@@ -2,9 +2,11 @@ version: "3.8"
 
 services:
   channelhoarder:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/sworcery/channelhoarder:latest
+    # To build locally instead, comment the image line above and uncomment:
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
     container_name: channelhoarder
     ports:
       - "8000:8000"

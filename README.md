@@ -46,9 +46,7 @@ version: "3.8"
 
 services:
   channelhoarder:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile
+    image: ghcr.io/sworcery/channelhoarder:latest
     container_name: channelhoarder
     ports:
       - "8000:8000"
