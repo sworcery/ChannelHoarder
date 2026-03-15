@@ -1,7 +1,69 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
-  <rect width="48" height="48" rx="12" fill="#DC2626"/>
-  <path d="M19 14L35 24L19 34V14Z" fill="white"/>
-  <path d="M8 38L14 32" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M14 32L14 38" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
-  <path d="M14 38L8 38" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="#1a1a2e"/>
+
+  <!-- Dragon body -->
+  <ellipse cx="256" cy="300" rx="120" ry="90" fill="#e94560"/>
+
+  <!-- Dragon belly -->
+  <ellipse cx="256" cy="320" rx="80" ry="60" fill="#f5a623"/>
+
+  <!-- Dragon head -->
+  <ellipse cx="256" cy="195" rx="70" ry="55" fill="#e94560"/>
+
+  <!-- Dragon snout -->
+  <ellipse cx="256" cy="220" rx="40" ry="25" fill="#d63851"/>
+
+  <!-- Nostrils -->
+  <circle cx="244" cy="218" r="4" fill="#1a1a2e"/>
+  <circle cx="268" cy="218" r="4" fill="#1a1a2e"/>
+
+  <!-- Left eye -->
+  <ellipse cx="232" cy="185" rx="16" ry="18" fill="white"/>
+  <ellipse cx="236" cy="185" rx="9" ry="12" fill="#1a1a2e"/>
+  <circle cx="239" cy="181" r="4" fill="white"/>
+
+  <!-- Right eye -->
+  <ellipse cx="280" cy="185" rx="16" ry="18" fill="white"/>
+  <ellipse cx="276" cy="185" rx="9" ry="12" fill="#1a1a2e"/>
+  <circle cx="273" cy="181" r="4" fill="white"/>
+
+  <!-- Dragon horns -->
+  <path d="M210 160 L195 115 L225 155 Z" fill="#f5a623"/>
+  <path d="M302 160 L317 115 L287 155 Z" fill="#f5a623"/>
+
+  <!-- Dragon wings (left) -->
+  <path d="M136 260 Q80 180 110 140 L150 200 Q90 200 100 160 L145 220 Q105 215 115 180 L155 245 Z" fill="#d63851" opacity="0.9"/>
+
+  <!-- Dragon wings (right) -->
+  <path d="M376 260 Q432 180 402 140 L362 200 Q422 200 412 160 L367 220 Q407 215 397 180 L357 245 Z" fill="#d63851" opacity="0.9"/>
+
+  <!-- Dragon arms hugging play button -->
+  <path d="M175 290 Q140 310 155 350 Q165 365 190 355" stroke="#e94560" stroke-width="18" fill="none" stroke-linecap="round"/>
+  <path d="M337 290 Q372 310 357 350 Q347 365 322 355" stroke="#e94560" stroke-width="18" fill="none" stroke-linecap="round"/>
+
+  <!-- Play button (hoard treasure!) -->
+  <rect x="206" y="290" rx="8" ry="8" width="100" height="70" fill="#FF0000" opacity="0.9"/>
+  <polygon points="240,310 240,345 270,327" fill="white"/>
+
+  <!-- Little play buttons scattered (the hoard) -->
+  <g opacity="0.6">
+    <rect x="155" y="370" rx="4" ry="4" width="40" height="28" fill="#FF0000"/>
+    <polygon points="168,378 168,392 182,385" fill="white"/>
+  </g>
+  <g opacity="0.5">
+    <rect x="320" y="375" rx="4" ry="4" width="35" height="24" fill="#FF0000"/>
+    <polygon points="331,381 331,393 344,387" fill="white"/>
+  </g>
+  <g opacity="0.4">
+    <rect x="270" y="385" rx="3" ry="3" width="30" height="21" fill="#FF0000"/>
+    <polygon points="280,390 280,401 291,395" fill="white"/>
+  </g>
+
+  <!-- Dragon tail -->
+  <path d="M340 370 Q400 400 410 370 Q420 340 440 360" stroke="#e94560" stroke-width="14" fill="none" stroke-linecap="round"/>
+  <path d="M440 360 L455 345 L450 375 Z" fill="#f5a623"/>
+
+  <!-- Smile -->
+  <path d="M238 232 Q256 248 274 232" stroke="#1a1a2e" stroke-width="3" fill="none" stroke-linecap="round"/>
 </svg>

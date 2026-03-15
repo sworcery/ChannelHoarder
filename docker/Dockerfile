@@ -9,19 +9,17 @@ RUN npm run build
 # Stage 2: Runtime
 FROM python:3.12-slim-bookworm
 
-# Install system dependencies
+# Install system dependencies and Node.js
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     unzip \
     ca-certificates \
     git \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Deno (for yt-dlp JS runtime and PO token provider)
-RUN curl -fsSL https://deno.land/install.sh | sh
-ENV DENO_INSTALL="/root/.deno"
-ENV PATH="${DENO_INSTALL}/bin:${PATH}"
 
 # Install Python dependencies
 WORKDIR /app
@@ -34,7 +32,8 @@ RUN pip install --no-cache-dir yt-dlp bgutil-ytdlp-pot-provider
 # Set up bgutil POT provider server
 RUN git clone --single-branch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/pot-provider \
     && cd /opt/pot-provider/server \
-    && deno install --allow-scripts=npm:canvas --frozen || true
+    && npm ci --no-audit --no-fund \
+    && npx tsc
 
 # Copy backend code
 COPY backend/app/ ./app/

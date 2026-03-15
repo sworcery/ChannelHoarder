@@ -5,9 +5,10 @@ import { useWebSocket } from "@/hooks/useWebSocket"
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
   const [dark, setDark] = useState(() => {
     if (typeof window !== "undefined") {
-      return document.documentElement.classList.contains("dark")
+      const saved = localStorage.getItem("theme")
+      return saved ? saved === "dark" : true
     }
-    return false
+    return true
   })
   const { connected } = useWebSocket()
 
@@ -15,11 +16,6 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
     document.documentElement.classList.toggle("dark", dark)
     localStorage.setItem("theme", dark ? "dark" : "light")
   }, [dark])
-
-  useEffect(() => {
-    const saved = localStorage.getItem("theme")
-    if (saved === "dark") setDark(true)
-  }, [])
 
   return (
     <header className="flex items-center gap-4 border-b bg-card px-4 py-3">

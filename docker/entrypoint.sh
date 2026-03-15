@@ -26,9 +26,9 @@ print('Database initialized')
 # Start PO token provider server in background (if enabled)
 if [ "${POT_SERVER_ENABLED:-true}" = "true" ]; then
     echo "Starting PO token provider server on port ${POT_SERVER_PORT:-4416}..."
-    if [ -d "/opt/pot-provider/server" ]; then
+    if [ -d "/opt/pot-provider/server/build" ]; then
         cd /opt/pot-provider/server
-        deno task start --port "${POT_SERVER_PORT:-4416}" &
+        node build/main.js --port "${POT_SERVER_PORT:-4416}" &
         POT_PID=$!
         echo "PO token server started (PID: $POT_PID)"
         cd /app
