@@ -2,6 +2,8 @@
 
 Self-hosted YouTube channel archiver with a modern web UI, designed for Plex-compatible output. Runs as a single Docker container on Unraid (or any Docker host) and automatically downloads new videos from your subscribed channels.
 
+![Dashboard](screenshots/dashboard.png)
+
 ## Features
 
 - **Automatic Channel Scanning** - Checks subscribed channels daily for new uploads and queues them for download
