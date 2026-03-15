@@ -1,7 +1,20 @@
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
+
+
+class UTCBaseModel(BaseModel):
+    """Base model that ensures all naive datetimes are serialized as UTC (with Z suffix)."""
+
+    model_config = {"from_attributes": True}
+
+    def model_post_init(self, __context) -> None:
+        """Attach UTC timezone to any naive datetime fields."""
+        for field_name in self.model_fields:
+            value = getattr(self, field_name, None)
+            if isinstance(value, datetime) and value.tzinfo is None:
+                object.__setattr__(self, field_name, value.replace(tzinfo=timezone.utc))
 
 
 # --- Channel Schemas ---
@@ -19,7 +32,7 @@ class ChannelUpdate(BaseModel):
     enabled: Optional[bool] = None
 
 
-class ChannelResponse(BaseModel):
+class ChannelResponse(UTCBaseModel):
     id: int
     channel_id: str
     channel_name: str
@@ -38,11 +51,9 @@ class ChannelResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    model_config = {"from_attributes": True}
-
 
 # --- Video Schemas ---
-class VideoResponse(BaseModel):
+class VideoResponse(UTCBaseModel):
     id: int
     video_id: str
     channel_id: int
@@ -62,8 +73,6 @@ class VideoResponse(BaseModel):
     discovered_at: datetime
     downloaded_at: Optional[datetime]
 
-    model_config = {"from_attributes": True}
-
 
 # --- Download Queue Schemas ---
 class QueueAdd(BaseModel):
@@ -71,7 +80,7 @@ class QueueAdd(BaseModel):
     priority: int = 0
 
 
-class QueueEntryResponse(BaseModel):
+class QueueEntryResponse(UTCBaseModel):
     id: int
     video_id: int
     priority: int
@@ -82,11 +91,9 @@ class QueueEntryResponse(BaseModel):
     eta_seconds: Optional[int]
     video: VideoResponse
 
-    model_config = {"from_attributes": True}
-
 
 # --- Dashboard Schemas ---
-class DashboardStats(BaseModel):
+class DashboardStats(UTCBaseModel):
     total_channels: int
     active_channels: int
     total_videos_known: int
@@ -161,7 +168,7 @@ class ErrorDiagnosis(BaseModel):
     system_context: dict
 
 
-class DiagnosticReport(BaseModel):
+class DiagnosticReport(UTCBaseModel):
     generated_at: datetime
     app_version: str
     ytdlp_version: str
@@ -177,7 +184,7 @@ class DiagnosticReport(BaseModel):
     system_info: dict
 
 
-class DownloadLogResponse(BaseModel):
+class DownloadLogResponse(UTCBaseModel):
     id: int
     video_id: int
     event: str
@@ -187,8 +194,6 @@ class DownloadLogResponse(BaseModel):
     created_at: datetime
     video_title: Optional[str] = None
     channel_name: Optional[str] = None
-
-    model_config = {"from_attributes": True}
 
 
 # --- WebSocket Schemas ---

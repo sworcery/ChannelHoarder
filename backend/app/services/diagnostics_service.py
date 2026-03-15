@@ -1,7 +1,7 @@
 import json
 import logging
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import func, select
@@ -79,7 +79,7 @@ class DiagnosticsService:
         pot_status = "healthy" if pot_healthy else "unhealthy"
 
         return DiagnosticReport(
-            generated_at=datetime.utcnow(),
+            generated_at=datetime.now(timezone.utc),
             app_version=settings.APP_VERSION,
             ytdlp_version=ytdlp.get_version(),
             pot_status=pot_status,
@@ -171,7 +171,7 @@ class DiagnosticsService:
 
         lines = [
             "=== ChannelHoarder - Diagnostic Report ===",
-            f"Generated: {datetime.utcnow().isoformat()}",
+            f"Generated: {datetime.now(timezone.utc).isoformat()}",
             f"App Version: {settings.APP_VERSION}",
             f"yt-dlp Version: {ytdlp.get_version()}",
             "",

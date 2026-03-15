@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select, func
@@ -34,7 +34,7 @@ class DownloadService:
         # Update status
         video.status = "downloading"
         if video.queue_entry:
-            video.queue_entry.started_at = datetime.utcnow()
+            video.queue_entry.started_at = datetime.now(timezone.utc)
         await self.db.commit()
 
         # Log start
@@ -126,7 +126,7 @@ class DownloadService:
             video.status = "completed"
             video.file_path = mp4_path
             video.file_size = file_size
-            video.downloaded_at = datetime.utcnow()
+            video.downloaded_at = datetime.now(timezone.utc)
             video.quality_downloaded = channel.quality
             video.error_code = None
             video.error_message = None

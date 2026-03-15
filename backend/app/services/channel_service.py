@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import shutil
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select, func
@@ -78,7 +78,7 @@ class ChannelService:
 
         if not video_list:
             logger.warning("No videos found for channel: %s", channel.channel_name)
-            channel.last_scanned_at = datetime.utcnow()
+            channel.last_scanned_at = datetime.now(timezone.utc)
             await self.db.commit()
             return 0
 
@@ -130,7 +130,7 @@ class ChannelService:
 
             new_count += 1
 
-        channel.last_scanned_at = datetime.utcnow()
+        channel.last_scanned_at = datetime.now(timezone.utc)
         channel.total_videos = len(existing_ids) + new_count
         if new_count > 0:
             channel.health_status = "healthy"
