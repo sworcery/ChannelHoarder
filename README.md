@@ -49,7 +49,7 @@ services:
     image: ghcr.io/sworcery/channelhoarder:latest
     container_name: channelhoarder
     ports:
-      - "8000:8000"
+      - "8587:8587"
     volumes:
       - ./config:/config
       - /path/to/your/media/youtube:/downloads
@@ -68,11 +68,11 @@ Use the included Unraid template at `docker/unraid-template.xml`, or install man
 2. Set the repository to the built image
 3. Map `/config` to your appdata directory
 4. Map `/downloads` to your Plex YouTube library folder
-5. Set the web UI port to `8000`
+5. Set the web UI port to `8587`
 
 ### Access the Web UI
 
-Open `http://your-server-ip:8000` in your browser.
+Open `http://your-server-ip:8587` in your browser.
 
 ## How It Works
 

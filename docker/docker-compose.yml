@@ -9,7 +9,7 @@ services:
     #   dockerfile: docker/Dockerfile
     container_name: channelhoarder
     ports:
-      - "8000:8000"
+      - "8587:8000"
     volumes:
       - ./config:/config
       - ./downloads:/downloads

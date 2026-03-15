@@ -13,10 +13,10 @@
         Features comprehensive error diagnostics and per-channel quality settings.
     </Overview>
     <Category>MediaApp:Video</Category>
-    <WebUI>http://[IP]:[PORT:8000]</WebUI>
+    <WebUI>http://[IP]:[PORT:8587]</WebUI>
     <Icon>https://raw.githubusercontent.com/sworcery/channelhoarder/main/frontend/public/logo.svg</Icon>
     <ExtraParams>--init</ExtraParams>
-    <Config Name="Web UI Port" Target="8000" Default="8000" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true">8000</Config>
+    <Config Name="Web UI Port" Target="8000" Default="8587" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true">8587</Config>
     <Config Name="Config" Target="/config" Default="/mnt/user/appdata/channelhoarder" Mode="rw" Description="Configuration and database storage" Type="Path" Display="always" Required="true">/mnt/user/appdata/channelhoarder</Config>
     <Config Name="Downloads" Target="/downloads" Default="/mnt/user/data/media/youtube" Mode="rw" Description="Downloaded video output directory (point this to your Plex YouTube library)" Type="Path" Display="always" Required="true">/mnt/user/data/media/youtube</Config>
     <Config Name="PUID" Target="PUID" Default="99" Description="User ID for file permissions" Type="Variable" Display="advanced" Required="false">99</Config>
