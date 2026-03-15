@@ -96,7 +96,9 @@ class ChannelService:
 
             upload_date = self._parse_upload_date(entry.get("upload_date"))
             if not upload_date:
-                continue
+                # Flat extraction often omits upload_date; default to today
+                from datetime import date
+                upload_date = date.today()
 
             season = upload_date.year
 

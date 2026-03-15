@@ -33,7 +33,7 @@ export default function DiagnosticsPage() {
     enabled: tab === "logs",
   })
 
-  const copyReport = () => {
+  const copyReport = async () => {
     if (!diagnostics) return
     const report = [
       "=== ChannelHoarder - System Diagnostic Report ===",
@@ -60,7 +60,19 @@ export default function DiagnosticsPage() {
       "=== End Report ===",
     ].join("\n")
 
-    navigator.clipboard.writeText(report)
+    try {
+      await navigator.clipboard.writeText(report)
+    } catch {
+      // Fallback for non-HTTPS contexts (e.g. local network IP)
+      const textarea = document.createElement("textarea")
+      textarea.value = report
+      textarea.style.position = "fixed"
+      textarea.style.left = "-9999px"
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand("copy")
+      document.body.removeChild(textarea)
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

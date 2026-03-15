@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2025-03-15
+
+### Fixed
+- Channel scanning now discovers videos even when upload date is unavailable from flat extraction
+- Copy Diagnostic Report button now works on non-HTTPS connections (e.g. local network IPs)
+
 ## [0.6.0] - 2025-03-15
 
 ### Fixed
