@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Database
+*.db
+*.db-journal
+
+# Config (runtime generated)
+config/archiver.db
+config/cookies.txt
+config/settings.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# Env
+.env
+.env.local
+
+# Logs
+*.log
+
+# Claude
+.claude/

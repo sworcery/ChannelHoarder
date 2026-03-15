@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  channelhoarder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: channelhoarder
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config:/config
+      - ./downloads:/downloads
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - LOG_LEVEL=info
+      - POT_SERVER_ENABLED=true
+      # Optional: Set your YouTube Data API key
+      # - YOUTUBE_API_KEY=your_api_key_here
+    restart: unless-stopped

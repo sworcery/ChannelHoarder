@@ -1,0 +1,63 @@
+import { NavLink } from "react-router-dom"
+import {
+  LayoutDashboard,
+  Tv,
+  Download,
+  Settings,
+  Stethoscope,
+  X,
+  Youtube,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const navItems = [
+  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/channels", icon: Tv, label: "Channels" },
+  { to: "/downloads", icon: Download, label: "Downloads" },
+  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/diagnostics", icon: Stethoscope, label: "Diagnostics" },
+]
+
+export default function Sidebar({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex h-full flex-col bg-card border-r">
+      {/* Logo */}
+      <div className="flex items-center gap-2 px-4 py-5 border-b">
+        <Youtube className="h-7 w-7 text-primary" />
+        <span className="text-lg font-bold">ChannelHoarder</span>
+        <button onClick={onClose} className="ml-auto lg:hidden">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === "/"}
+            onClick={onClose}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              )
+            }
+          >
+            <item.icon className="h-5 w-5" />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div className="border-t p-4">
+        <p className="text-xs text-muted-foreground">ChannelHoarder</p>
+        <p className="text-xs text-muted-foreground">v0.1.0</p>
+      </div>
+    </div>
+  )
+}
