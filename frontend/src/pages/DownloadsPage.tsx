@@ -1,10 +1,10 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDateTime, formatBytes } from "@/lib/utils"
 import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
-import { useEffect } from "react"
+import { useToast } from "@/components/ui/toaster"
 import {
   Download,
   RotateCcw,
@@ -59,25 +59,35 @@ export default function DownloadsPage() {
     enabled: tab !== "queue",
   })
 
+  const { toast } = useToast()
+
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["download-history"] })
       queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast("Video queued for retry")
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const retryAllMutation = useMutation({
     mutationFn: api.retryAllFailed,
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["download-history"] })
       queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast(data.message || "All failed downloads queued for retry")
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const removeFromQueue = useMutation({
     mutationFn: (queueId: number) => api.removeFromQueue(queueId),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["download-queue"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast("Removed from queue")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const tabs = [

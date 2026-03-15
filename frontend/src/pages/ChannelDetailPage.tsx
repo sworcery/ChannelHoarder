@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDate, formatDateTime, formatBytes, formatDuration } from "@/lib/utils"
 import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
+import { useToast } from "@/components/ui/toaster"
 import {
   ArrowLeft,
   RefreshCw,
@@ -21,6 +22,7 @@ export default function ChannelDetailPage() {
   const queryClient = useQueryClient()
   const channelId = Number(id)
   const [statusFilter, setStatusFilter] = useState("")
+  const { toast } = useToast()
 
   const { data: channel } = useQuery({
     queryKey: ["channel", channelId],
@@ -34,34 +36,45 @@ export default function ChannelDetailPage() {
 
   const scanMutation = useMutation({
     mutationFn: () => api.scanChannel(channelId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
       queryClient.invalidateQueries({ queryKey: ["channel-videos", channelId] })
+      toast(data.message || "Scan complete")
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const downloadAllMutation = useMutation({
     mutationFn: () => api.downloadAllChannel(channelId),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channel-videos", channelId] })
+      toast(data.message || "All videos queued for download")
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteChannel(channelId, false),
-    onSuccess: () => navigate("/channels"),
+    onSuccess: () => { navigate("/channels"); toast("Channel deleted") },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channel-videos", channelId] })
+      toast("Video queued for retry")
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const updateMutation = useMutation({
     mutationFn: (data: any) => api.updateChannel(channelId, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["channel", channelId] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+      toast("Channel updated")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   if (!channel) {

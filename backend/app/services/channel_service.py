@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Channel, Video, DownloadQueue
 from app.schemas import ChannelCreate
+from app.services.metadata_service import write_tvshow_nfo
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService
 
@@ -55,6 +56,16 @@ class ChannelService:
         await self.db.commit()
         await self.db.refresh(channel)
 
+        # Generate Plex metadata (tvshow.nfo + poster.jpg)
+        await asyncio.to_thread(
+            write_tvshow_nfo,
+            channel_name=channel_name,
+            channel_id=channel_id,
+            channel_url=channel_url,
+            description=info.get("description"),
+            thumbnail_url=info.get("thumbnail"),
+        )
+
         logger.info("Added channel: %s (%s)", channel_name, channel_id)
         return channel
 
@@ -88,17 +99,40 @@ class ChannelService:
         )
         existing_ids = {row[0] for row in result.all()}
 
-        new_count = 0
+        # First pass: identify new video IDs
+        new_entries = []
         for entry in video_list:
             vid_id = entry.get("id") or entry.get("video_id", "")
             if not vid_id or vid_id in existing_ids:
                 continue
+            new_entries.append(entry)
 
+        # Second pass: fetch full metadata for new videos to get real upload dates
+        new_count = 0
+        for entry in new_entries:
+            vid_id = entry.get("id") or entry.get("video_id", "")
             upload_date = self._parse_upload_date(entry.get("upload_date"))
+            title = entry.get("title", "Untitled")
+            description = entry.get("description")
+            duration = entry.get("duration")
+            thumbnail = entry.get("thumbnail")
+
             if not upload_date:
-                # Flat extraction often omits upload_date; default to today
-                from datetime import date
-                upload_date = date.today()
+                # Flat extraction omitted upload_date — fetch full video metadata
+                logger.info("Fetching metadata for %s to get upload date", vid_id)
+                full_info = await asyncio.to_thread(self.ytdlp.get_video_info, vid_id)
+                if full_info:
+                    upload_date = self._parse_upload_date(full_info.get("upload_date"))
+                    title = full_info.get("title") or title
+                    description = full_info.get("description") or description
+                    duration = full_info.get("duration") or duration
+                    thumbnail = full_info.get("thumbnail") or thumbnail
+
+            if not upload_date:
+                # Absolute last resort — use today's date
+                from datetime import date as date_cls
+                upload_date = date_cls.today()
+                logger.warning("Could not determine upload date for %s, defaulting to today", vid_id)
 
             season = upload_date.year
 
@@ -113,11 +147,11 @@ class ChannelService:
             video = Video(
                 video_id=vid_id,
                 channel_id=channel.id,
-                title=entry.get("title", "Untitled"),
-                description=entry.get("description"),
+                title=title,
+                description=description,
                 upload_date=upload_date,
-                duration=entry.get("duration"),
-                thumbnail_url=entry.get("thumbnail"),
+                duration=duration,
+                thumbnail_url=thumbnail,
                 season=season,
                 episode=episode,
                 status="pending",

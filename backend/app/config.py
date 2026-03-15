@@ -4,7 +4,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "0.7.0"
+    APP_VERSION: str = "0.8.0"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 

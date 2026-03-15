@@ -1,6 +1,7 @@
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { useToast } from "@/components/ui/toaster"
 import {
   Upload,
   Key,
@@ -10,10 +11,10 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
+  Save,
 } from "lucide-react"
 
 export default function SettingsPage() {
-  const queryClient = useQueryClient()
   const [tab, setTab] = useState<"general" | "auth" | "naming" | "ytdlp" | "antidetect">("general")
 
   const tabs = [
@@ -54,10 +55,13 @@ export default function SettingsPage() {
 }
 
 function GeneralTab() {
+  const { toast } = useToast()
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: api.getStats })
 
   const scanAllMutation = useMutation({
     mutationFn: api.scanAll,
+    onSuccess: (data: any) => toast(data.message || "Scan started"),
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   return (
@@ -75,9 +79,6 @@ function GeneralTab() {
           {scanAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Scan All Channels Now
         </button>
-        {scanAllMutation.data && (
-          <p className="text-sm text-green-600">{scanAllMutation.data.message}</p>
-        )}
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-2">
@@ -106,6 +107,7 @@ function GeneralTab() {
 }
 
 function AuthTab() {
+  const { toast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [apiKey, setApiKey] = useState("")
 
@@ -116,17 +118,19 @@ function AuthTab() {
 
   const uploadMutation = useMutation({
     mutationFn: (file: File) => api.uploadCookies(file),
-    onSuccess: () => refetchAuth(),
+    onSuccess: () => { refetchAuth(); toast("Cookies uploaded") },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const apiKeyMutation = useMutation({
     mutationFn: (key: string) => api.setApiKey(key),
-    onSuccess: () => { refetchAuth(); setApiKey("") },
+    onSuccess: () => { refetchAuth(); setApiKey(""); toast("API key saved") },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const deleteCookiesMutation = useMutation({
     mutationFn: api.deleteCookies,
-    onSuccess: () => refetchAuth(),
+    onSuccess: () => { refetchAuth(); toast("Cookies removed") },
   })
 
   return (
@@ -227,18 +231,33 @@ function AuthTab() {
             </button>
           )}
         </div>
-        {uploadMutation.isSuccess && (
-          <p className="text-sm text-green-600">Cookies uploaded successfully</p>
-        )}
       </div>
     </div>
   )
 }
 
 function NamingTab() {
+  const { toast } = useToast()
   const [template, setTemplate] = useState(
     "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
   )
+
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+
+  useEffect(() => {
+    if (settings?.naming_template) {
+      setTemplate(settings.naming_template)
+    }
+  }, [settings])
+
+  const saveMutation = useMutation({
+    mutationFn: () => api.updateSettings({ naming_template: template }),
+    onSuccess: () => toast("Naming template saved"),
+    onError: (e: Error) => toast(e.message, "error"),
+  })
 
   const previewMutation = useMutation({
     mutationFn: (tmpl: string) => api.previewNaming({ template: tmpl }),
@@ -257,12 +276,22 @@ function NamingTab() {
           rows={2}
           className="w-full px-3 py-2 rounded-md border bg-background font-mono text-sm"
         />
-        <button
-          onClick={() => previewMutation.mutate(template)}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90"
-        >
-          Preview
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => previewMutation.mutate(template)}
+            className="px-4 py-2 rounded-md border text-sm hover:bg-accent"
+          >
+            Preview
+          </button>
+          <button
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+          >
+            <Save className="h-4 w-4" />
+            Save
+          </button>
+        </div>
         {previewMutation.data && (
           <div className="rounded-md bg-muted p-3">
             <p className="text-sm font-mono">{previewMutation.data.full_path}</p>
@@ -274,6 +303,7 @@ function NamingTab() {
 }
 
 function YtdlpTab() {
+  const { toast } = useToast()
   const { data: version, refetch } = useQuery({
     queryKey: ["ytdlp-version"],
     queryFn: api.getYtdlpVersion,
@@ -281,7 +311,11 @@ function YtdlpTab() {
 
   const updateMutation = useMutation({
     mutationFn: api.updateYtdlp,
-    onSuccess: () => refetch(),
+    onSuccess: (data: any) => {
+      refetch()
+      toast(data.success ? `Updated to ${data.version}` : data.message, data.success ? "success" : "warning")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   return (
@@ -304,17 +338,44 @@ function YtdlpTab() {
             Update Now
           </button>
         </div>
-        {updateMutation.data && (
-          <p className={`text-sm ${updateMutation.data.success ? "text-green-600" : "text-red-500"}`}>
-            {updateMutation.data.success ? `Updated to ${updateMutation.data.version}` : updateMutation.data.message}
-          </p>
-        )}
       </div>
     </div>
   )
 }
 
 function AntiDetectTab() {
+  const { toast } = useToast()
+  const [minDelay, setMinDelay] = useState(10)
+  const [maxDelay, setMaxDelay] = useState(30)
+  const [uaRotation, setUaRotation] = useState(true)
+  const [jitter, setJitter] = useState(true)
+
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+
+  useEffect(() => {
+    if (settings) {
+      if (settings.download_delay_min != null) setMinDelay(Number(settings.download_delay_min))
+      if (settings.download_delay_max != null) setMaxDelay(Number(settings.download_delay_max))
+      if (settings.user_agent_rotation != null) setUaRotation(settings.user_agent_rotation === true || settings.user_agent_rotation === "true")
+      if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
+    }
+  }, [settings])
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      api.updateSettings({
+        download_delay_min: minDelay,
+        download_delay_max: maxDelay,
+        user_agent_rotation: uaRotation,
+        jitter_enabled: jitter,
+      }),
+    onSuccess: () => toast("Anti-detection settings saved"),
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   return (
     <div className="space-y-6">
       <div className="rounded-lg border bg-card p-4 space-y-4">
@@ -325,11 +386,21 @@ function AntiDetectTab() {
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm mb-1">Min Delay (seconds)</label>
-            <input type="number" defaultValue={10} className="w-full px-3 py-2 rounded-md border bg-background" />
+            <input
+              type="number"
+              value={minDelay}
+              onChange={(e) => setMinDelay(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            />
           </div>
           <div>
             <label className="block text-sm mb-1">Max Delay (seconds)</label>
-            <input type="number" defaultValue={30} className="w-full px-3 py-2 rounded-md border bg-background" />
+            <input
+              type="number"
+              value={maxDelay}
+              onChange={(e) => setMaxDelay(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            />
           </div>
         </div>
       </div>
@@ -340,7 +411,12 @@ function AntiDetectTab() {
           Rotate user-agent strings between downloads to appear as different browsers.
         </p>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" defaultChecked className="rounded" />
+          <input
+            type="checkbox"
+            checked={uaRotation}
+            onChange={(e) => setUaRotation(e.target.checked)}
+            className="rounded"
+          />
           <span className="text-sm">Enable user-agent rotation</span>
         </label>
       </div>
@@ -351,10 +427,24 @@ function AntiDetectTab() {
           Add random extra delay (0-10s) to make download timing less predictable.
         </p>
         <label className="flex items-center gap-2 cursor-pointer">
-          <input type="checkbox" defaultChecked className="rounded" />
+          <input
+            type="checkbox"
+            checked={jitter}
+            onChange={(e) => setJitter(e.target.checked)}
+            className="rounded"
+          />
           <span className="text-sm">Enable jitter</span>
         </label>
       </div>
+
+      <button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+      >
+        {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Settings
+      </button>
     </div>
   )
 }

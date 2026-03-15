@@ -51,6 +51,22 @@ class YtdlpService:
             logger.error("Failed to list videos for %s: %s", channel_url, e)
             return []
 
+    def get_video_info(self, video_id: str) -> dict | None:
+        """Get full metadata for a single video (non-flat extraction)."""
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        opts = self._base_opts()
+        opts.update({
+            "skip_download": True,
+            "ignoreerrors": True,
+        })
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info
+        except Exception as e:
+            logger.error("Failed to get video info for %s: %s", video_id, e)
+            return None
+
     def download_video(
         self,
         video_url: str,

@@ -1,4 +1,6 @@
 import { NavLink } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@/lib/api"
 import {
   LayoutDashboard,
   Tv,
@@ -6,7 +8,6 @@ import {
   Settings,
   Stethoscope,
   X,
-  Youtube,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -19,11 +20,17 @@ const navItems = [
 ]
 
 export default function Sidebar({ onClose }: { onClose: () => void }) {
+  const { data: health } = useQuery({
+    queryKey: ["system-health"],
+    queryFn: api.getHealth,
+    staleTime: 300000,
+  })
+
   return (
     <div className="flex h-full flex-col bg-card border-r">
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-5 border-b">
-        <Youtube className="h-7 w-7 text-primary" />
+        <img src="/logo.svg" alt="ChannelHoarder" className="h-7 w-7" />
         <span className="text-lg font-bold">ChannelHoarder</span>
         <button onClick={onClose} className="ml-auto lg:hidden">
           <X className="h-5 w-5" />
@@ -56,7 +63,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
       {/* Footer */}
       <div className="border-t p-4">
         <p className="text-xs text-muted-foreground">ChannelHoarder</p>
-        <p className="text-xs text-muted-foreground">v0.1.0</p>
+        <p className="text-xs text-muted-foreground">v{health?.version || "..."}</p>
       </div>
     </div>
   )

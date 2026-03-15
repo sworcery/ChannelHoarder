@@ -5,6 +5,24 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2025-03-15
+
+### Fixed
+- Upload dates now fetched from YouTube per-video instead of defaulting to scan date
+- Two-pass scanning: flat extraction for speed, then per-video metadata for accuracy
+
+### Added
+- Plex-compatible NFO metadata generation (tvshow.nfo per channel, episode .nfo per video)
+- Automatic channel poster download (poster.jpg) for Plex artwork
+- Toast notification system for user feedback on all actions
+- Anti-detection settings tab fully wired to backend (save/load delays, jitter, UA rotation)
+- Naming template save/load from backend settings
+- Dragon logo in sidebar
+- Dynamic version display in sidebar (fetched from API)
+
+### Changed
+- All mutations across pages now show success/error toasts
+
 ## [0.7.0] - 2025-03-15
 
 ### Fixed

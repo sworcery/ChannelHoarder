@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
+import { useToast } from "@/components/ui/toaster"
 import {
   Plus,
   Loader2,
@@ -22,6 +23,8 @@ export default function ChannelsPage() {
   const [addQuality, setAddQuality] = useState("best")
   const [search, setSearch] = useState("")
 
+  const { toast } = useToast()
+
   const { data: channels, isLoading } = useQuery({
     queryKey: ["channels", search],
     queryFn: () => api.getChannels(search || undefined),
@@ -29,21 +32,31 @@ export default function ChannelsPage() {
 
   const addMutation = useMutation({
     mutationFn: (data: { url: string; quality: string }) => api.addChannel(data),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       setShowAdd(false)
       setAddUrl("")
+      toast(`Added channel: ${data.channel_name}`)
     },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const scanMutation = useMutation({
     mutationFn: (id: number) => api.scanChannel(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["channels"] }),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] })
+      toast(data.message || "Scan complete")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteChannel(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["channels"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] })
+      toast("Channel deleted")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
   })
 
   return (

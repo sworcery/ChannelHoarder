@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Channel, Video, DownloadQueue, DownloadLog
 from app.services.diagnostics_service import DiagnosticsService
+from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.ytdlp_service import YtdlpService
@@ -121,6 +122,27 @@ class DownloadService:
                         break
 
             file_size = os.path.getsize(mp4_path) if os.path.exists(mp4_path) else 0
+
+            # Write Plex metadata NFO files
+            write_tvshow_nfo(
+                channel_name=channel.channel_name,
+                channel_id=channel.channel_id,
+                channel_url=channel.channel_url,
+                description=channel.description,
+                thumbnail_url=channel.thumbnail_url,
+            )
+            write_episode_nfo(
+                channel_name=channel.channel_name,
+                video_title=video.title,
+                video_id=video.video_id,
+                description=video.description,
+                upload_date=video.upload_date,
+                season=video.season,
+                episode=video.episode,
+                duration=video.duration,
+                thumbnail_url=video.thumbnail_url,
+                video_file_path=mp4_path,
+            )
 
             # Update video record
             video.status = "completed"
