@@ -28,6 +28,7 @@ class Channel(Base):
     channel_url: Mapped[str] = mapped_column(String(512), nullable=False)
     platform: Mapped[str] = mapped_column(String(32), nullable=False, default="youtube", server_default="youtube")
     thumbnail_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    banner_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     quality: Mapped[str] = mapped_column(String(10), nullable=False, default="best")
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)

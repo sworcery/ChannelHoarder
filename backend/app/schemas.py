@@ -41,6 +41,7 @@ class ChannelResponse(UTCBaseModel):
     channel_url: str
     platform: str = "youtube"
     thumbnail_url: Optional[str]
+    banner_url: Optional[str]
     description: Optional[str]
     quality: str
     naming_template: Optional[str]

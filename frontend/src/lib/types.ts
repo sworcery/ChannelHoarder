@@ -5,6 +5,7 @@ export interface Channel {
   channel_url: string
   platform: string
   thumbnail_url: string | null
+  banner_url: string | null
   description: string | null
   quality: string
   naming_template: string | null

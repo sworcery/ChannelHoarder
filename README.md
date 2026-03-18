@@ -17,7 +17,10 @@
 
 ### Channel Management
 - **Subscribe to Channels** — Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
-- **Automatic Scanning** — Checks subscribed channels daily for new uploads and queues them for download
+- **Channel Artwork** — Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
+- **Grid/List Views** — Toggle between grid cards and compact list view, with small/medium/large card size options
+- **Sorting** — Sort channels by name, recently added, most videos, or health status
+- **Automatic Scanning** — Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
 - **Auto-Scan on Add** — Optionally trigger an immediate scan when adding a new channel
 - **Channel Health Indicators** — Green/yellow/red status showing each channel's download success rate
 - **Per-Channel Quality** — Set download quality independently for each channel (best, 1080p, 720p, 480p)
