@@ -157,6 +157,8 @@ class SettingsUpdate(BaseModel):
     webhook_events: Optional[list[str]] = None
     # Livestream / long video filter
     max_video_duration: Optional[int] = None  # Max duration in seconds (0 = disabled)
+    # System
+    log_level: Optional[str] = None  # debug, info, warning, error
 
 
 class SettingValue(BaseModel):
