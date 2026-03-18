@@ -108,6 +108,15 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const refreshMetadataMutation = useMutation({
+    mutationFn: () => api.refreshChannelMetadata(channelId),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+      toast(data.message || "Metadata refreshed")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const bulkQueueMutation = useMutation({
     mutationFn: (ids: number[]) => api.bulkQueueVideos(channelId, ids),
     onSuccess: (data: any) => {
@@ -287,6 +296,15 @@ export default function ChannelDetailPage() {
             >
               <RefreshCw className={`h-4 w-4 ${scanMutation.isPending ? "animate-spin" : ""}`} />
               Scan
+            </button>
+            <button
+              onClick={() => refreshMetadataMutation.mutate()}
+              disabled={refreshMetadataMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+              title="Re-fetch thumbnail, banner, and description from the platform"
+            >
+              <RotateCcw className={`h-4 w-4 ${refreshMetadataMutation.isPending ? "animate-spin" : ""}`} />
+              Refresh Metadata
             </button>
             <button
               onClick={() => { setImportOpen(true); setImportMatches(null); setImportFolder(""); setImportSelected(new Set()) }}

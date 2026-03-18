@@ -99,6 +99,29 @@ class ChannelService:
         logger.info("Added channel: %s (%s)", channel_name, channel_id)
         return channel
 
+    async def refresh_channel_metadata(self, channel: Channel) -> Channel:
+        """Re-fetch thumbnail, banner, and description from the platform."""
+        info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
+        if not info:
+            raise ValueError("Could not fetch channel metadata")
+
+        channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
+        channel.description = info.get("description") or channel.description
+
+        # Extract banner URL from thumbnails list (widest image)
+        thumbnails = info.get("thumbnails") or []
+        for thumb in sorted(thumbnails, key=lambda t: t.get("width", 0), reverse=True):
+            w = thumb.get("width", 0)
+            h = thumb.get("height", 0)
+            if w >= 1200 and h > 0 and w / h > 2:
+                channel.banner_url = thumb.get("url")
+                break
+
+        await self.db.commit()
+        await self.db.refresh(channel)
+        logger.info("Refreshed metadata for: %s", channel.channel_name)
+        return channel
+
     async def scan_channel(self, channel: Channel) -> int:
         """Scan a channel for new videos. Returns count of newly discovered videos."""
         from app.utils.platform_utils import supports_api, supports_rss

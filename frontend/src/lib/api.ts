@@ -34,6 +34,7 @@ export const api = {
     return request<{ items: any[]; total: number; skip: number; limit: number }>(`/channels/${id}/videos?${qs}`)
   },
   scanChannel: (id: number) => request<any>(`/channels/${id}/scan`, { method: "POST" }),
+  refreshChannelMetadata: (id: number) => request<any>(`/channels/${id}/refresh-metadata`, { method: "POST" }),
   downloadAllChannel: (id: number) => request<any>(`/channels/${id}/download-all`, { method: "POST" }),
   importScan: (id: number, folderPath: string, threshold = 75) =>
     request<{ matches: any[]; total: number }>(`/channels/${id}/import/scan`, {
