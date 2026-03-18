@@ -54,12 +54,24 @@ class ChannelService:
         if existing.scalar_one_or_none():
             raise ValueError(f"Channel '{channel_name}' is already subscribed")
 
+        # Extract banner URL from thumbnails list (widest image)
+        banner_url = None
+        thumbnails = info.get("thumbnails") or []
+        for thumb in sorted(thumbnails, key=lambda t: t.get("width", 0), reverse=True):
+            w = thumb.get("width", 0)
+            h = thumb.get("height", 0)
+            # Banner images are wide (aspect ratio > 2:1, width >= 1200)
+            if w >= 1200 and h > 0 and w / h > 2:
+                banner_url = thumb.get("url")
+                break
+
         channel = Channel(
             channel_id=channel_id,
             channel_name=channel_name,
             channel_url=channel_url,
             platform=platform,
             thumbnail_url=info.get("thumbnail"),
+            banner_url=banner_url,
             description=info.get("description"),
             quality=data.quality,
             naming_template=data.naming_template,

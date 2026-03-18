@@ -42,6 +42,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN platform VARCHAR(32) DEFAULT 'youtube' NOT NULL")
             )
+        if "banner_url" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN banner_url VARCHAR(512)")
+            )
 
 
 async def get_db():

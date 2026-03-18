@@ -189,108 +189,127 @@ export default function ChannelDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-4">
-        <button onClick={() => navigate("/channels")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to Channels
-        </button>
+      {/* Back button */}
+      <button onClick={() => navigate("/channels")} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="h-4 w-4" /> Back to Channels
+      </button>
 
-        <div className="flex items-start gap-4">
-          {channel.thumbnail_url ? (
+      {/* Banner + Channel Info */}
+      <div className="rounded-lg border bg-card overflow-hidden">
+        {/* Banner */}
+        <div className="relative h-48 w-full">
+          {channel.banner_url ? (
             <img
-              src={channel.thumbnail_url}
-              alt={channel.channel_name}
-              className="h-20 w-20 rounded-full object-cover flex-shrink-0"
+              src={channel.banner_url}
+              alt=""
+              className="w-full h-full object-cover"
             />
           ) : (
-            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-              <Tv className="h-10 w-10 text-muted-foreground" />
-            </div>
+            <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-background" />
           )}
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold truncate">{channel.channel_name}</h1>
-              {channel.platform && channel.platform !== "youtube" && (
-                <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 capitalize">
-                  {channel.platform}
-                </span>
-              )}
-              <Circle
-                className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`}
+          <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
+        </div>
+
+        {/* Channel info overlapping banner */}
+        <div className="relative px-6 pb-5 -mt-16">
+          <div className="flex items-end gap-4">
+            {channel.thumbnail_url ? (
+              <img
+                src={channel.thumbnail_url}
+                alt={channel.channel_name}
+                className="h-24 w-24 rounded-full object-cover border-4 border-card flex-shrink-0 shadow-lg"
               />
-            </div>
-            <a
-              href={channel.channel_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
-            >
-              {channel.channel_url} <ExternalLink className="h-3 w-3" />
-            </a>
-            {channel.description && (
-              <div className="mt-2">
-                <p className={`text-sm text-muted-foreground ${descExpanded ? "" : "line-clamp-3"}`}>
-                  {channel.description}
-                </p>
-                {channel.description.length > 200 && (
-                  <button
-                    onClick={() => setDescExpanded(!descExpanded)}
-                    className="text-xs text-primary hover:underline mt-1"
-                  >
-                    {descExpanded ? "Show less" : "Show more"}
-                  </button>
-                )}
+            ) : (
+              <div className="h-24 w-24 rounded-full bg-muted border-4 border-card flex items-center justify-center flex-shrink-0 shadow-lg">
+                <Tv className="h-12 w-12 text-muted-foreground" />
               </div>
             )}
+            <div className="flex-1 min-w-0 pb-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold truncate">{channel.channel_name}</h1>
+                {channel.platform && channel.platform !== "youtube" && (
+                  <span className="inline-flex px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 capitalize">
+                    {channel.platform}
+                  </span>
+                )}
+                <Circle
+                  className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`}
+                />
+              </div>
+              <a
+                href={channel.channel_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
+              >
+                {channel.channel_url} <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           </div>
-        </div>
 
-        {/* Stats row */}
-        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-          <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
-          <span className="text-border">|</span>
-          <span>Quality: {channel.quality}</span>
-          <span className="text-border">|</span>
-          <span>Last scan: {formatDateTime(channel.last_scanned_at)}</span>
-        </div>
+          {channel.description && (
+            <div className="mt-3">
+              <p className={`text-sm text-muted-foreground ${descExpanded ? "" : "line-clamp-3"}`}>
+                {channel.description}
+              </p>
+              {channel.description.length > 200 && (
+                <button
+                  onClick={() => setDescExpanded(!descExpanded)}
+                  className="text-xs text-primary hover:underline mt-1"
+                >
+                  {descExpanded ? "Show less" : "Show more"}
+                </button>
+              )}
+            </div>
+          )}
 
-        {channel.last_error_code && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
-            Last error: {channel.last_error_code}
+          {/* Stats row */}
+          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
+            <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
+            <span className="text-border">|</span>
+            <span>Quality: {channel.quality}</span>
+            <span className="text-border">|</span>
+            <span>Last scan: {formatDateTime(channel.last_scanned_at)}</span>
           </div>
-        )}
 
-        {/* Action buttons */}
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => scanMutation.mutate()}
-            disabled={scanMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-          >
-            <RefreshCw className={`h-4 w-4 ${scanMutation.isPending ? "animate-spin" : ""}`} />
-            Scan
-          </button>
-          <button
-            onClick={() => { setImportOpen(true); setImportMatches(null); setImportFolder(""); setImportSelected(new Set()) }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
-          >
-            <FolderInput className="h-4 w-4" />
-            Import Existing
-          </button>
-          <button
-            onClick={() => downloadAllMutation.mutate()}
-            disabled={downloadAllMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Download className="h-4 w-4" />
-            Download All
-          </button>
-          <button
-            onClick={() => { if (confirm("Delete this channel?")) deleteMutation.mutate() }}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {channel.last_error_code && (
+            <div className="flex items-center gap-2 px-3 py-2 mt-3 rounded-md bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+              Last error: {channel.last_error_code}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex gap-2 flex-wrap mt-4">
+            <button
+              onClick={() => scanMutation.mutate()}
+              disabled={scanMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+            >
+              <RefreshCw className={`h-4 w-4 ${scanMutation.isPending ? "animate-spin" : ""}`} />
+              Scan
+            </button>
+            <button
+              onClick={() => { setImportOpen(true); setImportMatches(null); setImportFolder(""); setImportSelected(new Set()) }}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
+            >
+              <FolderInput className="h-4 w-4" />
+              Import Existing
+            </button>
+            <button
+              onClick={() => downloadAllMutation.mutate()}
+              disabled={downloadAllMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              Download All
+            </button>
+            <button
+              onClick={() => { if (confirm("Delete this channel?")) deleteMutation.mutate() }}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
