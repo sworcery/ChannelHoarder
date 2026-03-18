@@ -129,6 +129,23 @@ async def list_channel_videos(
     }
 
 
+@router.post("/{channel_id}/refresh-metadata", status_code=200)
+async def refresh_metadata(channel_id: int, db: AsyncSession = Depends(get_db)):
+    """Re-fetch channel metadata (thumbnail, banner, description) from the platform."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    service = ChannelService(db)
+    try:
+        updated = await service.refresh_channel_metadata(channel)
+        return {"message": f"Metadata refreshed for {updated.channel_name}"}
+    except Exception as e:
+        logger.error("Metadata refresh failed for %s: %s", channel.channel_name, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Metadata refresh failed: {e}")
+
+
 @router.post("/{channel_id}/scan", status_code=202)
 async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
