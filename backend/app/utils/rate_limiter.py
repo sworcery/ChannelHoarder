@@ -18,10 +18,19 @@ async def wait_for_rate_limit():
         _last_download_time = time.monotonic()
         return
 
-    elapsed = time.monotonic() - _last_download_time
-    delay = random.uniform(settings.DOWNLOAD_DELAY_MIN, settings.DOWNLOAD_DELAY_MAX)
+    # Read delay settings from DB (falls back to config.py defaults)
+    from app.database import async_session
+    from app.services.settings_service import get_setting
 
-    if settings.JITTER_ENABLED:
+    async with async_session() as db:
+        delay_min = await get_setting(db, "download_delay_min")
+        delay_max = await get_setting(db, "download_delay_max")
+        jitter_enabled = await get_setting(db, "jitter_enabled")
+
+    elapsed = time.monotonic() - _last_download_time
+    delay = random.uniform(delay_min, delay_max)
+
+    if jitter_enabled:
         jitter = random.uniform(0, 10)
         delay += jitter
 

@@ -44,6 +44,21 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
             db.add(AppSetting(key=key, value=json.dumps(value)))
 
     await db.commit()
+
+    # Apply runtime-reactive settings immediately
+    if "global_schedule_cron" in update_data:
+        try:
+            from app.main import app
+            scheduler = app.state.scheduler
+            scheduler.reschedule_scan(update_data["global_schedule_cron"])
+        except Exception as e:
+            logger.warning("Could not reschedule scan: %s", e)
+
+    if "log_level" in update_data:
+        level = update_data["log_level"].upper()
+        logging.getLogger().setLevel(getattr(logging, level, logging.INFO))
+        logger.info("Log level changed to %s", level)
+
     return {"message": "Settings updated", "updated": list(update_data.keys())}
 
 

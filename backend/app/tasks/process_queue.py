@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, Channel, DownloadQueue, Video
 from app.services.download_service import DownloadService
+from app.services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,8 @@ async def process_download_queue():
             select(func.count(DownloadQueue.id)).where(DownloadQueue.started_at.isnot(None))
         )
 
-        if active_count and active_count >= settings.MAX_CONCURRENT_DOWNLOADS:
+        max_concurrent = await get_setting(db, "max_concurrent_downloads")
+        if active_count and active_count >= max_concurrent:
             return  # At capacity
 
         # Get next queued video

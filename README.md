@@ -111,7 +111,7 @@ Open `http://your-server-ip:8587` in your browser.
 
 ### Automatic Scanning
 
-- The scheduler runs a channel scan daily at 3:00 AM (configurable)
+- The scheduler runs a channel scan on a configurable schedule (default: daily at 3:00 AM, changeable in Settings)
 - Each scan checks for new videos that haven't been downloaded yet
 - New videos are added to the download queue with `pending` status
 - If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise, yt-dlp handles discovery directly
@@ -265,7 +265,7 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
 All settings are configurable through the **Settings** page:
 
-- **General** — Manual scan trigger, system overview, config import/export
+- **General** — Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
 - **Authentication** — PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
 - **Naming** — Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
 - **yt-dlp** — Version info, manual update trigger

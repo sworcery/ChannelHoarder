@@ -19,6 +19,7 @@ import {
   Clock,
   ExternalLink,
   Globe,
+  Settings,
 } from "lucide-react"
 
 export default function SettingsPage() {
@@ -63,14 +64,72 @@ export default function SettingsPage() {
   )
 }
 
+const SCAN_PRESETS = [
+  { label: "Every 6 hours", value: "0 */6 * * *" },
+  { label: "Every 12 hours", value: "0 */12 * * *" },
+  { label: "Daily at 3 AM", value: "0 3 * * *" },
+  { label: "Twice daily (8 AM & 8 PM)", value: "0 8,20 * * *" },
+  { label: "Custom", value: "custom" },
+]
+
 function GeneralTab() {
   const { toast } = useToast()
+  const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: api.getStats })
+
+  // Settings state
+  const [scanCron, setScanCron] = useState("0 3 * * *")
+  const [customCron, setCustomCron] = useState("")
+  const [isCustomCron, setIsCustomCron] = useState(false)
+  const [defaultQuality, setDefaultQuality] = useState("best")
+  const [maxConcurrent, setMaxConcurrent] = useState(1)
+  const [maxRetries, setMaxRetries] = useState(3)
+  const [logLevel, setLogLevel] = useState("info")
+
+  const { data: settings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+
+  useEffect(() => {
+    if (settings) {
+      const cron = settings.global_schedule_cron || "0 3 * * *"
+      const preset = SCAN_PRESETS.find(p => p.value === cron)
+      if (preset) {
+        setScanCron(cron)
+        setIsCustomCron(false)
+      } else {
+        setScanCron("custom")
+        setCustomCron(cron)
+        setIsCustomCron(true)
+      }
+      if (settings.default_quality) setDefaultQuality(String(settings.default_quality))
+      if (settings.max_concurrent_downloads != null) setMaxConcurrent(Number(settings.max_concurrent_downloads))
+      if (settings.max_retries != null) setMaxRetries(Number(settings.max_retries))
+      if (settings.log_level) setLogLevel(String(settings.log_level))
+    }
+  }, [settings])
 
   const scanAllMutation = useMutation({
     mutationFn: api.scanAll,
     onSuccess: (data: any) => toast(data.message || "Scan started"),
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const saveSettingsMutation = useMutation({
+    mutationFn: () =>
+      api.updateSettings({
+        global_schedule_cron: isCustomCron ? customCron : scanCron,
+        default_quality: defaultQuality,
+        max_concurrent_downloads: maxConcurrent,
+        max_retries: maxRetries,
+        log_level: logLevel,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
+      toast("Settings saved — changes take effect immediately")
+    },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -101,11 +160,47 @@ function GeneralTab() {
 
   return (
     <div className="space-y-6">
+      {/* Scan Controls */}
       <div className="rounded-lg border bg-card p-4 space-y-4">
-        <h3 className="font-semibold">Scan Controls</h3>
+        <div className="flex items-center gap-2">
+          <Clock className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold">Scan Schedule</h3>
+        </div>
         <p className="text-sm text-muted-foreground">
-          Channels are scanned daily at 3 AM by default. You can trigger a manual scan here.
+          How often to check subscribed channels for new uploads.
         </p>
+        <div className="max-w-xs">
+          <select
+            value={isCustomCron ? "custom" : scanCron}
+            onChange={(e) => {
+              if (e.target.value === "custom") {
+                setIsCustomCron(true)
+                setScanCron("custom")
+                setCustomCron(settings?.global_schedule_cron || "0 3 * * *")
+              } else {
+                setIsCustomCron(false)
+                setScanCron(e.target.value)
+              }
+            }}
+            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+          >
+            {SCAN_PRESETS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+          {isCustomCron && (
+            <input
+              type="text"
+              placeholder="0 3 * * *"
+              value={customCron}
+              onChange={(e) => setCustomCron(e.target.value)}
+              className="w-full mt-2 px-3 py-2 rounded-md border bg-background font-mono text-sm"
+            />
+          )}
+          <p className="text-xs text-muted-foreground mt-1">
+            {isCustomCron ? "Standard 5-field cron expression" : ""}
+          </p>
+        </div>
         <button
           onClick={() => scanAllMutation.mutate()}
           disabled={scanAllMutation.isPending}
@@ -116,6 +211,79 @@ function GeneralTab() {
         </button>
       </div>
 
+      {/* Download & System Settings */}
+      <div className="rounded-lg border bg-card p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <Settings className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold">Download Settings</h3>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-sm mb-1">Default Quality</label>
+            <select
+              value={defaultQuality}
+              onChange={(e) => setDefaultQuality(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+            >
+              <option value="best">Best Available</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">Default quality for new channels</p>
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Max Concurrent Downloads</label>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={maxConcurrent}
+              onChange={(e) => setMaxConcurrent(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Simultaneous downloads (1-5)</p>
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Max Retries</label>
+            <input
+              type="number"
+              min={1}
+              max={10}
+              value={maxRetries}
+              onChange={(e) => setMaxRetries(Number(e.target.value))}
+              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Retry attempts for failed downloads</p>
+          </div>
+          <div>
+            <label className="block text-sm mb-1">Log Level</label>
+            <select
+              value={logLevel}
+              onChange={(e) => setLogLevel(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+            >
+              <option value="debug">Debug</option>
+              <option value="info">Info</option>
+              <option value="warning">Warning</option>
+              <option value="error">Error</option>
+            </select>
+            <p className="text-xs text-muted-foreground mt-1">Set to debug for troubleshooting</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Save button */}
+      <button
+        onClick={() => saveSettingsMutation.mutate()}
+        disabled={saveSettingsMutation.isPending}
+        className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+      >
+        {saveSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Settings
+      </button>
+
+      {/* System Info */}
       <div className="rounded-lg border bg-card p-4 space-y-2">
         <h3 className="font-semibold">System Info</h3>
         <div className="grid gap-2 text-sm">
@@ -138,6 +306,7 @@ function GeneralTab() {
         </div>
       </div>
 
+      {/* Backup & Restore */}
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <h3 className="font-semibold">Backup & Restore</h3>
         <p className="text-sm text-muted-foreground">
