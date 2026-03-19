@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,6 +13,7 @@ from app.models import AppSetting, Channel, Video, DownloadQueue
 from app.schemas import ChannelCreate
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.services.metadata_service import write_tvshow_nfo
+from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService
@@ -283,6 +285,11 @@ class ChannelService:
         if imported > 0:
             logger.info("Auto-imported %d existing files for %s", imported, channel.channel_name)
 
+        # Rename any completed videos whose file paths don't match current naming template
+        renamed = await self._rename_existing_files(channel)
+        if renamed > 0:
+            logger.info("Renamed %d files for %s to match naming template", renamed, channel.channel_name)
+
         return new_count
 
     async def _get_max_duration(self) -> int | None:
@@ -299,6 +306,69 @@ class ChannelService:
         except Exception:
             pass
         return None
+
+    async def _rename_existing_files(self, channel: Channel) -> int:
+        """Rename completed video files to match the current naming template."""
+        result = await self.db.execute(
+            select(Video)
+            .where(Video.channel_id == channel.id)
+            .where(Video.status == "completed")
+            .where(Video.file_path.isnot(None))
+        )
+        videos = result.scalars().all()
+
+        renamed_count = 0
+        for video in videos:
+            old_path = Path(video.file_path)
+            if not old_path.exists():
+                continue
+
+            # Build expected path from current naming template
+            expected_base = build_output_path(
+                channel_name=channel.channel_name,
+                video_title=video.title,
+                video_id=video.video_id,
+                upload_date=video.upload_date,
+                season=video.season,
+                episode=video.episode,
+                naming_template=channel.naming_template,
+                base_dir=channel.download_dir,
+            )
+            expected_path = Path(expected_base + old_path.suffix)
+
+            if old_path == expected_path:
+                continue
+
+            try:
+                os.makedirs(expected_path.parent, exist_ok=True)
+                await asyncio.to_thread(shutil.move, str(old_path), str(expected_path))
+                video.file_path = str(expected_path)
+                renamed_count += 1
+                logger.info("Renamed: %s -> %s", old_path, expected_path)
+
+                # Also move accompanying .nfo file if present
+                old_nfo = old_path.with_suffix(".nfo")
+                if old_nfo.exists():
+                    new_nfo = expected_path.with_suffix(".nfo")
+                    await asyncio.to_thread(shutil.move, str(old_nfo), str(new_nfo))
+
+                # Clean up empty parent directories
+                try:
+                    old_parent = old_path.parent
+                    while old_parent != Path(channel.download_dir or settings.DOWNLOAD_DIR):
+                        if old_parent.exists() and not any(old_parent.iterdir()):
+                            old_parent.rmdir()
+                            old_parent = old_parent.parent
+                        else:
+                            break
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning("Failed to rename %s: %s", old_path, e)
+
+        if renamed_count > 0:
+            await self.db.commit()
+        return renamed_count
 
     async def _auto_import_existing(self, channel: Channel) -> int:
         """Check the channel's download directory for files that match un-downloaded videos."""

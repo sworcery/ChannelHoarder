@@ -65,10 +65,11 @@ export const api = {
     }),
 
   // Downloads
-  getQueue: (params?: { skip?: number; limit?: number }) => {
+  getQueue: (params?: { skip?: number; limit?: number; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.skip) qs.set("skip", String(params.skip))
     if (params?.limit) qs.set("limit", String(params.limit))
+    if (params?.search) qs.set("search", params.search)
     return request<{ items: any[]; total: number }>(`/downloads/queue?${qs}`)
   },
   bulkRemoveFromQueue: (queueIds: number[]) =>

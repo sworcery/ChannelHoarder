@@ -103,6 +103,7 @@ export default function DownloadsPage() {
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<"queue" | "history" | "failed">("queue")
   const [search, setSearch] = useState("")
+  const [queueSearch, setQueueSearch] = useState("")
   const [page, setPage] = useState(0)
   const [queuePage, setQueuePage] = useState(0)
   const [activeProgress, setActiveProgress] = useState<Record<string, any>>({})
@@ -173,8 +174,8 @@ export default function DownloadsPage() {
   }, [subscribe, queryClient])
 
   const { data: queueData } = useQuery({
-    queryKey: ["download-queue", queuePage],
-    queryFn: () => api.getQueue({ skip: queuePage * 50, limit: 50 }),
+    queryKey: ["download-queue", queuePage, queueSearch],
+    queryFn: () => api.getQueue({ skip: queuePage * 50, limit: 50, search: queueSearch || undefined }),
     refetchInterval: 5000,
     enabled: tab === "queue",
     placeholderData: keepPreviousData,
@@ -417,6 +418,18 @@ export default function DownloadsPage() {
       {/* Queue Tab */}
       {tab === "queue" && (
         <div className="space-y-3">
+          {/* Search */}
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search queue..."
+              value={queueSearch}
+              onChange={(e) => { setQueueSearch(e.target.value); setQueuePage(0) }}
+              className="w-full pl-9 pr-3 py-2 rounded-md border bg-background"
+            />
+          </div>
+
           {/* Select all + bulk action bar */}
           {queue && queue.length > 0 && (
             <div className="flex items-center justify-between">
@@ -496,6 +509,9 @@ export default function DownloadsPage() {
 
                           {/* Meta row */}
                           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                            {video?.channel_name && (
+                              <span className="font-medium text-foreground/70">{video.channel_name}</span>
+                            )}
                             {video?.upload_date && (
                               <span>Uploaded: {video.upload_date}</span>
                             )}
@@ -697,6 +713,9 @@ export default function DownloadsPage() {
 
                             {/* Meta row */}
                             <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                              {video.channel_name && (
+                                <span className="font-medium text-foreground/70">{video.channel_name}</span>
+                              )}
                               {video.upload_date && <span>{video.upload_date}</span>}
                               {video.duration != null && video.duration > 0 && <span>{formatDuration(video.duration)}</span>}
                               {video.file_size ? <span>{formatBytes(video.file_size)}</span> : null}

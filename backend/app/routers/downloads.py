@@ -18,13 +18,24 @@ router = APIRouter()
 async def get_queue(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
+    search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    total = await db.scalar(select(func.count(DownloadQueue.id))) or 0
+    # Count query (no eager loading needed)
+    count_query = select(func.count(DownloadQueue.id))
+    if search:
+        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))
+    total = await db.scalar(count_query) or 0
+
+    # Data query with eager loading
+    data_query = select(DownloadQueue).options(
+        joinedload(DownloadQueue.video).joinedload(Video.channel)
+    )
+    if search:
+        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))
 
     result = await db.execute(
-        select(DownloadQueue)
-        .options(joinedload(DownloadQueue.video))
+        data_query
         .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
         .offset(skip)
         .limit(limit)
@@ -105,7 +116,9 @@ async def get_history(
     error_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Video).order_by(Video.downloaded_at.desc().nullslast(), Video.created_at.desc())
+    query = select(Video).options(
+        joinedload(Video.channel)
+    ).order_by(Video.downloaded_at.desc().nullslast(), Video.created_at.desc())
 
     if channel_id:
         query = query.where(Video.channel_id == channel_id)
@@ -121,7 +134,7 @@ async def get_history(
     total = await db.scalar(count_query)
 
     result = await db.execute(query.offset(skip).limit(limit))
-    videos = result.scalars().all()
+    videos = result.scalars().unique().all()
 
     return {
         "items": [VideoResponse.model_validate(v) for v in videos],

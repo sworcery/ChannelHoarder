@@ -74,13 +74,17 @@ class Video(Base):
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
-    channel: Mapped["Channel"] = relationship("Channel", back_populates="videos")
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="videos", lazy="joined")
     queue_entry: Mapped[Optional["DownloadQueue"]] = relationship(
         "DownloadQueue", back_populates="video", uselist=False, cascade="all, delete-orphan"
     )
     logs: Mapped[list["DownloadLog"]] = relationship(
         "DownloadLog", back_populates="video", cascade="all, delete-orphan"
     )
+
+    @property
+    def channel_name(self) -> str | None:
+        return self.channel.channel_name if self.channel else None
 
 
 class DownloadQueue(Base):

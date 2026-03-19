@@ -62,6 +62,7 @@ class VideoResponse(UTCBaseModel):
     id: int
     video_id: str
     channel_id: int
+    channel_name: Optional[str] = None
     title: str
     upload_date: date
     duration: Optional[int]
