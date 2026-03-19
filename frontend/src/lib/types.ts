@@ -25,6 +25,7 @@ export interface Video {
   id: number
   video_id: string
   channel_id: number
+  channel_name: string | null
   title: string
   upload_date: string
   duration: number | null
