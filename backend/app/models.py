@@ -45,7 +45,7 @@ class Channel(Base):
         DateTime, nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
-    videos: Mapped[list["Video"]] = relationship("Video", back_populates="channel", cascade="all, delete-orphan")
+    videos: Mapped[list["Video"]] = relationship("Video", back_populates="channel", cascade="all, delete-orphan", lazy="noload")
 
 
 class Video(Base):
@@ -76,10 +76,10 @@ class Video(Base):
 
     channel: Mapped["Channel"] = relationship("Channel", back_populates="videos", lazy="selectin")
     queue_entry: Mapped[Optional["DownloadQueue"]] = relationship(
-        "DownloadQueue", back_populates="video", uselist=False, cascade="all, delete-orphan"
+        "DownloadQueue", back_populates="video", uselist=False, cascade="all, delete-orphan", lazy="noload"
     )
     logs: Mapped[list["DownloadLog"]] = relationship(
-        "DownloadLog", back_populates="video", cascade="all, delete-orphan"
+        "DownloadLog", back_populates="video", cascade="all, delete-orphan", lazy="noload"
     )
 
     @property

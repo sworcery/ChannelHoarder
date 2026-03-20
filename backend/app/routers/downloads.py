@@ -4,11 +4,11 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import defer, joinedload
 
 from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
-from app.schemas import BulkQueueRemove, QueueAdd, QueueEntryResponse, VideoResponse, DownloadLogResponse
+from app.schemas import BulkQueueRemove, QueueAdd, QueueEntryResponse, VideoResponse, VideoSummary, DownloadLogResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,9 +27,13 @@ async def get_queue(
         count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))
     total = await db.scalar(count_query) or 0
 
-    # Data query with eager loading
+    # Data query with eager loading — defer large text blobs not needed for queue display
     data_query = select(DownloadQueue).options(
-        joinedload(DownloadQueue.video).joinedload(Video.channel)
+        joinedload(DownloadQueue.video)
+        .defer(Video.description)
+        .defer(Video.error_details)
+        .defer(Video.file_path)
+        .joinedload(Video.channel)
     )
     if search:
         data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))

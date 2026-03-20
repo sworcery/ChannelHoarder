@@ -81,6 +81,22 @@ class VideoResponse(UTCBaseModel):
     downloaded_at: Optional[datetime]
 
 
+class VideoSummary(UTCBaseModel):
+    """Lightweight video schema for queue listings — omits large text blobs."""
+    id: int
+    video_id: str
+    channel_id: int
+    channel_name: Optional[str] = None
+    title: str
+    upload_date: date
+    duration: Optional[int]
+    thumbnail_url: Optional[str]
+    status: str
+    error_code: Optional[str]
+    error_message: Optional[str]
+    retry_count: int
+
+
 # --- Download Queue Schemas ---
 class QueueAdd(BaseModel):
     video_id: int
@@ -115,7 +131,7 @@ class QueueEntryResponse(UTCBaseModel):
     progress_percent: float
     speed_bps: Optional[int]
     eta_seconds: Optional[int]
-    video: VideoResponse
+    video: VideoSummary
 
 
 # --- Dashboard Schemas ---
