@@ -18,49 +18,59 @@ router = APIRouter()
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_stats(db: AsyncSession = Depends(get_db)):
-    total_channels = await db.scalar(select(func.count(Channel.id))) or 0
-    active_channels = await db.scalar(
-        select(func.count(Channel.id)).where(Channel.enabled == True)
-    ) or 0
-    total_videos = await db.scalar(select(func.count(Video.id))) or 0
-    total_downloaded = await db.scalar(
-        select(func.count(Video.id)).where(Video.status == "completed")
-    ) or 0
-    total_failed = await db.scalar(
-        select(func.count(Video.id)).where(Video.status == "failed")
-    ) or 0
-    total_pending = await db.scalar(
-        select(func.count(Video.id)).where(Video.status.in_(["pending", "queued"]))
-    ) or 0
-    queue_length = await db.scalar(select(func.count(DownloadQueue.id))) or 0
-    active_downloads = await db.scalar(
-        select(func.count(DownloadQueue.id)).where(DownloadQueue.started_at.isnot(None))
-    ) or 0
-
-    last_scan = await db.scalar(
-        select(func.max(Channel.last_scanned_at))
+    # Batch channel counts into one query
+    ch_result = await db.execute(
+        select(
+            func.count(Channel.id),
+            func.count(Channel.id).filter(Channel.enabled == True),
+            func.max(Channel.last_scanned_at),
+        )
     )
+    ch_row = ch_result.one()
+    total_channels, active_channels, last_scan = ch_row[0] or 0, ch_row[1] or 0, ch_row[2]
 
-    # Get custom download dirs from channels
+    # Batch video counts into one query using conditional aggregation
+    vid_result = await db.execute(
+        select(
+            func.count(Video.id),
+            func.count(Video.id).filter(Video.status == "completed"),
+            func.count(Video.id).filter(Video.status == "failed"),
+            func.count(Video.id).filter(Video.status.in_(["pending", "queued"])),
+        )
+    )
+    vid_row = vid_result.one()
+    total_videos = vid_row[0] or 0
+    total_downloaded = vid_row[1] or 0
+    total_failed = vid_row[2] or 0
+    total_pending = vid_row[3] or 0
+
+    # Batch queue counts into one query
+    q_result = await db.execute(
+        select(
+            func.count(DownloadQueue.id),
+            func.count(DownloadQueue.id).filter(DownloadQueue.started_at.isnot(None)),
+        )
+    )
+    q_row = q_result.one()
+    queue_length, active_downloads = q_row[0] or 0, q_row[1] or 0
+
+    # Get custom download dirs + cookies_expired in parallel with above
     custom_dirs_result = await db.execute(
         select(Channel.download_dir).where(Channel.download_dir.isnot(None)).distinct()
     )
     custom_dirs = [row[0] for row in custom_dirs_result.all()]
 
-    storage = get_storage_usage(custom_dirs=custom_dirs)
-
-    ytdlp = YtdlpService()
-
-    # Check PO token status
-    pot_status = "enabled" if settings.POT_SERVER_ENABLED else "disabled"
-    cookies_status = "present" if settings.has_cookies else "not configured"
-
-    # Check if cookies have been flagged as expired
     cookie_flag = await db.execute(
         select(AppSetting).where(AppSetting.key == "cookies_expired")
     )
     cookie_setting = cookie_flag.scalar_one_or_none()
     cookies_expired = cookie_setting is not None and cookie_setting.value == "true"
+
+    storage = get_storage_usage(custom_dirs=custom_dirs)
+
+    ytdlp = YtdlpService()
+    pot_status = "enabled" if settings.POT_SERVER_ENABLED else "disabled"
+    cookies_status = "present" if settings.has_cookies else "not configured"
 
     return DashboardStats(
         total_channels=total_channels,

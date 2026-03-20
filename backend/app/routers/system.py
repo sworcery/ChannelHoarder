@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy.orm import joinedload
+
 from app.config import settings
 from app.deps import get_db
 from app.models import Channel, DownloadLog, Video
@@ -60,7 +62,9 @@ async def get_logs(
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(DownloadLog).order_by(DownloadLog.created_at.desc())
+    query = select(DownloadLog).options(
+        joinedload(DownloadLog.video).joinedload(Video.channel)
+    ).order_by(DownloadLog.created_at.desc())
 
     if error_code:
         query = query.where(DownloadLog.error_code == error_code)
@@ -74,20 +78,10 @@ async def get_logs(
 
     total = await db.scalar(select(func.count()).select_from(query.subquery()))
     result = await db.execute(query.offset(skip).limit(limit))
-    logs = result.scalars().all()
+    logs = result.scalars().unique().all()
 
-    # Enrich with video/channel info
-    items = []
-    for log in logs:
-        video_result = await db.execute(select(Video).where(Video.id == log.video_id))
-        video = video_result.scalar_one_or_none()
-        channel_name = None
-        if video:
-            ch_result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
-            ch = ch_result.scalar_one_or_none()
-            channel_name = ch.channel_name if ch else None
-
-        items.append(DownloadLogResponse(
+    items = [
+        DownloadLogResponse(
             id=log.id,
             video_id=log.video_id,
             event=log.event,
@@ -95,9 +89,11 @@ async def get_logs(
             message=log.message,
             details=log.details,
             created_at=log.created_at,
-            video_title=video.title if video else None,
-            channel_name=channel_name,
-        ))
+            video_title=log.video.title if log.video else None,
+            channel_name=log.video.channel.channel_name if log.video and log.video.channel else None,
+        )
+        for log in logs
+    ]
 
     return {"items": items, "total": total or 0, "skip": skip, "limit": limit}
 

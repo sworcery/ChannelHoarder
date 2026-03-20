@@ -74,7 +74,7 @@ class Video(Base):
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
-    channel: Mapped["Channel"] = relationship("Channel", back_populates="videos", lazy="joined")
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="videos", lazy="selectin")
     queue_entry: Mapped[Optional["DownloadQueue"]] = relationship(
         "DownloadQueue", back_populates="video", uselist=False, cascade="all, delete-orphan"
     )

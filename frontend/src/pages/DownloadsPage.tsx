@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { formatDateTime, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed } from "@/lib/utils"
 import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
+import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/components/ui/toaster"
 import {
   RotateCcw,
@@ -104,6 +105,8 @@ export default function DownloadsPage() {
   const [tab, setTab] = useState<"queue" | "history" | "failed">("queue")
   const [search, setSearch] = useState("")
   const [queueSearch, setQueueSearch] = useState("")
+  const debouncedSearch = useDebounce(search, 300)
+  const debouncedQueueSearch = useDebounce(queueSearch, 300)
   const [page, setPage] = useState(0)
   const [queuePage, setQueuePage] = useState(0)
   const [activeProgress, setActiveProgress] = useState<Record<string, any>>({})
@@ -174,9 +177,9 @@ export default function DownloadsPage() {
   }, [subscribe, queryClient])
 
   const { data: queueData } = useQuery({
-    queryKey: ["download-queue", queuePage, queueSearch],
-    queryFn: () => api.getQueue({ skip: queuePage * 50, limit: 50, search: queueSearch || undefined }),
-    refetchInterval: 5000,
+    queryKey: ["download-queue", queuePage, debouncedQueueSearch],
+    queryFn: () => api.getQueue({ skip: queuePage * 50, limit: 50, search: debouncedQueueSearch || undefined }),
+    refetchInterval: 10000,
     enabled: tab === "queue",
     placeholderData: keepPreviousData,
   })
@@ -191,12 +194,12 @@ export default function DownloadsPage() {
   })
 
   const { data: history } = useQuery({
-    queryKey: ["download-history", page, search, tab === "failed" ? "failed" : undefined],
+    queryKey: ["download-history", page, debouncedSearch, tab === "failed" ? "failed" : undefined],
     queryFn: () =>
       api.getHistory({
         skip: page * 50,
         limit: 50,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         status: tab === "failed" ? "failed" : undefined,
       }),
     enabled: tab !== "queue",
