@@ -176,16 +176,29 @@ export default function DownloadsPage() {
     })
   }, [subscribe, queryClient])
 
+  const PAGE_SIZE = 25
+
   const { data: queueData } = useQuery({
     queryKey: ["download-queue", queuePage, debouncedQueueSearch],
-    queryFn: () => api.getQueue({ skip: queuePage * 50, limit: 50, search: debouncedQueueSearch || undefined }),
-    refetchInterval: 10000,
+    queryFn: () => api.getQueue({ skip: queuePage * PAGE_SIZE, limit: PAGE_SIZE, search: debouncedQueueSearch || undefined }),
+    refetchInterval: 15000,
     enabled: tab === "queue",
     placeholderData: keepPreviousData,
   })
 
   const queue = queueData?.items
   const queueTotal = queueData?.total ?? 0
+
+  // Prefetch next page so navigation feels instant
+  useEffect(() => {
+    if (tab === "queue" && queueTotal > (queuePage + 1) * PAGE_SIZE) {
+      queryClient.prefetchQuery({
+        queryKey: ["download-queue", queuePage + 1, debouncedQueueSearch],
+        queryFn: () => api.getQueue({ skip: (queuePage + 1) * PAGE_SIZE, limit: PAGE_SIZE, search: debouncedQueueSearch || undefined }),
+        staleTime: 30000,
+      })
+    }
+  }, [queuePage, queueTotal, debouncedQueueSearch, tab, queryClient])
 
   const { data: pauseStatus } = useQuery({
     queryKey: ["download-paused"],
@@ -197,8 +210,8 @@ export default function DownloadsPage() {
     queryKey: ["download-history", page, debouncedSearch, tab === "failed" ? "failed" : undefined],
     queryFn: () =>
       api.getHistory({
-        skip: page * 50,
-        limit: 50,
+        skip: page * PAGE_SIZE,
+        limit: PAGE_SIZE,
         search: debouncedSearch || undefined,
         status: tab === "failed" ? "failed" : undefined,
       }),
@@ -622,10 +635,10 @@ export default function DownloadsPage() {
               })}
 
               {/* Queue Pagination */}
-              {queueTotal > 50 && (
+              {queueTotal > PAGE_SIZE && (
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-muted-foreground">
-                    Showing {queuePage * 50 + 1}-{Math.min((queuePage + 1) * 50, queueTotal)} of {queueTotal}
+                    Showing {queuePage * PAGE_SIZE + 1}-{Math.min((queuePage + 1) * PAGE_SIZE, queueTotal)} of {queueTotal}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -637,7 +650,7 @@ export default function DownloadsPage() {
                     </button>
                     <button
                       onClick={() => { setQueuePage(queuePage + 1); setSelectedQueueIds(new Set()) }}
-                      disabled={(queuePage + 1) * 50 >= queueTotal}
+                      disabled={(queuePage + 1) * PAGE_SIZE >= queueTotal}
                       className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                     >
                       Next
@@ -809,7 +822,7 @@ export default function DownloadsPage() {
               {/* Pagination */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">
-                  Showing {page * 50 + 1}-{Math.min((page + 1) * 50, history.total)} of {history.total}
+                  Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, history.total)} of {history.total}
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -821,7 +834,7 @@ export default function DownloadsPage() {
                   </button>
                   <button
                     onClick={() => setPage(page + 1)}
-                    disabled={(page + 1) * 50 >= history.total}
+                    disabled={(page + 1) * PAGE_SIZE >= history.total}
                     className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                   >
                     Next

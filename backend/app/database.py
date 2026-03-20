@@ -8,8 +8,8 @@ engine = create_async_engine(
     settings.db_url,
     echo=settings.DEBUG,
     connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=5,
-    max_overflow=5,
+    pool_size=10,
+    max_overflow=10,
     pool_pre_ping=True,
 )
 
