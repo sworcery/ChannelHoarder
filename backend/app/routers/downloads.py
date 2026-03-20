@@ -120,24 +120,33 @@ async def get_history(
     error_code: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Video).options(
-        joinedload(Video.channel)
-    ).order_by(Video.downloaded_at.desc().nullslast(), Video.created_at.desc())
-
+    # Build WHERE conditions for reuse in both count and data queries
+    conditions = []
     if channel_id:
-        query = query.where(Video.channel_id == channel_id)
+        conditions.append(Video.channel_id == channel_id)
     if status:
-        query = query.where(Video.status == status)
+        conditions.append(Video.status == status)
     if search:
-        query = query.where(Video.title.ilike(f"%{search}%"))
+        conditions.append(Video.title.ilike(f"%{search}%"))
     if error_code:
-        query = query.where(Video.error_code == error_code)
+        conditions.append(Video.error_code == error_code)
 
-    # Get total count
-    count_query = select(func.count()).select_from(query.subquery())
-    total = await db.scalar(count_query)
+    # Count query — lightweight, no joins
+    count_query = select(func.count(Video.id))
+    for cond in conditions:
+        count_query = count_query.where(cond)
+    total = await db.scalar(count_query) or 0
 
-    result = await db.execute(query.offset(skip).limit(limit))
+    # Data query — eager-load channel for channel_name display
+    data_query = (
+        select(Video)
+        .options(joinedload(Video.channel))
+        .order_by(Video.downloaded_at.desc().nullslast(), Video.created_at.desc())
+    )
+    for cond in conditions:
+        data_query = data_query.where(cond)
+
+    result = await db.execute(data_query.offset(skip).limit(limit))
     videos = result.scalars().unique().all()
 
     return {

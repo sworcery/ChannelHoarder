@@ -61,6 +61,7 @@ export default function ChannelsPage() {
   const { data: channels, isLoading } = useQuery({
     queryKey: ["channels", debouncedSearch],
     queryFn: () => api.getChannels(debouncedSearch || undefined),
+    staleTime: 15000,
   })
 
   const addMutation = useMutation({

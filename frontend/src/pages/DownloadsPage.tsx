@@ -178,10 +178,11 @@ export default function DownloadsPage() {
 
   const PAGE_SIZE = 25
 
-  const { data: queueData } = useQuery({
+  const { data: queueData, isLoading: queueLoading } = useQuery({
     queryKey: ["download-queue", queuePage, debouncedQueueSearch],
     queryFn: () => api.getQueue({ skip: queuePage * PAGE_SIZE, limit: PAGE_SIZE, search: debouncedQueueSearch || undefined }),
     refetchInterval: 15000,
+    staleTime: 5000,
     enabled: tab === "queue",
     placeholderData: keepPreviousData,
   })
@@ -203,10 +204,11 @@ export default function DownloadsPage() {
   const { data: pauseStatus } = useQuery({
     queryKey: ["download-paused"],
     queryFn: api.getPauseStatus,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
+    staleTime: 10000,
   })
 
-  const { data: history } = useQuery({
+  const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["download-history", page, debouncedSearch, tab === "failed" ? "failed" : undefined],
     queryFn: () =>
       api.getHistory({
@@ -215,6 +217,7 @@ export default function DownloadsPage() {
         search: debouncedSearch || undefined,
         status: tab === "failed" ? "failed" : undefined,
       }),
+    staleTime: 10000,
     enabled: tab !== "queue",
   })
 
@@ -481,7 +484,12 @@ export default function DownloadsPage() {
             </div>
           )}
 
-          {queue && queue.length > 0 ? (
+          {queueLoading && !queue ? (
+            <div className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50 mx-auto mb-2" />
+              <p className="text-muted-foreground">Loading queue...</p>
+            </div>
+          ) : queue && queue.length > 0 ? (
             <>
               {queue.map((entry: any, idx: number) => {
                 const progress = activeProgress[entry.video?.video_id]
@@ -695,7 +703,12 @@ export default function DownloadsPage() {
             )}
           </div>
 
-          {history && history.items.length > 0 ? (
+          {historyLoading && !history ? (
+            <div className="text-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50 mx-auto mb-2" />
+              <p className="text-muted-foreground">Loading...</p>
+            </div>
+          ) : history && history.items.length > 0 ? (
             <>
               <div className="space-y-2">
                 {history.items.map((video: any) => {

@@ -16,11 +16,15 @@ engine = create_async_engine(
 
 @event.listens_for(engine.sync_engine, "connect")
 def _set_sqlite_pragma(dbapi_conn, connection_record):
-    """Enable WAL mode and busy timeout for SQLite concurrency."""
+    """Optimize SQLite for concurrent web-app usage."""
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    # Performance: 64MB page cache (default is ~2MB), 256MB mmap, temp tables in memory
+    cursor.execute("PRAGMA cache_size=-65536")
+    cursor.execute("PRAGMA mmap_size=268435456")
+    cursor.execute("PRAGMA temp_store=MEMORY")
     cursor.close()
 
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
