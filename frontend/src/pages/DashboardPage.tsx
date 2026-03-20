@@ -20,18 +20,21 @@ export default function DashboardPage() {
     queryKey: ["dashboard-stats"],
     queryFn: api.getStats,
     refetchInterval: 30000,
+    staleTime: 10000,
   })
 
   const { data: recent } = useQuery({
     queryKey: ["recent-downloads"],
     queryFn: () => api.getRecentDownloads(10),
     refetchInterval: 30000,
+    staleTime: 10000,
   })
 
   const { data: queueData } = useQuery({
-    queryKey: ["download-queue"],
-    queryFn: () => api.getQueue(),
+    queryKey: ["download-queue-dashboard"],
+    queryFn: () => api.getQueue({ limit: 10 }),
     refetchInterval: 15000,
+    staleTime: 5000,
   })
   const queue = queueData?.items
 

@@ -117,13 +117,14 @@ async def get_cookie_status():
 @router.post("/cookies/validate")
 async def validate_cookies():
     """Force a cookie health check."""
+    import asyncio
     from app.services.ytdlp_service import YtdlpService
 
     if not settings.has_cookies:
         return {"status": "not_configured", "message": "No cookies file to validate"}
 
     ytdlp = YtdlpService()
-    success, message = ytdlp.test_download_capability()
+    success, message = await asyncio.to_thread(ytdlp.test_download_capability)
 
     return {
         "status": "healthy" if success else "expired",

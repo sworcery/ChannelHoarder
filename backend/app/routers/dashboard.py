@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime
 
@@ -66,7 +67,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     cookie_setting = cookie_flag.scalar_one_or_none()
     cookies_expired = cookie_setting is not None and cookie_setting.value == "true"
 
-    storage = get_storage_usage(custom_dirs=custom_dirs)
+    storage = await asyncio.to_thread(lambda: get_storage_usage(custom_dirs=custom_dirs))
 
     ytdlp = YtdlpService()
     pot_status = "enabled" if settings.POT_SERVER_ENABLED else "disabled"
@@ -112,7 +113,7 @@ async def get_storage_info(db: AsyncSession = Depends(get_db)):
         select(Channel.download_dir).where(Channel.download_dir.isnot(None)).distinct()
     )
     custom_dirs = [row[0] for row in custom_dirs_result.all()]
-    storage = get_storage_usage(custom_dirs=custom_dirs)
+    storage = await asyncio.to_thread(lambda: get_storage_usage(custom_dirs=custom_dirs))
     return {
         "disk_total": storage["disk_total"],
         "disk_total_formatted": format_bytes(storage["disk_total"]),
