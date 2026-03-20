@@ -19,19 +19,19 @@ export default function DashboardPage() {
   const { data: stats, refetch: refetchStats } = useQuery({
     queryKey: ["dashboard-stats"],
     queryFn: api.getStats,
-    refetchInterval: 10000,
+    refetchInterval: 30000,
   })
 
   const { data: recent } = useQuery({
     queryKey: ["recent-downloads"],
     queryFn: () => api.getRecentDownloads(10),
-    refetchInterval: 15000,
+    refetchInterval: 30000,
   })
 
   const { data: queueData } = useQuery({
     queryKey: ["download-queue"],
     queryFn: () => api.getQueue(),
-    refetchInterval: 5000,
+    refetchInterval: 15000,
   })
   const queue = queueData?.items
 
@@ -141,7 +141,12 @@ export default function DashboardPage() {
               {recent.map((video: any) => (
                 <div key={video.id} className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  <span className="truncate flex-1">{video.title}</span>
+                  <div className="truncate flex-1">
+                    <span>{video.title}</span>
+                    {video.channel_name && (
+                      <span className="text-xs text-muted-foreground ml-1.5">— {video.channel_name}</span>
+                    )}
+                  </div>
                   <span className="text-xs text-muted-foreground flex-shrink-0">
                     {formatDateTime(video.downloaded_at)}
                   </span>

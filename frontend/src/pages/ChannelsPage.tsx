@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
+import { useDebounce } from "@/hooks/useDebounce"
 import {
   Plus,
   Loader2,
@@ -55,9 +56,11 @@ export default function ChannelsPage() {
 
   const { toast } = useToast()
 
+  const debouncedSearch = useDebounce(search, 300)
+
   const { data: channels, isLoading } = useQuery({
-    queryKey: ["channels", search],
-    queryFn: () => api.getChannels(search || undefined),
+    queryKey: ["channels", debouncedSearch],
+    queryFn: () => api.getChannels(debouncedSearch || undefined),
   })
 
   const addMutation = useMutation({

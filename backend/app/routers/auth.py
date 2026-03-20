@@ -219,31 +219,23 @@ async def get_auth_status():
             cookies_status = "error"
             cookies_message = f"Error checking cookies: {e}"
 
-        # Check if cookies are flagged as expired
+        # Check cookies_expired and last_successful_auth in a single DB session
+        api_key_configured = bool(settings.YOUTUBE_API_KEY)
+        last_auth = None
+
         async with async_session() as db:
             result = await db.execute(
-                select(AppSetting).where(AppSetting.key == "cookies_expired")
+                select(AppSetting).where(
+                    AppSetting.key.in_(["cookies_expired", "last_successful_auth"])
+                )
             )
-            flag = result.scalar_one_or_none()
-            if flag and flag.value == "true":
+            db_settings = {s.key: s.value for s in result.scalars().all()}
+
+            if db_settings.get("cookies_expired") == "true":
                 cookies_status = "expired"
                 cookies_message = "Cookies expired — please upload fresh cookies.txt"
 
-        # API key
-        api_key_configured = bool(settings.YOUTUBE_API_KEY)
-
-        # Last successful auth time
-        last_auth = None
-        try:
-            async with async_session() as db2:
-                result2 = await db2.execute(
-                    select(AppSetting).where(AppSetting.key == "last_successful_auth")
-                )
-                auth_setting = result2.scalar_one_or_none()
-                if auth_setting:
-                    last_auth = auth_setting.value
-        except Exception:
-            pass
+            last_auth = db_settings.get("last_successful_auth")
 
         return {
             "pot_status": pot_status,
