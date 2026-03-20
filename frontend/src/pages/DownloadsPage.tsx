@@ -178,7 +178,7 @@ export default function DownloadsPage() {
 
   const PAGE_SIZE = 25
 
-  const { data: queueData, isLoading: queueLoading } = useQuery({
+  const { data: queueData, isFetching: queueFetching, isPlaceholderData } = useQuery({
     queryKey: ["download-queue", queuePage, debouncedQueueSearch],
     queryFn: () => api.getQueue({ skip: queuePage * PAGE_SIZE, limit: PAGE_SIZE, search: debouncedQueueSearch || undefined }),
     refetchInterval: 15000,
@@ -484,7 +484,7 @@ export default function DownloadsPage() {
             </div>
           )}
 
-          {queueLoading && !queue ? (
+          {queueFetching && !queueData ? (
             <div className="text-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50 mx-auto mb-2" />
               <p className="text-muted-foreground">Loading queue...</p>
