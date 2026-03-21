@@ -121,9 +121,9 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
     ErrorCode.FORMAT_UNAVAILABLE: ErrorInfo(
         code=ErrorCode.FORMAT_UNAVAILABLE,
         summary="Requested quality not available",
-        explanation="The requested video quality/format is not available for this video.",
-        suggested_fix="Try a lower quality setting for this channel, or set quality to 'best' to download whatever is available.",
-        retry_strategy="none",
+        explanation="The requested video quality/format is not available for this video. This can happen when the player client (e.g. mweb) returns limited format options.",
+        suggested_fix="Retry the download — format selection has been improved. If it persists, try changing the player client in Settings > Authentication (e.g. 'web' or 'android').",
+        retry_strategy="retry",
         severity="warning",
     ),
     ErrorCode.AGE_RESTRICTED: ErrorInfo(
