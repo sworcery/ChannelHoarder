@@ -69,6 +69,13 @@ export default function ChannelDetailPage() {
     placeholderData: keepPreviousData,
   })
 
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+    staleTime: 60000,
+  })
+  const shortsGloballyEnabled = appSettings?.shorts_enabled === true || appSettings?.shorts_enabled === "true"
+
   const videos = videosData?.items || []
   const totalVideos = videosData?.total || 0
   const totalPages = Math.ceil(totalVideos / PAGE_SIZE)
@@ -114,6 +121,18 @@ export default function ChannelDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
       toast(data.message || "Metadata refreshed")
     },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const detectShortsMutation = useMutation({
+    mutationFn: () => api.detectChannelShorts(channelId),
+    onSuccess: (data: any) => { invalidateVideos(); toast(data.message) },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const deleteShortsMutation = useMutation({
+    mutationFn: () => api.deleteChannelShorts(channelId),
+    onSuccess: (data: any) => { invalidateVideos(); toast(data.message) },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -376,6 +395,53 @@ export default function ChannelDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Shorts Management */}
+          {channel.platform === "youtube" && (
+            <div className="mt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
+              {shortsGloballyEnabled ? (
+                <div className="space-y-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={channel.include_shorts}
+                      onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Include shorts when downloading</span>
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {channel.include_shorts
+                      ? "Shorts (videos under 60s) will be included in downloads."
+                      : "Shorts are excluded from downloads for this channel."}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => detectShortsMutation.mutate()}
+                      disabled={detectShortsMutation.isPending}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+                    >
+                      {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                      Detect Shorts
+                    </button>
+                    <button
+                      onClick={() => { if (confirm("Delete all downloaded shorts for this channel? Files will be removed from disk.")) deleteShortsMutation.mutate() }}
+                      disabled={deleteShortsMutation.isPending}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                    >
+                      {deleteShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                      Delete Downloaded Shorts
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Shorts downloading is disabled globally. Enable it in Settings &gt; Anti-Detection to configure per-channel.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Monitoring */}

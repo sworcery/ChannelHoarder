@@ -733,6 +733,7 @@ function AntiDetectTab() {
   const [uaRotation, setUaRotation] = useState(true)
   const [jitter, setJitter] = useState(true)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
+  const [shortsEnabled, setShortsEnabled] = useState(false)
 
   const { data: settings } = useQuery({
     queryKey: ["app-settings"],
@@ -746,6 +747,7 @@ function AntiDetectTab() {
       if (settings.user_agent_rotation != null) setUaRotation(settings.user_agent_rotation === true || settings.user_agent_rotation === "true")
       if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
+      if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
     }
   }, [settings])
 
@@ -757,6 +759,7 @@ function AntiDetectTab() {
         user_agent_rotation: uaRotation,
         jitter_enabled: jitter,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
+        shorts_enabled: shortsEnabled,
       }),
     onSuccess: () => toast("Anti-detection settings saved"),
     onError: (e: Error) => toast(e.message, "error"),
@@ -821,6 +824,28 @@ function AntiDetectTab() {
           />
           <span className="text-sm">Enable jitter</span>
         </label>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">YouTube Shorts</h3>
+        <p className="text-sm text-muted-foreground">
+          By default, YouTube Shorts (videos under 60 seconds) are excluded from downloads. Enable this
+          to allow channels to opt-in to downloading shorts.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={shortsEnabled}
+            onChange={(e) => setShortsEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Allow shorts downloading (per-channel opt-in)</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {shortsEnabled
+            ? "Channels can individually enable shorts downloading in their settings."
+            : "Shorts are excluded from all channel downloads."}
+        </p>
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">

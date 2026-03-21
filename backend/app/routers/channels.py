@@ -356,6 +356,88 @@ async def scan_for_import(
         raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
 
 
+@router.get("/{channel_id}/shorts")
+async def list_channel_shorts(
+    channel_id: int,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all videos identified as shorts for a channel."""
+    query = (
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == True)
+        .order_by(Video.season.desc(), Video.episode.desc())
+    )
+    if status:
+        query = query.where(Video.status == status)
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    return {
+        "items": [VideoResponse.model_validate(v) for v in videos],
+        "total": len(videos),
+    }
+
+
+@router.post("/{channel_id}/shorts/delete")
+async def delete_channel_shorts(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all downloaded shorts for a channel (removes files and marks as skipped)."""
+    import os
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == True)
+        .where(Video.status == "completed")
+    )
+    videos = result.scalars().all()
+
+    deleted = 0
+    for video in videos:
+        if video.file_path:
+            try:
+                if os.path.exists(video.file_path):
+                    os.remove(video.file_path)
+                    # Also remove .nfo if present
+                    nfo_path = video.file_path.rsplit(".", 1)[0] + ".nfo"
+                    if os.path.exists(nfo_path):
+                        os.remove(nfo_path)
+                    deleted += 1
+            except Exception as e:
+                logger.warning("Failed to delete short file %s: %s", video.file_path, e)
+        video.status = "skipped"
+        video.file_path = None
+        video.file_size = None
+
+    await db.commit()
+    return {"message": f"Deleted {deleted} shorts", "deleted": deleted}
+
+
+@router.post("/{channel_id}/shorts/detect")
+async def detect_channel_shorts(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Scan existing videos and mark any with duration <= 60s as shorts."""
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == False)
+    )
+    videos = result.scalars().all()
+
+    detected = 0
+    for video in videos:
+        if video.duration and video.duration <= 60:
+            video.is_short = True
+            detected += 1
+
+    await db.commit()
+    return {"message": f"Detected {detected} shorts", "detected": detected}
+
+
 @router.post("/{channel_id}/import/confirm")
 async def confirm_import(
     channel_id: int,

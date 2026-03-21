@@ -32,6 +32,7 @@ class ChannelUpdate(BaseModel):
     download_dir: Optional[str] = None
     check_schedule: Optional[str] = None
     enabled: Optional[bool] = None
+    include_shorts: Optional[bool] = None
 
 
 class ChannelResponse(UTCBaseModel):
@@ -48,6 +49,7 @@ class ChannelResponse(UTCBaseModel):
     download_dir: Optional[str]
     check_schedule: Optional[str]
     enabled: bool
+    include_shorts: bool
     last_scanned_at: Optional[datetime]
     total_videos: int
     downloaded_count: int
@@ -70,6 +72,7 @@ class VideoResponse(UTCBaseModel):
     season: int
     episode: int
     status: str
+    is_short: bool
     file_path: Optional[str]
     file_size: Optional[int]
     quality_downloaded: Optional[str]
@@ -173,6 +176,7 @@ class SettingsUpdate(BaseModel):
     pushover_app_token: Optional[str] = None
     pushover_user_key: Optional[str] = None
     webhook_events: Optional[list[str]] = None
+    shorts_enabled: Optional[bool] = None  # Global toggle to allow shorts downloading
     # Livestream / long video filter
     max_video_duration: Optional[int] = None  # Max duration in seconds (0 = disabled)
     # System
