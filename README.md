@@ -44,6 +44,7 @@
 - **Bulk Video Management** — Select multiple videos to queue, skip, or unskip at once
 - **Import Existing Files** — Scan a folder of previously downloaded videos and match them to channel entries by title. Matched files are moved into the proper Plex-compatible directory structure. Video filenames must contain the original video title for matching to work.
 - **Livestream / Long Video Filter** — Auto-skip videos over a configurable duration (e.g., livestreams), with optional notification for manual review
+- **YouTube Shorts Filter** — Shorts (videos under 60 seconds) are excluded by default. Global toggle in Settings to allow shorts, with per-channel opt-in. Detect and bulk-delete already-downloaded shorts per channel
 
 ### Authentication
 - **PO Token Authentication** — Built-in PO token server (bgutil-ytdlp-pot-provider) for YouTube authentication with no manual setup
@@ -323,6 +324,9 @@ All endpoints are under `/api/v1/`:
 - `POST /channels/{id}/import/scan` — Scan folder for existing video files
 - `POST /channels/{id}/import/confirm` — Import matched files
 - `POST /channels/download-all-missing` — Queue all pending/failed videos across all channels
+- `GET /channels/{id}/shorts` — List videos identified as shorts
+- `POST /channels/{id}/shorts/detect` — Scan existing videos and mark shorts
+- `POST /channels/{id}/shorts/delete` — Delete downloaded shorts from disk
 
 ### Downloads
 - `GET /downloads/queue` — Current download queue with progress
