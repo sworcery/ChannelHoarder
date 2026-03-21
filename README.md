@@ -36,6 +36,8 @@
 
 ### Downloads
 - **Queue-Based Pipeline** — Downloads are queued and processed sequentially with configurable delays
+- **Standalone Video Download** — Download individual videos by URL without subscribing to a channel, with configurable download directory
+- **Download All Missing** — One-click button to queue all pending/failed videos across all channels, plus per-channel download buttons
 - **Pause/Resume Queue** — Pause the entire download queue and resume when ready
 - **Real-Time Progress** — WebSocket-powered live download speed, ETA, and progress bars
 - **Retry Failed Downloads** — Retry individual failures or all failed downloads at once
@@ -320,6 +322,7 @@ All endpoints are under `/api/v1/`:
 - `POST /channels/{id}/videos/bulk-unskip` — Unskip selected videos
 - `POST /channels/{id}/import/scan` — Scan folder for existing video files
 - `POST /channels/{id}/import/confirm` — Import matched files
+- `POST /channels/download-all-missing` — Queue all pending/failed videos across all channels
 
 ### Downloads
 - `GET /downloads/queue` — Current download queue with progress
@@ -334,6 +337,9 @@ All endpoints are under `/api/v1/`:
 - `GET /downloads/history` — Filterable download history
 - `POST /downloads/retry/{id}` — Retry a failed download
 - `POST /downloads/retry-all-failed` — Retry all failed downloads
+- `POST /downloads/standalone` — Download a standalone video by URL
+- `GET /downloads/standalone/settings` — Get standalone download directory
+- `PUT /downloads/standalone/settings` — Update standalone download directory
 
 ### Dashboard
 - `GET /dashboard/stats` — Aggregate statistics
