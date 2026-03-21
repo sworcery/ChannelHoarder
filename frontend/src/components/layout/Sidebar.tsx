@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Tv,
   Download,
+  Video,
   Settings,
   Stethoscope,
   X,
@@ -15,6 +16,7 @@ const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/channels", icon: Tv, label: "Channels" },
   { to: "/downloads", icon: Download, label: "Downloads" },
+  { to: "/download-video", icon: Video, label: "Download Video" },
   { to: "/settings", icon: Settings, label: "Settings" },
   { to: "/diagnostics", icon: Stethoscope, label: "Diagnostics" },
 ]

@@ -1,7 +1,10 @@
+import asyncio
 import logging
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer, joinedload
@@ -9,6 +12,7 @@ from sqlalchemy.orm import defer, joinedload
 from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
 from app.schemas import BulkQueueRemove, QueueAdd, QueueEntryResponse, VideoResponse, VideoSummary, DownloadLogResponse
+from app.services.ytdlp_service import YtdlpService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -272,3 +276,163 @@ async def clear_queue(db: AsyncSession = Depends(get_db)):
     await db.commit()
     logger.info("Cleared %d items from download queue", count)
     return {"message": f"Cleared {count} items from queue", "cleared": count}
+
+
+# --- Standalone video download ---
+
+STANDALONE_CHANNEL_ID = "__standalone__"
+
+
+class StandaloneDownloadRequest(BaseModel):
+    url: str = Field(..., min_length=1, description="Video URL to download")
+    quality: str = Field(default="best", pattern="^(best|1080p|720p|480p)$")
+    download_dir: Optional[str] = Field(default=None, description="Custom download directory")
+
+
+async def _get_or_create_standalone_channel(db: AsyncSession, download_dir: Optional[str] = None) -> Channel:
+    """Get or create the special 'Standalone Downloads' channel."""
+    from app.config import settings as app_settings
+
+    result = await db.execute(
+        select(Channel).where(Channel.channel_id == STANDALONE_CHANNEL_ID)
+    )
+    channel = result.scalar_one_or_none()
+    if not channel:
+        channel = Channel(
+            channel_id=STANDALONE_CHANNEL_ID,
+            channel_name="Standalone Downloads",
+            channel_url="",
+            platform="youtube",
+            quality="best",
+            enabled=False,  # Don't scan this "channel"
+            health_status="healthy",
+            download_dir=download_dir or app_settings.DOWNLOAD_DIR,
+        )
+        db.add(channel)
+        await db.commit()
+        await db.refresh(channel)
+    elif download_dir and channel.download_dir != download_dir:
+        channel.download_dir = download_dir
+        await db.commit()
+        await db.refresh(channel)
+    return channel
+
+
+@router.post("/standalone", status_code=202)
+async def download_standalone_video(
+    body: StandaloneDownloadRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download a standalone video by URL (not tied to a channel subscription)."""
+    ytdlp = YtdlpService()
+
+    # Extract video info
+    try:
+        info = await asyncio.to_thread(ytdlp.get_video_info_by_url, body.url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not extract video info: {e}")
+
+    if not info:
+        raise HTTPException(status_code=400, detail="Could not extract video info from the provided URL")
+
+    video_id = info.get("id") or info.get("video_id", "")
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Could not determine video ID from URL")
+
+    # Check if already exists
+    existing = await db.execute(select(Video).where(Video.video_id == video_id))
+    existing_video = existing.scalar_one_or_none()
+    if existing_video:
+        if existing_video.status == "completed":
+            return {"message": f"Video '{existing_video.title}' is already downloaded", "video_id": existing_video.id, "already_exists": True}
+        if existing_video.status in ("queued", "downloading"):
+            return {"message": f"Video '{existing_video.title}' is already in the download queue", "video_id": existing_video.id, "already_exists": True}
+        # Re-queue failed/pending/skipped video
+        existing_video.status = "queued"
+        existing_video.error_code = None
+        existing_video.error_message = None
+        queue_check = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == existing_video.id))
+        if not queue_check.scalar_one_or_none():
+            db.add(DownloadQueue(video_id=existing_video.id))
+        await db.commit()
+        return {"message": f"Video '{existing_video.title}' queued for download", "video_id": existing_video.id, "already_exists": True}
+
+    # Get or create standalone channel
+    channel = await _get_or_create_standalone_channel(db, body.download_dir)
+
+    # Parse upload date
+    upload_date_str = info.get("upload_date")
+    upload_date = date.today()
+    if upload_date_str:
+        try:
+            if len(upload_date_str) == 8:
+                upload_date = date(int(upload_date_str[:4]), int(upload_date_str[4:6]), int(upload_date_str[6:8]))
+            else:
+                upload_date = date.fromisoformat(upload_date_str[:10])
+        except (ValueError, TypeError):
+            pass
+
+    season = upload_date.year
+
+    # Calculate episode number
+    episode_count = await db.scalar(
+        select(func.count(Video.id))
+        .where(Video.channel_id == channel.id)
+        .where(Video.season == season)
+    )
+    episode = (episode_count or 0) + 1
+
+    video = Video(
+        video_id=video_id,
+        channel_id=channel.id,
+        title=info.get("title") or "Untitled",
+        description=info.get("description"),
+        upload_date=upload_date,
+        duration=info.get("duration"),
+        thumbnail_url=info.get("thumbnail"),
+        season=season,
+        episode=episode,
+        status="queued",
+    )
+    db.add(video)
+    await db.flush()
+
+    db.add(DownloadQueue(video_id=video.id))
+    await db.commit()
+
+    logger.info("Standalone download queued: %s (%s)", video.title, video_id)
+    return {
+        "message": f"Video '{video.title}' queued for download",
+        "video_id": video.id,
+        "title": video.title,
+        "already_exists": False,
+    }
+
+
+@router.get("/standalone/settings")
+async def get_standalone_settings(db: AsyncSession = Depends(get_db)):
+    """Get the current standalone download directory."""
+    from app.config import settings as app_settings
+
+    result = await db.execute(
+        select(Channel).where(Channel.channel_id == STANDALONE_CHANNEL_ID)
+    )
+    channel = result.scalar_one_or_none()
+    return {
+        "download_dir": channel.download_dir if channel else app_settings.DOWNLOAD_DIR,
+        "default_dir": app_settings.DOWNLOAD_DIR,
+    }
+
+
+class StandaloneSettingsUpdate(BaseModel):
+    download_dir: str = Field(..., min_length=1)
+
+
+@router.put("/standalone/settings")
+async def update_standalone_settings(
+    body: StandaloneSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update the standalone download directory."""
+    channel = await _get_or_create_standalone_channel(db, body.download_dir)
+    return {"download_dir": channel.download_dir, "message": "Standalone download directory updated"}

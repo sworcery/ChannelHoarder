@@ -36,6 +36,7 @@ export const api = {
   scanChannel: (id: number) => request<any>(`/channels/${id}/scan`, { method: "POST" }),
   refreshChannelMetadata: (id: number) => request<any>(`/channels/${id}/refresh-metadata`, { method: "POST" }),
   downloadAllChannel: (id: number) => request<any>(`/channels/${id}/download-all`, { method: "POST" }),
+  downloadAllMissing: () => request<any>("/channels/download-all-missing", { method: "POST" }),
   importScan: (id: number, folderPath: string, threshold = 75) =>
     request<{ matches: any[]; total: number }>(`/channels/${id}/import/scan`, {
       method: "POST",
@@ -98,6 +99,13 @@ export const api = {
   pauseQueue: () => request<any>("/downloads/pause", { method: "POST" }),
   resumeQueue: () => request<any>("/downloads/resume", { method: "POST" }),
   clearQueue: () => request<any>("/downloads/clear-queue", { method: "POST" }),
+
+  // Standalone downloads
+  downloadStandalone: (data: { url: string; quality?: string; download_dir?: string }) =>
+    request<any>("/downloads/standalone", { method: "POST", body: JSON.stringify(data) }),
+  getStandaloneSettings: () => request<any>("/downloads/standalone/settings"),
+  updateStandaloneSettings: (download_dir: string) =>
+    request<any>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
 
   // Dashboard
   getStats: () => request<any>("/dashboard/stats"),

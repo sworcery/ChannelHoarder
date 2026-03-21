@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.deps import get_db
 from app.models import Channel, Video, DownloadQueue
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import joinedload
 
 from app.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, VideoResponse,
@@ -27,12 +28,57 @@ async def list_channels(
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    query = select(Channel).order_by(Channel.channel_name)
+    query = select(Channel).where(Channel.channel_id != "__standalone__").order_by(Channel.channel_name)
     if search:
         query = query.where(Channel.channel_name.ilike(f"%{search}%"))
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
-    return result.scalars().all()
+    channels = result.scalars().all()
+
+    if not channels:
+        return []
+
+    # Compute live counts from Video table (avoids stale cached values)
+    channel_ids = [c.id for c in channels]
+    counts_result = await db.execute(
+        select(
+            Video.channel_id,
+            func.count(Video.id).label("total"),
+            func.count(Video.id).filter(Video.status == "completed").label("downloaded"),
+        )
+        .where(Video.channel_id.in_(channel_ids))
+        .group_by(Video.channel_id)
+    )
+    counts_map = {row[0]: (row[1], row[2]) for row in counts_result.all()}
+
+    # Override stale cached values with live counts
+    for ch in channels:
+        total, downloaded = counts_map.get(ch.id, (0, 0))
+        ch.total_videos = total
+        ch.downloaded_count = downloaded
+
+    return channels
+
+
+@router.post("/download-all-missing", status_code=202)
+async def download_all_missing(db: AsyncSession = Depends(get_db)):
+    """Queue all pending/failed videos across all channels for download."""
+    subquery = select(DownloadQueue.video_id)
+    result = await db.execute(
+        select(Video)
+        .where(Video.status.in_(["pending", "failed"]))
+        .where(Video.id.notin_(subquery))
+    )
+    videos = result.scalars().all()
+
+    queued = 0
+    for video in videos:
+        video.status = "queued"
+        db.add(DownloadQueue(video_id=video.id))
+        queued += 1
+
+    await db.commit()
+    return {"message": f"Queued {queued} videos for download across all channels.", "queued": queued}
 
 
 @router.post("/", response_model=ChannelResponse, status_code=201)
@@ -57,6 +103,18 @@ async def get_channel(channel_id: int, db: AsyncSession = Depends(get_db)):
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Compute live counts from Video table
+    counts = await db.execute(
+        select(
+            func.count(Video.id),
+            func.count(Video.id).filter(Video.status == "completed"),
+        ).where(Video.channel_id == channel.id)
+    )
+    row = counts.one()
+    channel.total_videos = row[0] or 0
+    channel.downloaded_count = row[1] or 0
+
     return channel
 
 
