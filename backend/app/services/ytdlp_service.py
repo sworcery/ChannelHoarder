@@ -121,6 +121,23 @@ class YtdlpService:
         finally:
             self._cleanup_cookie_tmp(opts)
 
+    def get_video_info_by_url(self, url: str) -> dict | None:
+        """Get full metadata for a video by its URL (any platform)."""
+        opts = self._base_opts()
+        opts.update({
+            "skip_download": True,
+            "ignoreerrors": True,
+        })
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                return info
+        except Exception as e:
+            logger.error("Failed to get video info for URL %s: %s", url, e)
+            return None
+        finally:
+            self._cleanup_cookie_tmp(opts)
+
     def download_video(
         self,
         video_url: str,

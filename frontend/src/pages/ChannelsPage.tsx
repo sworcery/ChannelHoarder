@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   List,
   ArrowUpDown,
+  Download,
 } from "lucide-react"
 
 type ViewMode = "grid" | "list"
@@ -89,6 +90,26 @@ export default function ChannelsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const downloadAllMissingMutation = useMutation({
+    mutationFn: () => api.downloadAllMissing(),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] })
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast(data.message || "All missing videos queued")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const downloadChannelMutation = useMutation({
+    mutationFn: (id: number) => api.downloadAllChannel(id),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] })
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast(data.message || "Videos queued for download")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const setView = (v: ViewMode) => { setViewMode(v); localStorage.setItem("ch_view", v) }
   const setSize = (s: CardSize) => { setCardSize(s); localStorage.setItem("ch_size", s) }
   const setSort = (s: SortBy) => { setSortBy(s); localStorage.setItem("ch_sort", s) }
@@ -108,12 +129,22 @@ export default function ChannelsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Channels</h1>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" /> Add Channel
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => downloadAllMissingMutation.mutate()}
+            disabled={downloadAllMissingMutation.isPending}
+            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors disabled:opacity-50"
+          >
+            {downloadAllMissingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Download All Missing
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="h-4 w-4" /> Add Channel
+          </button>
+        </div>
       </div>
 
       {/* Search + Display Controls */}
@@ -270,7 +301,7 @@ export default function ChannelsPage() {
               <tbody className="divide-y">
                 {sortedChannels.map((channel: any) => {
                   const progress = channel.total_videos > 0
-                    ? Math.round((channel.downloaded_count / channel.total_videos) * 100)
+                    ? Math.min(100, Math.round((channel.downloaded_count / channel.total_videos) * 100))
                     : 0
                   return (
                     <tr key={channel.id} className="hover:bg-muted/30">
@@ -317,6 +348,12 @@ export default function ChannelsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
                           <button
+                            onClick={() => downloadChannelMutation.mutate(channel.id)}
+                            className="p-1 hover:bg-accent rounded" title="Download all missing"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                          </button>
+                          <button
                             onClick={() => scanMutation.mutate(channel.id)}
                             className="p-1 hover:bg-accent rounded" title="Scan now"
                           >
@@ -338,7 +375,7 @@ export default function ChannelsPage() {
           <div className={`grid gap-4 ${gridCols[cardSize]}`}>
             {sortedChannels.map((channel: any) => {
               const progress = channel.total_videos > 0
-                ? Math.round((channel.downloaded_count / channel.total_videos) * 100)
+                ? Math.min(100, Math.round((channel.downloaded_count / channel.total_videos) * 100))
                 : 0
               return (
                 <Link
@@ -417,6 +454,13 @@ export default function ChannelsPage() {
                         </span>
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.preventDefault(); downloadChannelMutation.mutate(channel.id) }}
+                          className="p-1 hover:bg-accent rounded"
+                          title="Download all missing"
+                        >
+                          <Download className="h-3.5 w-3.5" />
+                        </button>
                         <button
                           onClick={(e) => { e.preventDefault(); scanMutation.mutate(channel.id) }}
                           className="p-1 hover:bg-accent rounded"
