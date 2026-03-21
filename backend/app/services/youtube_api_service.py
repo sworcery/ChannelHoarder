@@ -31,7 +31,7 @@ class YouTubeAPIService:
         page_token = None
         while True:
             params = {
-                "part": "snippet",
+                "part": "snippet,contentDetails",
                 "playlistId": uploads_playlist_id,
                 "maxResults": 50,
                 "key": self.api_key,
@@ -50,7 +50,14 @@ class YouTubeAPIService:
                 if not vid_id:
                     continue
 
-                published = snippet.get("publishedAt", "")
+                # Prefer contentDetails.videoPublishedAt (actual video publish date)
+                # over snippet.publishedAt (when added to playlist, can differ for premieres)
+                content_details = item.get("contentDetails", {})
+                published = (
+                    content_details.get("videoPublishedAt")
+                    or snippet.get("publishedAt")
+                    or ""
+                )
                 upload_date = published[:10].replace("-", "") if published else None
 
                 videos.append({

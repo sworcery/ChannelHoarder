@@ -181,7 +181,11 @@ class ChannelService:
 
         for entry in new_entries:
             vid_id = entry.get("id") or entry.get("video_id", "")
-            upload_date = self._parse_upload_date(entry.get("upload_date"))
+            # Prefer release_date (public release) over upload_date (when uploaded, may differ)
+            upload_date = (
+                self._parse_upload_date(entry.get("release_date"))
+                or self._parse_upload_date(entry.get("upload_date"))
+            )
             title = entry.get("title", "Untitled")
             description = entry.get("description")
             duration = entry.get("duration")
@@ -196,7 +200,10 @@ class ChannelService:
                 logger.info("Fetching metadata for %s to get upload date", vid_id)
                 full_info = await asyncio.to_thread(self.ytdlp.get_video_info, vid_id, platform)
                 if full_info:
-                    fetched_date = self._parse_upload_date(full_info.get("upload_date"))
+                    fetched_date = (
+                        self._parse_upload_date(full_info.get("release_date"))
+                        or self._parse_upload_date(full_info.get("upload_date"))
+                    )
                     if fetched_date:
                         upload_date = fetched_date
                         consecutive_metadata_failures = 0
