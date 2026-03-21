@@ -12,6 +12,7 @@ export interface Channel {
   download_dir: string | null
   check_schedule: string | null
   enabled: boolean
+  include_shorts: boolean
   last_scanned_at: string | null
   total_videos: number
   downloaded_count: number
@@ -33,6 +34,7 @@ export interface Video {
   season: number
   episode: number
   status: string
+  is_short: boolean
   file_path: string | null
   file_size: number | null
   quality_downloaded: string | null

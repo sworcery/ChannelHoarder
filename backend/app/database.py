@@ -50,6 +50,18 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN banner_url VARCHAR(512)")
             )
+        if "include_shorts" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN include_shorts BOOLEAN DEFAULT 0 NOT NULL")
+            )
+
+        # Add is_short column to videos table
+        result2 = await conn.execute(text("PRAGMA table_info(videos)"))
+        video_columns = {row[1] for row in result2.fetchall()}
+        if "is_short" not in video_columns:
+            await conn.execute(
+                text("ALTER TABLE videos ADD COLUMN is_short BOOLEAN DEFAULT 0 NOT NULL")
+            )
 
 
 async def get_db():

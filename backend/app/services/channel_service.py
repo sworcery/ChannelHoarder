@@ -248,6 +248,24 @@ class ChannelService:
             self.db.add(video)
             await self.db.flush()
 
+            # Detect YouTube Shorts (duration <= 60s)
+            is_short = False
+            if duration and duration <= 60:
+                is_short = True
+            # Also check if yt-dlp flagged it as a short
+            if entry.get("url", "").startswith("https://www.youtube.com/shorts/"):
+                is_short = True
+            video.is_short = is_short
+
+            # Filter shorts based on global + channel settings
+            if is_short:
+                shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
+                if not shorts_globally_enabled or not channel.include_shorts:
+                    video.status = "skipped"
+                    logger.info("Skipped short: %s (%s) — %ds", vid_id, title, duration or 0)
+                    new_count += 1
+                    continue
+
             # Check livestream / long video filter
             max_dur = await self._get_max_duration()
             if max_dur and max_dur > 0 and duration and duration > max_dur:
@@ -306,6 +324,21 @@ class ChannelService:
         except Exception:
             pass
         return None
+
+    async def _get_setting_bool(self, key: str, default: bool = False) -> bool:
+        """Read a boolean AppSetting."""
+        try:
+            result = await self.db.execute(
+                select(AppSetting).where(AppSetting.key == key)
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                import json
+                val = json.loads(setting.value)
+                return bool(val)
+        except Exception:
+            pass
+        return default
 
     async def _rename_existing_files(self, channel: Channel) -> int:
         """Rename completed video files to match the current naming template."""

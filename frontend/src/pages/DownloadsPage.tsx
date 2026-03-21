@@ -764,7 +764,7 @@ export default function DownloadsPage() {
                                 <span className="text-xs text-muted-foreground truncate">
                                   {video.error_message}
                                 </span>
-                                {(errorDetails || errorInfo) && (
+                                {(errorDetails || errorInfo) && tab !== "failed" && (
                                   <button
                                     onClick={() => toggleExpanded(video.id)}
                                     className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-auto shrink-0"
@@ -801,7 +801,7 @@ export default function DownloadsPage() {
                         </div>
 
                         {/* Expanded error details */}
-                        {isExpanded && (
+                        {(isExpanded || tab === "failed") && (
                           <div className="mt-3 rounded-md bg-muted/50 border p-3 text-xs space-y-2">
                             {errorDetails?.explanation && (
                               <div>

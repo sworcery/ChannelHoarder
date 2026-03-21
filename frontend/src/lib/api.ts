@@ -48,6 +48,16 @@ export const api = {
       body: JSON.stringify({ matches }),
     }),
 
+  // Shorts management
+  getChannelShorts: (channelId: number, status?: string) => {
+    const qs = status ? `?status=${status}` : ""
+    return request<{ items: any[]; total: number }>(`/channels/${channelId}/shorts${qs}`)
+  },
+  deleteChannelShorts: (channelId: number) =>
+    request<{ deleted: number }>(`/channels/${channelId}/shorts/delete`, { method: "POST" }),
+  detectChannelShorts: (channelId: number) =>
+    request<{ detected: number }>(`/channels/${channelId}/shorts/detect`, { method: "POST" }),
+
   // Bulk video actions
   bulkQueueVideos: (channelId: number, videoIds: number[]) =>
     request<{ queued: number }>(`/channels/${channelId}/videos/bulk-queue`, {
