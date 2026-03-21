@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.3] - 2026-03-21
+
+### Fixed
+- **Shorts detect/delete always available** — Detect Shorts and Delete Downloaded Shorts buttons are now always visible on the channel detail page regardless of the global shorts toggle. The global setting only controls whether shorts are *downloaded*, not whether you can identify and remove them.
+- **Error details visible on channel detail page** — Failed videos in the channel video list now show the error message directly under the status badge, so you can see why a download failed without navigating to the Downloads page.
+
 ## [0.26.0] - 2026-03-15
 
 ### Added
