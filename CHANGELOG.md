@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.5] - 2026-03-21
+
+### Improved
+- **Delete Shorts confirmation modal** — Clicking "Delete Downloaded Shorts" now opens an in-page modal showing exactly which shorts will be removed, with title, duration, file path, file size, and total size. Requires explicit confirmation before any files are deleted.
+
 ## [1.3.3] - 2026-03-21
 
 ### Fixed

@@ -46,6 +46,9 @@ export default function ChannelDetailPage() {
   const [importScanning, setImportScanning] = useState(false)
   const [importRunning, setImportRunning] = useState(false)
   const [descExpanded, setDescExpanded] = useState(false)
+  const [shortsDeleteOpen, setShortsDeleteOpen] = useState(false)
+  const [shortsToDelete, setShortsToDelete] = useState<any[] | null>(null)
+  const [shortsLoading, setShortsLoading] = useState(false)
 
   // Video multi-select
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
@@ -132,7 +135,7 @@ export default function ChannelDetailPage() {
 
   const deleteShortsMutation = useMutation({
     mutationFn: () => api.deleteChannelShorts(channelId),
-    onSuccess: (data: any) => { invalidateVideos(); toast(data.message) },
+    onSuccess: (data: any) => { invalidateVideos(); setShortsDeleteOpen(false); setShortsToDelete(null); toast(data.message) },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -433,7 +436,20 @@ export default function ChannelDetailPage() {
                     Detect Shorts
                   </button>
                   <button
-                    onClick={() => { if (confirm("Delete all downloaded shorts for this channel? Files will be removed from disk.")) deleteShortsMutation.mutate() }}
+                    onClick={async () => {
+                      setShortsLoading(true)
+                      setShortsDeleteOpen(true)
+                      setShortsToDelete(null)
+                      try {
+                        const res = await api.getChannelShorts(channelId, "completed")
+                        setShortsToDelete(res.items)
+                      } catch (e: any) {
+                        toast(e.message, "error")
+                        setShortsDeleteOpen(false)
+                      } finally {
+                        setShortsLoading(false)
+                      }
+                    }}
                     disabled={deleteShortsMutation.isPending}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                   >
@@ -702,6 +718,108 @@ export default function ChannelDetailPage() {
           </p>
         )}
       </div>
+
+      {/* Delete Shorts Confirmation Modal */}
+      {shortsDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { if (!deleteShortsMutation.isPending) { setShortsDeleteOpen(false); setShortsToDelete(null) } }}>
+          <div className="bg-card border rounded-lg shadow-lg w-full max-w-lg max-h-[80vh] flex flex-col mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+                <Trash2 className="h-5 w-5" />
+                Delete Downloaded Shorts
+              </h3>
+              <button
+                onClick={() => { setShortsDeleteOpen(false); setShortsToDelete(null) }}
+                disabled={deleteShortsMutation.isPending}
+                className="p-1 hover:bg-accent rounded disabled:opacity-50"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              {shortsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  <span className="ml-2 text-sm text-muted-foreground">Loading shorts...</span>
+                </div>
+              ) : shortsToDelete && shortsToDelete.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3">
+                    <p className="text-sm font-medium text-red-700 dark:text-red-300">
+                      {shortsToDelete.length} downloaded short{shortsToDelete.length !== 1 ? "s" : ""} will be permanently deleted from disk and marked as skipped.
+                    </p>
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">This action cannot be undone.</p>
+                  </div>
+
+                  <div className="rounded-lg border overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2">Title</th>
+                          <th className="text-left px-3 py-2 w-20">Duration</th>
+                          <th className="text-right px-3 py-2 w-20">Size</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {shortsToDelete.map((short: any) => (
+                          <tr key={short.id} className="hover:bg-muted/30">
+                            <td className="px-3 py-2">
+                              <p className="truncate max-w-[280px]" title={short.title}>{short.title}</p>
+                              {short.file_path && (
+                                <p className="text-[10px] text-muted-foreground truncate max-w-[280px]" title={short.file_path}>
+                                  {short.file_path}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground text-xs">
+                              {short.duration ? formatDuration(short.duration) : "-"}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground text-xs text-right">
+                              {short.file_size ? formatBytes(short.file_size) : "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {shortsToDelete.some((s: any) => s.file_size) && (
+                    <p className="text-xs text-muted-foreground text-right">
+                      Total size: {formatBytes(shortsToDelete.reduce((sum: number, s: any) => sum + (s.file_size || 0), 0))}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground text-sm">No downloaded shorts found for this channel.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Try running "Detect Shorts" first to identify shorts by duration.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t flex items-center justify-end gap-2">
+              <button
+                onClick={() => { setShortsDeleteOpen(false); setShortsToDelete(null) }}
+                disabled={deleteShortsMutation.isPending}
+                className="px-4 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              {shortsToDelete && shortsToDelete.length > 0 && (
+                <button
+                  onClick={() => deleteShortsMutation.mutate()}
+                  disabled={deleteShortsMutation.isPending}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleteShortsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Delete {shortsToDelete.length} Short{shortsToDelete.length !== 1 ? "s" : ""}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       {importOpen && (
