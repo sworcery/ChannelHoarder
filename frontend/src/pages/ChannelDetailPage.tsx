@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { formatDate, formatDateTime, formatBytes } from "@/lib/utils"
+import { formatDate, formatDateTime, formatBytes, formatDuration } from "@/lib/utils"
 import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import {
@@ -598,6 +598,7 @@ export default function ChannelDetailPage() {
                     <th className="text-left px-3 py-2">#</th>
                     <th className="text-left px-3 py-2">Title</th>
                     <th className="text-left px-3 py-2">Date</th>
+                    <th className="text-left px-3 py-2">Duration</th>
                     <th className="text-left px-3 py-2">Status</th>
                     <th className="text-left px-3 py-2">Size</th>
                     <th className="px-3 py-2"></th>
@@ -624,6 +625,9 @@ export default function ChannelDetailPage() {
                         </td>
                         <td className="px-3 py-2 max-w-xs truncate" title={video.title}>{video.title}</td>
                         <td className="px-3 py-2 text-muted-foreground">{formatDate(video.upload_date)}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {video.duration ? formatDuration(video.duration) : "-"}
+                        </td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[video.status] || ""}`}>
                             {video.status}
