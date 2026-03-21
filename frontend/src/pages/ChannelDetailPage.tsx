@@ -400,46 +400,48 @@ export default function ChannelDetailPage() {
           {channel.platform === "youtube" && (
             <div className="mt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
-              {shortsGloballyEnabled ? (
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={channel.include_shorts}
-                      onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Include shorts when downloading</span>
-                  </label>
+              <div className="space-y-3">
+                {shortsGloballyEnabled ? (
+                  <>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={channel.include_shorts}
+                        onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
+                        className="rounded"
+                      />
+                      <span className="text-sm">Include shorts when downloading</span>
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {channel.include_shorts
+                        ? "Shorts (videos under 60s) will be included in downloads."
+                        : "Shorts are excluded from downloads for this channel."}
+                    </p>
+                  </>
+                ) : (
                   <p className="text-xs text-muted-foreground">
-                    {channel.include_shorts
-                      ? "Shorts (videos under 60s) will be included in downloads."
-                      : "Shorts are excluded from downloads for this channel."}
+                    Shorts downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
                   </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => detectShortsMutation.mutate()}
-                      disabled={detectShortsMutation.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-                    >
-                      {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                      Detect Shorts
-                    </button>
-                    <button
-                      onClick={() => { if (confirm("Delete all downloaded shorts for this channel? Files will be removed from disk.")) deleteShortsMutation.mutate() }}
-                      disabled={deleteShortsMutation.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                    >
-                      {deleteShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                      Delete Downloaded Shorts
-                    </button>
-                  </div>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => detectShortsMutation.mutate()}
+                    disabled={detectShortsMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+                  >
+                    {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                    Detect Shorts
+                  </button>
+                  <button
+                    onClick={() => { if (confirm("Delete all downloaded shorts for this channel? Files will be removed from disk.")) deleteShortsMutation.mutate() }}
+                    disabled={deleteShortsMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  >
+                    {deleteShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                    Delete Downloaded Shorts
+                  </button>
                 </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Shorts downloading is disabled globally. Enable it in Settings &gt; Anti-Detection to configure per-channel.
-                </p>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -629,11 +631,18 @@ export default function ChannelDetailPage() {
                           {video.duration ? formatDuration(video.duration) : "-"}
                         </td>
                         <td className="px-3 py-2">
-                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[video.status] || ""}`}>
-                            {video.status}
-                          </span>
-                          {video.error_code && (
-                            <span className="ml-1 text-xs text-red-500">{video.error_code}</span>
+                          <div>
+                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[video.status] || ""}`}>
+                              {video.status}
+                            </span>
+                            {video.error_code && (
+                              <span className="ml-1 text-xs text-red-500">{video.error_code}</span>
+                            )}
+                          </div>
+                          {video.status === "failed" && video.error_message && (
+                            <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={video.error_message}>
+                              {video.error_message}
+                            </p>
                           )}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
