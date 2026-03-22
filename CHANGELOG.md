@@ -5,6 +5,33 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.8] - 2026-03-22
+
+### Security
+- **Path traversal fix** — SPA catch-all route now validates resolved paths stay under static directory
+- **CORS fix** — Disable credentials with wildcard origins to prevent cross-origin attacks
+- **URL validation** — Reject `file://`, `ftp://`, and other unsafe URL schemes passed to yt-dlp
+- **ILIKE escaping** — Escape `%` and `_` wildcard characters in all search queries
+
+### Fixed
+- **Settings export/import unreachable** — Route ordering bug where `/{key}` shadowed `/export` and `/import`
+- **Event loop blocking** — yt-dlp update, health check, and PO token server log now run in threads
+- **Retry all failed** — Now clears `error_details` like single retry does
+- **Error misclassification** — Tightened broad substring matching for "blocked", "pot", "update"
+- **Hardcoded YouTube URLs** — Downloads page now uses platform-aware video URLs (Rumble, Twitch, etc.)
+- **video_id column too narrow** — Widened from 16 to 128 chars for non-YouTube platform IDs
+- **SCAN_FAILED missing from ErrorCode enum** — Added to prevent lookup failures
+- **Frontend type mismatches** — Added `cookies_expired`, `platform` to TypeScript interfaces
+
+### Added
+- **Claude Code subagents** — Custom code-reviewer, security-auditor, refactoring-specialist, docker-optimizer, and db-optimizer agents for automated codebase analysis
+- **Path validation utility** — `validate_download_path()` and `validate_url_scheme()` in file_utils
+- **`buildVideoUrl` frontend utility** — Platform-aware video URL construction
+
+### Removed
+- Dead `get_db()` duplicate in database.py
+- Unused imports (`date`, `and_`, `datetime`, `XCircle`, `RefreshCw`)
+
 ## [1.3.5] - 2026-03-21
 
 ### Improved
