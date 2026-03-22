@@ -24,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Frontend type mismatches** — Added `cookies_expired`, `platform` to TypeScript interfaces
 
 ### Added
-- **Claude Code subagents** — Custom code-reviewer, security-auditor, refactoring-specialist, docker-optimizer, and db-optimizer agents for automated codebase analysis
 - **Path validation utility** — `validate_download_path()` and `validate_url_scheme()` in file_utils
 - **`buildVideoUrl` frontend utility** — Platform-aware video URL construction
 
