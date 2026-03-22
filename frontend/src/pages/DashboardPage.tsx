@@ -10,9 +10,7 @@ import {
   HardDrive,
   Clock,
   CheckCircle2,
-  XCircle,
   Loader2,
-  RefreshCw,
 } from "lucide-react"
 
 export default function DashboardPage() {

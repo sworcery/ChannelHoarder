@@ -27,6 +27,7 @@ export interface Video {
   video_id: string
   channel_id: number
   channel_name: string | null
+  platform: string
   title: string
   upload_date: string
   duration: number | null
@@ -73,6 +74,7 @@ export interface DashboardStats {
   ytdlp_version: string
   last_scan_at: string | null
   active_downloads: number
+  cookies_expired: boolean
 }
 
 export interface WSMessage {

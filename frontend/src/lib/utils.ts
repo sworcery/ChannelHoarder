@@ -5,8 +5,22 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+const VIDEO_URL_TEMPLATES: Record<string, string> = {
+  youtube: "https://www.youtube.com/watch?v={video_id}",
+  rumble: "https://rumble.com/{video_id}",
+  twitch: "https://www.twitch.tv/videos/{video_id}",
+  dailymotion: "https://www.dailymotion.com/video/{video_id}",
+  vimeo: "https://vimeo.com/{video_id}",
+  odysee: "https://odysee.com/{video_id}",
+}
+
+export function buildVideoUrl(platform: string, videoId: string): string {
+  const template = VIDEO_URL_TEMPLATES[platform] || `https://www.youtube.com/watch?v=${videoId}`
+  return template.replace("{video_id}", videoId)
+}
+
 export function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B"
+  if (!bytes || bytes <= 0) return "0 B"
   const k = 1024
   const sizes = ["B", "KB", "MB", "GB", "TB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))

@@ -54,7 +54,7 @@ class Video(Base):
     __table_args__ = (Index("ix_videos_channel_season", "channel_id", "season"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    video_id: Mapped[str] = mapped_column(String(16), unique=True, nullable=False, index=True)
+    video_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(Integer, ForeignKey("channels.id"), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -87,6 +87,10 @@ class Video(Base):
     @property
     def channel_name(self) -> str | None:
         return self.channel.channel_name if self.channel else None
+
+    @property
+    def platform(self) -> str:
+        return self.channel.platform if self.channel else "youtube"
 
 
 class DownloadQueue(Base):

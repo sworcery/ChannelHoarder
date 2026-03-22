@@ -30,7 +30,7 @@ async def list_channels(
 ):
     query = select(Channel).where(Channel.channel_id != "__standalone__").order_by(Channel.channel_name)
     if search:
-        query = query.where(Channel.channel_name.ilike(f"%{search}%"))
+        query = query.where(Channel.channel_name.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     channels = result.scalars().all()
@@ -176,7 +176,7 @@ async def list_channel_videos(
     if status:
         query = query.where(Video.status == status)
     if search:
-        query = query.where(Video.title.ilike(f"%{search}%"))
+        query = query.where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
 
     # Total count
     count_query = select(func.count()).select_from(query.subquery())

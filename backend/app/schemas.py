@@ -65,6 +65,7 @@ class VideoResponse(UTCBaseModel):
     video_id: str
     channel_id: int
     channel_name: Optional[str] = None
+    platform: str = "youtube"
     title: str
     upload_date: date
     duration: Optional[int]
@@ -90,6 +91,7 @@ class VideoSummary(UTCBaseModel):
     video_id: str
     channel_id: int
     channel_name: Optional[str] = None
+    platform: str = "youtube"
     title: str
     upload_date: date
     duration: Optional[int]

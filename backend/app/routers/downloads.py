@@ -1,11 +1,11 @@
 import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer, joinedload
 
@@ -28,7 +28,7 @@ async def get_queue(
     # Count query (no eager loading needed)
     count_query = select(func.count(DownloadQueue.id))
     if search:
-        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))
+        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
     total = await db.scalar(count_query) or 0
 
     # Data query with eager loading — defer large text blobs not needed for queue display
@@ -40,7 +40,7 @@ async def get_queue(
         .joinedload(Video.channel)
     )
     if search:
-        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search}%"))
+        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
 
     result = await db.execute(
         data_query
@@ -131,7 +131,7 @@ async def get_history(
     if status:
         conditions.append(Video.status == status)
     if search:
-        conditions.append(Video.title.ilike(f"%{search}%"))
+        conditions.append(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
     if error_code:
         conditions.append(Video.error_code == error_code)
 

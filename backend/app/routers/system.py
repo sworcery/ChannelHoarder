@@ -73,7 +73,7 @@ async def get_logs(
     if event:
         query = query.where(DownloadLog.event == event)
     if search:
-        query = query.where(DownloadLog.message.ilike(f"%{search}%"))
+        query = query.where(DownloadLog.message.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
     if channel_id:
         video_ids = select(Video.id).where(Video.channel_id == channel_id)
         query = query.where(DownloadLog.video_id.in_(video_ids))

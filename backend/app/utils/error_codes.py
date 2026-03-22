@@ -16,6 +16,7 @@ class ErrorCode(str, Enum):
     PO_TOKEN_FAILURE = "PO_TOKEN_FAILURE"
     FORMAT_UNAVAILABLE = "FORMAT_UNAVAILABLE"
     AGE_RESTRICTED = "AGE_RESTRICTED"
+    SCAN_FAILED = "SCAN_FAILED"
     UNKNOWN = "UNKNOWN"
 
 
@@ -155,7 +156,7 @@ def classify_error(error_str: str) -> ErrorCode:
     if "429" in error_lower or "too many requests" in error_lower or "rate limit" in error_lower:
         return ErrorCode.RATE_LIMITED
 
-    if "not available in your country" in error_lower or "geo" in error_lower or "blocked" in error_lower:
+    if "not available in your country" in error_lower or "geo restriction" in error_lower or "geo-blocked" in error_lower or "geoblocked" in error_lower:
         return ErrorCode.GEO_BLOCKED
 
     if "private video" in error_lower:
@@ -179,13 +180,13 @@ def classify_error(error_str: str) -> ErrorCode:
     if "ffmpeg" in error_lower or "postprocess" in error_lower or "muxing" in error_lower:
         return ErrorCode.FFMPEG_ERROR
 
-    if "po token" in error_lower or "pot" in error_lower:
+    if "po token" in error_lower or "po_token" in error_lower or "pot provider" in error_lower or "pot server" in error_lower:
         return ErrorCode.PO_TOKEN_FAILURE
 
     if "requested format" in error_lower or "format not available" in error_lower:
         return ErrorCode.FORMAT_UNAVAILABLE
 
-    if "outdated" in error_lower or "update" in error_lower or "incompatible" in error_lower:
+    if "outdated" in error_lower or "yt-dlp update" in error_lower or "please update" in error_lower or "incompatible" in error_lower:
         return ErrorCode.YTDLP_OUTDATED
 
     return ErrorCode.UNKNOWN

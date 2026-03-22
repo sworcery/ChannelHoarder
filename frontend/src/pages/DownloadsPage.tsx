@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { formatDateTime, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed } from "@/lib/utils"
+import { formatDateTime, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed, buildVideoUrl } from "@/lib/utils"
 import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -553,7 +553,7 @@ export default function DownloadsPage() {
 
                           {/* Video ID link */}
                           <a
-                            href={`https://www.youtube.com/watch?v=${video?.video_id}`}
+                            href={buildVideoUrl(video?.platform || "youtube", video?.video_id || "")}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-1"
@@ -780,7 +780,7 @@ export default function DownloadsPage() {
                           {/* Actions */}
                           <div className="flex items-center gap-1 shrink-0">
                             <a
-                              href={`https://www.youtube.com/watch?v=${video.video_id}`}
+                              href={buildVideoUrl(video.platform || "youtube", video.video_id)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-1.5 hover:bg-accent rounded"

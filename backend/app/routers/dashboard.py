@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select, func

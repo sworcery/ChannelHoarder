@@ -28,6 +28,11 @@ def validate_download_path(path: str, allowed_roots: list[str] | None = None) ->
     return resolved
 
 
+def escape_like(search: str) -> str:
+    """Escape SQL LIKE/ILIKE wildcard characters in a search string."""
+    return search.replace("%", "\\%").replace("_", "\\_")
+
+
 def sanitize_filename(name: str, max_length: int = 200) -> str:
     """Make a string safe for use as a filename."""
     # Normalize unicode
