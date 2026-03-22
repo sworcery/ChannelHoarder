@@ -61,9 +61,10 @@ async def check_system_health():
         except Exception as e:
             logger.error("Failed to check disk space: %s", e)
 
-        # Check yt-dlp functionality
+        # Check yt-dlp functionality (blocking call — run in thread to avoid blocking event loop)
+        import asyncio
         ytdlp = YtdlpService()
-        success, message = ytdlp.test_download_capability()
+        success, message = await asyncio.to_thread(ytdlp.test_download_capability)
 
         db.add(SystemHealthLog(
             component="ytdlp",

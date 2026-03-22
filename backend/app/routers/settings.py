@@ -88,28 +88,6 @@ async def get_userscript(request: Request):
     return PlainTextResponse(content=script, media_type="text/javascript")
 
 
-@router.get("/{key}")
-async def get_setting(key: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
-    setting = result.scalar_one_or_none()
-    if not setting:
-        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
-    return {"key": key, "value": json.loads(setting.value)}
-
-
-@router.put("/{key}")
-async def update_setting(key: str, value: str, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
-    setting = result.scalar_one_or_none()
-    if setting:
-        setting.value = json.dumps(value)
-    else:
-        db.add(AppSetting(key=key, value=json.dumps(value)))
-
-    await db.commit()
-    return {"key": key, "value": value}
-
-
 @router.post("/webhook/test")
 async def test_webhook(provider: str = "telegram"):
     """Send a test notification to verify webhook configuration."""
@@ -227,3 +205,28 @@ async def preview_naming_template(body: NamingPreviewRequest):
         preview_path=result,
         full_path=f"/downloads/{result}.mp4",
     )
+
+
+# --- Dynamic key routes MUST come AFTER all named routes to avoid shadowing ---
+
+
+@router.get("/{key}")
+async def get_setting(key: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if not setting:
+        raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
+    return {"key": key, "value": json.loads(setting.value)}
+
+
+@router.put("/{key}")
+async def update_setting(key: str, value: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(AppSetting).where(AppSetting.key == key))
+    setting = result.scalar_one_or_none()
+    if setting:
+        setting.value = json.dumps(value)
+    else:
+        db.add(AppSetting(key=key, value=json.dumps(value)))
+
+    await db.commit()
+    return {"key": key, "value": value}

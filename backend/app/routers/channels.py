@@ -86,6 +86,12 @@ async def add_channel(
     body: ChannelCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    from app.utils.file_utils import validate_url_scheme
+    try:
+        validate_url_scheme(body.url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     service = ChannelService(db)
     try:
         channel = await service.add_channel(body)
@@ -94,7 +100,7 @@ async def add_channel(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error("Failed to add channel: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to add channel: {e}")
+        raise HTTPException(status_code=500, detail="Failed to add channel. Check logs for details.")
 
 
 @router.get("/{channel_id}", response_model=ChannelResponse)

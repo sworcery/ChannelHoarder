@@ -194,6 +194,7 @@ async def retry_all_failed(db: AsyncSession = Depends(get_db)):
         video.status = "queued"
         video.error_code = None
         video.error_message = None
+        video.error_details = None
 
         existing = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
         if not existing.scalar_one_or_none():
@@ -324,6 +325,12 @@ async def download_standalone_video(
     db: AsyncSession = Depends(get_db),
 ):
     """Download a standalone video by URL (not tied to a channel subscription)."""
+    from app.utils.file_utils import validate_url_scheme
+    try:
+        validate_url_scheme(body.url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     ytdlp = YtdlpService()
 
     # Extract video info

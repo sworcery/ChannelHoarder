@@ -31,9 +31,11 @@ async def get_ytdlp_version():
 
 @router.post("/ytdlp/update")
 async def update_ytdlp():
+    import asyncio
     ytdlp = YtdlpService()
-    success, message = ytdlp.update()
-    return {"success": success, "message": message, "version": ytdlp.get_version()}
+    success, message = await asyncio.to_thread(ytdlp.update)
+    version = await asyncio.to_thread(ytdlp.get_version)
+    return {"success": success, "message": message, "version": version}
 
 
 @router.get("/diagnostics", response_model=DiagnosticReport)
@@ -125,8 +127,9 @@ async def get_pot_server_log():
     # Quick connectivity test
     try:
         import httpx
-        resp = httpx.get(f"{settings.POT_SERVER_URL}/ping", timeout=5)
-        result["ping"] = f"status {resp.status_code}: {resp.text[:200]}"
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"{settings.POT_SERVER_URL}/ping", timeout=5)
+            result["ping"] = f"status {resp.status_code}: {resp.text[:200]}"
     except Exception as e:
         result["ping"] = f"FAILED: {e}"
 

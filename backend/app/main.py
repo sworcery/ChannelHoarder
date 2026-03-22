@@ -77,7 +77,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -101,6 +101,13 @@ if static_dir.exists():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         file_path = static_dir / full_path
+        # Prevent path traversal — ensure resolved path stays under static_dir
+        try:
+            file_path = file_path.resolve()
+            if not file_path.is_relative_to(static_dir.resolve()):
+                return FileResponse(str(static_dir / "index.html"))
+        except (ValueError, OSError):
+            return FileResponse(str(static_dir / "index.html"))
         if file_path.exists() and file_path.is_file():
             return FileResponse(str(file_path))
         return FileResponse(str(static_dir / "index.html"))
