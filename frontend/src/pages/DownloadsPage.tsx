@@ -784,7 +784,7 @@ export default function DownloadsPage() {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-1.5 hover:bg-accent rounded"
-                              title="Open on YouTube"
+                              title={`Open on ${(video.platform || "youtube").charAt(0).toUpperCase() + (video.platform || "youtube").slice(1)}`}
                             >
                               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                             </a>
