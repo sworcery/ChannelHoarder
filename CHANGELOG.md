@@ -5,7 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.11] - 2026-03-26
+## [1.4.0] - 2026-03-27
+
+### Added
+- **Queue controls** — Move items to front of queue, download immediately bypassing queue order, set custom priority per item. Available as per-item buttons (lightning bolt for download now, arrow for move to front) and bulk actions for selected items.
+- **Queue position numbers** — Each queued item now shows its position in the queue.
+- **Inline download progress on standalone page** — After submitting a video URL, progress bar, speed, ETA, and completion status are shown directly on the page instead of requiring navigation to the queue. Multiple videos can be tracked simultaneously.
 
 ### Fixed
 - **Standalone video download broken** — Missing `date` import in downloads router caused 500 Internal Server Error when downloading any video by URL.

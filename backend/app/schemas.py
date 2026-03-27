@@ -112,6 +112,14 @@ class BulkQueueRemove(BaseModel):
     queue_ids: list[int] = Field(..., min_length=1, max_length=500)
 
 
+class PriorityUpdate(BaseModel):
+    priority: int = Field(..., description="Priority value (higher = downloads sooner)")
+
+
+class BulkMoveRequest(BaseModel):
+    queue_ids: list[int] = Field(..., min_length=1, max_length=500)
+
+
 # --- Import Schemas ---
 class ImportScanRequest(BaseModel):
     folder_path: str = Field(..., min_length=1)

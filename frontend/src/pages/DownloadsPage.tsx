@@ -24,6 +24,8 @@ import {
   CheckSquare,
   Square,
   MinusSquare,
+  ArrowUpToLine,
+  Zap,
 } from "lucide-react"
 
 /** Human-readable error descriptions shown inline */
@@ -292,6 +294,35 @@ export default function DownloadsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const moveToFrontMutation = useMutation({
+    mutationFn: (queueId: number) => api.moveToFront(queueId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast("Moved to front of queue")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const downloadNowMutation = useMutation({
+    mutationFn: (queueId: number) => api.downloadNow(queueId),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast(data.message || "Download started")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const bulkMoveToFrontMutation = useMutation({
+    mutationFn: (ids: number[]) => api.bulkMoveToFront(ids),
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      setSelectedQueueIds(new Set())
+      setLastSelectedIdx(null)
+      toast(data.message || `Moved ${data.moved} items to front`)
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   // Clear selection when switching tabs
   const handleTabChange = useCallback((newTab: typeof tab) => {
     setTab(newTab)
@@ -468,18 +499,28 @@ export default function DownloadsPage() {
                   : "Select all"}
               </button>
               {selectedQueueIds.size > 0 && (
-                <button
-                  onClick={() => {
-                    if (window.confirm(`Remove ${selectedQueueIds.size} items from queue?`)) {
-                      bulkRemoveMutation.mutate(Array.from(selectedQueueIds))
-                    }
-                  }}
-                  disabled={bulkRemoveMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Remove Selected ({selectedQueueIds.size})
-                </button>
+                <>
+                  <button
+                    onClick={() => bulkMoveToFrontMutation.mutate(Array.from(selectedQueueIds))}
+                    disabled={bulkMoveToFrontMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-blue-500/30 text-blue-500 hover:bg-blue-500/10 disabled:opacity-50"
+                  >
+                    <ArrowUpToLine className="h-3.5 w-3.5" />
+                    Move to Front ({selectedQueueIds.size})
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Remove ${selectedQueueIds.size} items from queue?`)) {
+                        bulkRemoveMutation.mutate(Array.from(selectedQueueIds))
+                      }
+                    }}
+                    disabled={bulkRemoveMutation.isPending}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Remove Selected ({selectedQueueIds.size})
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -501,17 +542,19 @@ export default function DownloadsPage() {
                   <div key={entry.id} className={`rounded-lg border bg-card overflow-hidden ${isSelected ? "ring-2 ring-primary/50" : ""}`}>
                     <div className="p-4">
                       <div className="flex items-start gap-3">
-                        {/* Checkbox */}
-                        <button
-                          onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}
-                          className="mt-1 shrink-0"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="h-4 w-4 text-primary" />
-                          ) : (
-                            <Square className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </button>
+                        {/* Position + Checkbox */}
+                        <div className="flex flex-col items-center gap-0.5 shrink-0 mt-1">
+                          <span className="text-[10px] font-mono text-muted-foreground w-5 text-center">
+                            {queuePage * PAGE_SIZE + idx + 1}
+                          </span>
+                          <button onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}>
+                            {isSelected ? (
+                              <CheckSquare className="h-4 w-4 text-primary" />
+                            ) : (
+                              <Square className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </button>
+                        </div>
 
                         {/* Thumbnail */}
                         {video?.thumbnail_url && (
@@ -563,14 +606,34 @@ export default function DownloadsPage() {
                           </a>
                         </div>
 
-                        {/* Remove button */}
-                        <button
-                          onClick={() => removeFromQueue.mutate(entry.id)}
-                          className="p-1.5 hover:bg-accent rounded shrink-0"
-                          title="Remove from queue"
-                        >
-                          <XCircle className="h-4 w-4 text-muted-foreground" />
-                        </button>
+                        {/* Queue controls */}
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          {!entry.started_at && (
+                            <>
+                              <button
+                                onClick={() => downloadNowMutation.mutate(entry.id)}
+                                className="p-1.5 hover:bg-green-500/10 rounded"
+                                title="Download now"
+                              >
+                                <Zap className="h-4 w-4 text-green-500" />
+                              </button>
+                              <button
+                                onClick={() => moveToFrontMutation.mutate(entry.id)}
+                                className="p-1.5 hover:bg-blue-500/10 rounded"
+                                title="Move to front of queue"
+                              >
+                                <ArrowUpToLine className="h-4 w-4 text-blue-500" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => removeFromQueue.mutate(entry.id)}
+                            className="p-1.5 hover:bg-accent rounded"
+                            title="Remove from queue"
+                          >
+                            <XCircle className="h-4 w-4 text-muted-foreground" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Progress bar */}

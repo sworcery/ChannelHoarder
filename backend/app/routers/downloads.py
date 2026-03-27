@@ -11,7 +11,7 @@ from sqlalchemy.orm import defer, joinedload
 
 from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
-from app.schemas import BulkQueueRemove, QueueAdd, QueueEntryResponse, VideoResponse, VideoSummary, DownloadLogResponse
+from app.schemas import BulkMoveRequest, BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse, VideoSummary, DownloadLogResponse
 from app.services.ytdlp_service import YtdlpService
 
 logger = logging.getLogger(__name__)
@@ -279,6 +279,95 @@ async def clear_queue(db: AsyncSession = Depends(get_db)):
     return {"message": f"Cleared {count} items from queue", "cleared": count}
 
 
+@router.post("/queue/{queue_id}/priority")
+async def set_queue_priority(queue_id: int, body: PriorityUpdate, db: AsyncSession = Depends(get_db)):
+    """Set the priority of a queue entry. Higher priority downloads first."""
+    result = await db.execute(select(DownloadQueue).where(DownloadQueue.id == queue_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Queue entry not found")
+    if entry.started_at is not None:
+        raise HTTPException(status_code=409, detail="Cannot change priority of an active download")
+    entry.priority = body.priority
+    await db.commit()
+    return {"message": f"Priority set to {body.priority}", "priority": body.priority}
+
+
+@router.post("/queue/{queue_id}/move-to-front")
+async def move_to_front(queue_id: int, db: AsyncSession = Depends(get_db)):
+    """Move a queue entry to the front by setting its priority above all others."""
+    result = await db.execute(select(DownloadQueue).where(DownloadQueue.id == queue_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Queue entry not found")
+    if entry.started_at is not None:
+        raise HTTPException(status_code=409, detail="Cannot reorder an active download")
+    max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0
+    entry.priority = max_priority + 1
+    await db.commit()
+    return {"message": "Moved to front of queue", "priority": entry.priority}
+
+
+@router.post("/queue/{queue_id}/download-now")
+async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
+    """Start downloading a queued item immediately, bypassing the queue scheduler."""
+    from app.tasks.process_queue import _run_download, _active_tasks
+
+    result = await db.execute(
+        select(DownloadQueue).options(joinedload(DownloadQueue.video)).where(DownloadQueue.id == queue_id)
+    )
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Queue entry not found")
+    if entry.started_at is not None:
+        raise HTTPException(status_code=409, detail="Download already in progress")
+
+    video = entry.video
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found for queue entry")
+
+    result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Mark as started and bump priority
+    max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0
+    entry.priority = max_priority + 1
+    entry.started_at = datetime.now(timezone.utc)
+    video.status = "downloading"
+    await db.commit()
+
+    # Launch download as background task
+    task = asyncio.create_task(
+        _run_download(video.id, channel.id, entry.id),
+        name=f"download-now-{video.video_id}",
+    )
+    _active_tasks.add(task)
+    task.add_done_callback(_active_tasks.discard)
+
+    logger.info("Download NOW triggered for: %s", video.title)
+    return {"message": f"Starting download: {video.title}"}
+
+
+@router.post("/queue/bulk-move-to-front")
+async def bulk_move_to_front(body: BulkMoveRequest, db: AsyncSession = Depends(get_db)):
+    """Move multiple queue entries to the front, preserving their relative order."""
+    max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0
+    result = await db.execute(
+        select(DownloadQueue)
+        .where(DownloadQueue.id.in_(body.queue_ids), DownloadQueue.started_at.is_(None))
+        .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
+    )
+    entries = result.scalars().all()
+    moved = 0
+    for i, entry in enumerate(entries):
+        entry.priority = max_priority + len(entries) - i
+        moved += 1
+    await db.commit()
+    return {"message": f"Moved {moved} items to front of queue", "moved": moved}
+
+
 # --- Standalone video download ---
 
 STANDALONE_CHANNEL_ID = "__standalone__"
@@ -412,6 +501,9 @@ async def download_standalone_video(
         "message": f"Video '{video.title}' queued for download",
         "video_id": video.id,
         "title": video.title,
+        "thumbnail": video.thumbnail_url,
+        "duration": video.duration,
+        "channel": info.get("uploader") or info.get("channel"),
         "already_exists": False,
     }
 

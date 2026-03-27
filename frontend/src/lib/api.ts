@@ -109,6 +109,14 @@ export const api = {
   pauseQueue: () => request<any>("/downloads/pause", { method: "POST" }),
   resumeQueue: () => request<any>("/downloads/resume", { method: "POST" }),
   clearQueue: () => request<any>("/downloads/clear-queue", { method: "POST" }),
+  setQueuePriority: (queueId: number, priority: number) =>
+    request<any>(`/downloads/queue/${queueId}/priority`, { method: "POST", body: JSON.stringify({ priority }) }),
+  moveToFront: (queueId: number) =>
+    request<any>(`/downloads/queue/${queueId}/move-to-front`, { method: "POST" }),
+  downloadNow: (queueId: number) =>
+    request<any>(`/downloads/queue/${queueId}/download-now`, { method: "POST" }),
+  bulkMoveToFront: (queueIds: number[]) =>
+    request<any>("/downloads/queue/bulk-move-to-front", { method: "POST", body: JSON.stringify({ queue_ids: queueIds }) }),
 
   // Standalone downloads
   downloadStandalone: (data: { url: string; quality?: string; download_dir?: string }) =>
