@@ -18,7 +18,7 @@
     </Overview>
     <Category>MediaApp:Video Downloaders</Category>
     <WebUI>http://[IP]:[PORT:8587]</WebUI>
-    <Icon>https://raw.githubusercontent.com/sworcery/ChannelHoarder/main/frontend/public/logo.svg</Icon>
+    <Icon>https://raw.githubusercontent.com/sworcery/ChannelHoarder/main/frontend/public/logo.png</Icon>
     <ExtraParams>--init</ExtraParams>
     <Changes>
 ### v1.4.2
