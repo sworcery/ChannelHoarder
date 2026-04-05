@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<Container version="2">
+    <Name>ChannelHoarder</Name>
+    <Repository>ghcr.io/sworcery/channelhoarder:latest</Repository>
+    <Registry>https://github.com/sworcery/ChannelHoarder/pkgs/container/channelhoarder</Registry>
+    <Network>bridge</Network>
+    <Privileged>false</Privileged>
+    <Support/>
+    <Overview>
+        Self-hosted YouTube channel archiver with Plex-compatible naming.
+        Automatically downloads videos from subscribed channels with a modern web interface.
+        Uses PO tokens for authentication (no cookies required).
+        Features comprehensive error diagnostics and per-channel quality settings.
+    </Overview>
+    <Category>MediaApp:Video</Category>
+    <WebUI>http://[IP]:[PORT:8587]</WebUI>
+    <Icon>https://raw.githubusercontent.com/sworcery/channelhoarder/main/frontend/public/logo.svg</Icon>
+    <ExtraParams>--init</ExtraParams>
+    <Config Name="Web UI Port" Target="8000" Default="8587" Mode="tcp" Description="Web interface port" Type="Port" Display="always" Required="true">8587</Config>
+    <Config Name="Config" Target="/config" Default="/mnt/user/appdata/channelhoarder" Mode="rw" Description="Configuration and database storage" Type="Path" Display="always" Required="true">/mnt/user/appdata/channelhoarder</Config>
+    <Config Name="Downloads" Target="/downloads" Default="/mnt/user/data/media/youtube" Mode="rw" Description="Download directory. Per-channel custom dirs use subdirectories (e.g. set channel dir to /downloads/cartoons)" Type="Path" Display="always" Required="true">/mnt/user/data/media/youtube</Config>
+    <Config Name="Extra Media Path" Target="/media" Default="" Mode="rw" Description="Optional: additional host path for per-channel custom download directories" Type="Path" Display="always" Required="false"></Config>
+    <Config Name="PUID" Target="PUID" Default="99" Description="User ID for file permissions" Type="Variable" Display="advanced" Required="false">99</Config>
+    <Config Name="PGID" Target="PGID" Default="100" Description="Group ID for file permissions" Type="Variable" Display="advanced" Required="false">100</Config>
+    <Config Name="TZ" Target="TZ" Default="America/New_York" Description="Timezone (e.g. America/New_York, America/Chicago, Europe/London)" Type="Variable" Display="always" Required="false">America/New_York</Config>
+    <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="info" Description="Logging level (debug, info, warning, error)" Type="Variable" Display="advanced" Required="false">info</Config>
+    <Config Name="YouTube API Key" Target="YOUTUBE_API_KEY" Default="" Description="Optional: YouTube Data API v3 key for reliable channel discovery" Type="Variable" Display="advanced" Required="false"></Config>
+    <Config Name="PO Token Server" Target="POT_SERVER_ENABLED" Default="true" Description="Enable built-in PO token server for YouTube authentication" Type="Variable" Display="advanced" Required="false">true</Config>
+</Container>
