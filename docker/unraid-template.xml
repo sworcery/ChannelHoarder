@@ -5,7 +5,7 @@
     <Registry>https://github.com/sworcery/ChannelHoarder/pkgs/container/channelhoarder</Registry>
     <Network>bridge</Network>
     <Privileged>false</Privileged>
-    <Support>https://forums.unraid.net/topic/REPLACE_WITH_YOUR_THREAD_ID</Support>
+    <Support>https://forums.unraid.net/topic/198136-support-channelhoarder-self-hosted-video-channel-archiver/</Support>
     <Project>https://github.com/sworcery/ChannelHoarder</Project>
     <TemplateURL>https://raw.githubusercontent.com/sworcery/ChannelHoarder/main/docker/unraid-template.xml</TemplateURL>
     <Overview>
