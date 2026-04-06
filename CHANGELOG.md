@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.4] - 2026-04-06
+
+### Fixed
+- **Database creation fails on fresh install** — Models were not imported before `create_all`, so tables were never created on first run. The migration code then tried to ALTER non-existent tables, crashing the container on startup.
+
 ## [1.4.3] - 2026-04-05
 
 ### Fixed
