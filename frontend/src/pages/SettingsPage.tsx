@@ -128,7 +128,7 @@ function GeneralTab() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Settings saved — changes take effect immediately")
+      toast("Settings saved  - changes take effect immediately")
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -866,7 +866,7 @@ function AntiDetectTab() {
           <p className="text-xs text-muted-foreground mt-1">
             {maxDuration > 0
               ? `Videos over ${maxDuration}h will need manual approval`
-              : "Disabled — all videos auto-queue"}
+              : "Disabled  - all videos auto-queue"}
           </p>
         </div>
       </div>

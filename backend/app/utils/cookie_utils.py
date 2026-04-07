@@ -26,4 +26,4 @@ async def flag_cookies_expired(db: AsyncSession) -> None:
             db.add(AppSetting(key=key, value=value))
 
     settings.cookies_path.unlink(missing_ok=True)
-    logger.warning("Cookies expired — queue auto-paused, cookies deleted")
+    logger.warning("Cookies expired  - queue auto-paused, cookies deleted")

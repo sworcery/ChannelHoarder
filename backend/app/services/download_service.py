@@ -107,7 +107,7 @@ class DownloadService:
             )
         # ← session released
 
-        # ── Phase 2: actual download — no DB session held ────────────────
+        # ── Phase 2: actual download  - no DB session held ────────────────
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
         _loop = asyncio.get_running_loop()
@@ -165,7 +165,7 @@ class DownloadService:
                     timeout=900,
                 )
             except asyncio.TimeoutError:
-                raise Exception("Download timed out after 15 minutes — YouTube may be throttling or blocking requests")
+                raise Exception("Download timed out after 15 minutes  - YouTube may be throttling or blocking requests")
 
             mark_download_complete()
 

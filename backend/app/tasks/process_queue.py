@@ -48,7 +48,7 @@ async def process_download_queue():
         )
         pause_setting = result.scalar_one_or_none()
         if pause_setting and pause_setting.value == "true":
-            return  # Queue is paused — don't start new downloads
+            return  # Queue is paused  - don't start new downloads
 
         # Unstick any downloads that have been "active" for more than 20 minutes
         stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=20)

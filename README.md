@@ -16,57 +16,57 @@
 ## Features
 
 ### Channel Management
-- **Subscribe to Channels** — Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
-- **Channel Artwork** — Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
-- **Grid/List Views** — Toggle between grid cards and compact list view, with small/medium/large card size options
-- **Sorting** — Sort channels by name, recently added, most videos, or health status
-- **Automatic Scanning** — Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
-- **Auto-Scan on Add** — Optionally trigger an immediate scan when adding a new channel
-- **Channel Health Indicators** — Green/yellow/red status showing each channel's download success rate
-- **Per-Channel Quality** — Set download quality independently for each channel (best, 1080p, 720p, 480p)
-- **Per-Channel Download Directories** — Route channels to different storage locations
-- **Pause/Resume** — Pause a channel to discover new videos without downloading them
+- **Subscribe to Channels**  - Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
+- **Channel Artwork**  - Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
+- **Grid/List Views**  - Toggle between grid cards and compact list view, with small/medium/large card size options
+- **Sorting**  - Sort channels by name, recently added, most videos, or health status
+- **Automatic Scanning**  - Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
+- **Auto-Scan on Add**  - Optionally trigger an immediate scan when adding a new channel
+- **Channel Health Indicators**  - Green/yellow/red status showing each channel's download success rate
+- **Per-Channel Quality**  - Set download quality independently for each channel (best, 1080p, 720p, 480p)
+- **Per-Channel Download Directories**  - Route channels to different storage locations
+- **Pause/Resume**  - Pause a channel to discover new videos without downloading them
 
 ### Plex Integration
-- **TV Show Naming** — Organizes videos in Plex TV Show format (seasons by year, episodes numbered in upload order)
-- **Customizable Naming Templates** — Configure the output filename format with variables like `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}` — with live preview
-- **Per-Channel Naming Overrides** — Each channel can use its own naming template
-- **NFO Metadata** — Generates tvshow.nfo and episode.nfo files for Plex/Jellyfin/Emby
-- **Poster Art** — Downloads channel thumbnails as poster images
+- **TV Show Naming**  - Organizes videos in Plex TV Show format (seasons by year, episodes numbered in upload order)
+- **Customizable Naming Templates**  - Configure the output filename format with variables like `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`  - with live preview
+- **Per-Channel Naming Overrides**  - Each channel can use its own naming template
+- **NFO Metadata**  - Generates tvshow.nfo and episode.nfo files for Plex/Jellyfin/Emby
+- **Poster Art**  - Downloads channel thumbnails as poster images
 
 ### Downloads
-- **Queue-Based Pipeline** — Downloads are queued and processed sequentially with configurable delays
-- **Standalone Video Download** — Download individual videos by URL without subscribing to a channel, with configurable download directory
-- **Download All Missing** — One-click button to queue all pending/failed videos across all channels, plus per-channel download buttons
-- **Pause/Resume Queue** — Pause the entire download queue and resume when ready
-- **Real-Time Progress** — WebSocket-powered live download speed, ETA, and progress bars
-- **Retry Failed Downloads** — Retry individual failures or all failed downloads at once
-- **Bulk Video Management** — Select multiple videos to queue, skip, or unskip at once
-- **Import Existing Files** — Scan a folder of previously downloaded videos and match them to channel entries by title. Matched files are moved into the proper Plex-compatible directory structure. Video filenames must contain the original video title for matching to work.
-- **Livestream / Long Video Filter** — Auto-skip videos over a configurable duration (e.g., livestreams), with optional notification for manual review
-- **YouTube Shorts Filter** — Shorts (videos under 60 seconds) are excluded by default. Global toggle in Settings to allow shorts, with per-channel opt-in. Detect and bulk-delete already-downloaded shorts per channel
+- **Queue-Based Pipeline**  - Downloads are queued and processed sequentially with configurable delays
+- **Standalone Video Download**  - Download individual videos by URL without subscribing to a channel, with configurable download directory
+- **Download All Missing**  - One-click button to queue all pending/failed videos across all channels, plus per-channel download buttons
+- **Pause/Resume Queue**  - Pause the entire download queue and resume when ready
+- **Real-Time Progress**  - WebSocket-powered live download speed, ETA, and progress bars
+- **Retry Failed Downloads**  - Retry individual failures or all failed downloads at once
+- **Bulk Video Management**  - Select multiple videos to queue, skip, or unskip at once
+- **Import Existing Files**  - Scan a folder of previously downloaded videos and match them to channel entries by title. Matched files are moved into the proper Plex-compatible directory structure. Video filenames must contain the original video title for matching to work.
+- **Livestream / Long Video Filter**  - Auto-skip videos over a configurable duration (e.g., livestreams), with optional notification for manual review
+- **YouTube Shorts Filter**  - Shorts (videos under 60 seconds) are excluded by default. Global toggle in Settings to allow shorts, with per-channel opt-in. Detect and bulk-delete already-downloaded shorts per channel
 
 ### Authentication
-- **PO Token Authentication** — Built-in PO token server (bgutil-ytdlp-pot-provider) for YouTube authentication with no manual setup
-- **Automatic Cookie Sync** — Windows cookie exporter reads Firefox cookies and pushes to ChannelHoarder every 30 minutes
-- **Browser Cookie Sync** — Tampermonkey userscript exports cookies on each YouTube page load
-- **Manual Cookie Upload** — Upload a cookies.txt file directly
-- **YouTube Data API** — Optional API key for faster, more reliable channel discovery
-- **Multiple Player Clients** — Supports mweb, web, and web_creator strategies
+- **PO Token Authentication**  - Built-in PO token server (bgutil-ytdlp-pot-provider) for YouTube authentication with no manual setup
+- **Automatic Cookie Sync**  - Windows cookie exporter reads Firefox cookies and pushes to ChannelHoarder every 30 minutes
+- **Browser Cookie Sync**  - Tampermonkey userscript exports cookies on each YouTube page load
+- **Manual Cookie Upload**  - Upload a cookies.txt file directly
+- **YouTube Data API**  - Optional API key for faster, more reliable channel discovery
+- **Multiple Player Clients**  - Supports mweb, web, and web_creator strategies
 
 ### Anti-Detection
-- **Configurable Download Delays** — Set minimum and maximum delay between downloads
-- **Random Jitter** — Adds 0–10 seconds of random delay to avoid predictable patterns
-- **User-Agent Rotation** — Rotates browser user-agent strings between downloads
+- **Configurable Download Delays**  - Set minimum and maximum delay between downloads
+- **Random Jitter**  - Adds 0–10 seconds of random delay to avoid predictable patterns
+- **User-Agent Rotation**  - Rotates browser user-agent strings between downloads
 
 ### Monitoring & Diagnostics
-- **Error Classification** — Categorizes failures (rate limited, geo-blocked, auth expired, etc.) with suggested fixes
-- **Test Download Tool** — Multi-strategy diagnostic that tests metadata extraction across player clients (web, mweb, web_creator, without cookies)
-- **Diagnostic Report** — One-click copy of full system report including app version, yt-dlp version, PO token status, cookie status, API key configuration, disk space, and download statistics
-- **System Logs** — Searchable and filterable log viewer in the web UI
+- **Error Classification**  - Categorizes failures (rate limited, geo-blocked, auth expired, etc.) with suggested fixes
+- **Test Download Tool**  - Multi-strategy diagnostic that tests metadata extraction across player clients (web, mweb, web_creator, without cookies)
+- **Diagnostic Report**  - One-click copy of full system report including app version, yt-dlp version, PO token status, cookie status, API key configuration, disk space, and download statistics
+- **System Logs**  - Searchable and filterable log viewer in the web UI
 
 ### Notifications
-- **Telegram & Pushover** — Push notifications with configurable events:
+- **Telegram & Pushover**  - Push notifications with configurable events:
   - Download complete
   - Download failed
   - Cookies expired / refreshed
@@ -75,16 +75,16 @@
   - Long video review required
 
 ### Infrastructure
-- **Single Container** — Web server, download engine, PO token server, and scheduler all in one Docker container
-- **Dark Mode UI** — Modern React-based interface with responsive layout
-- **Auto-Updating yt-dlp** — Checks for yt-dlp updates daily and can be triggered manually
-- **Config Import/Export** — Backup and restore all settings and channel subscriptions as JSON
+- **Single Container**  - Web server, download engine, PO token server, and scheduler all in one Docker container
+- **Dark Mode UI**  - Modern React-based interface with responsive layout
+- **Auto-Updating yt-dlp**  - Checks for yt-dlp updates daily and can be triggered manually
+- **Config Import/Export**  - Backup and restore all settings and channel subscriptions as JSON
 
 ## Prerequisites
 
-- **Docker & Docker Compose** — [Install Docker](https://docs.docker.com/get-docker/)
-- **Disk space** — Plan 500 MB–1 GB per video at best quality; minimum 50 GB recommended
-- **Platform** — Linux, macOS, Windows (via Docker Desktop), Unraid, TrueNAS
+- **Docker & Docker Compose**  - [Install Docker](https://docs.docker.com/get-docker/)
+- **Disk space**  - Plan 500 MB–1 GB per video at best quality; minimum 50 GB recommended
+- **Platform**  - Linux, macOS, Windows (via Docker Desktop), Unraid, TrueNAS
 
 ## Quick Start
 
@@ -122,7 +122,7 @@ Open `http://your-server-ip:8587` in your browser.
 4. Go to **Channels** → **Add Channel** and paste a channel URL
 5. Videos will be scanned immediately and queued for download
 
-> **Security note:** ChannelHoarder has no built-in authentication — it is designed for trusted local networks. If exposing to the internet, place it behind a reverse proxy with authentication (e.g. Authelia, Nginx Proxy Manager).
+> **Security note:** ChannelHoarder has no built-in authentication  - it is designed for trusted local networks. If exposing to the internet, place it behind a reverse proxy with authentication (e.g. Authelia, Nginx Proxy Manager).
 
 ### Updating
 
@@ -150,12 +150,12 @@ docker compose pull && docker compose up -d
 
 ### Download Pipeline
 
-1. **Queue Processing** — Every 30 seconds, the next queued video is picked up
-2. **Rate Limiting** — A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
-3. **Download** — yt-dlp downloads the video using the configured player client with PO tokens, plus thumbnail and metadata
-4. **Naming** — Files are renamed to the Plex-compatible format with season/episode numbering
-5. **Verification** — Output files are verified to exist and the database is updated
-6. **Progress** — Real-time progress (speed, ETA, percentage) is broadcast via WebSocket to connected browsers
+1. **Queue Processing**  - Every 30 seconds, the next queued video is picked up
+2. **Rate Limiting**  - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
+3. **Download**  - yt-dlp downloads the video using the configured player client with PO tokens, plus thumbnail and metadata
+4. **Naming**  - Files are renamed to the Plex-compatible format with season/episode numbering
+5. **Verification**  - Output files are verified to exist and the database is updated
+6. **Progress**  - Real-time progress (speed, ETA, percentage) is broadcast via WebSocket to connected browsers
 
 ### Importing Existing Videos
 
@@ -188,9 +188,9 @@ When a download fails, ChannelHoarder classifies the error and provides actionab
 ### Channel Health
 
 Each channel shows a health indicator:
-- **Green** — All recent downloads succeeded
-- **Yellow** — Some downloads failed recently
-- **Red** — Most or all recent downloads are failing, with the specific error reason shown
+- **Green**  - All recent downloads succeeded
+- **Yellow**  - Some downloads failed recently
+- **Red**  - Most or all recent downloads are failing, with the specific error reason shown
 
 ## File Organization
 
@@ -282,7 +282,7 @@ The Windows cookie exporter reads cookies directly from Firefox's database, incl
 1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension
 2. Go to **Settings > Authentication** in ChannelHoarder and click **Install Tampermonkey Script**
 3. The script comes pre-configured with your server address and exports cookies each time you load a YouTube page (with a 5-minute cooldown between exports)
-4. Note: Cannot access HttpOnly cookies (SID, HSID, SSID) — Option 1 is more complete
+4. Note: Cannot access HttpOnly cookies (SID, HSID, SSID)  - Option 1 is more complete
 
 **Option 3: Manual Upload**
 
@@ -296,12 +296,12 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
 All settings are configurable through the **Settings** page:
 
-- **General** — Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
-- **Authentication** — PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
-- **Naming** — Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
-- **yt-dlp** — Version info, manual update trigger
-- **Anti-Detection** — Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
-- **Notifications** — Telegram and Pushover configuration with test buttons, per-event toggles
+- **General**  - Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
+- **Authentication**  - PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
+- **Naming**  - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
+- **yt-dlp**  - Version info, manual update trigger
+- **Anti-Detection**  - Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
+- **Notifications**  - Telegram and Pushover configuration with test buttons, per-event toggles
 
 ## Supported Platforms
 
@@ -335,89 +335,89 @@ All settings are configurable through the **Settings** page:
 All endpoints are under `/api/v1/`:
 
 ### Channels
-- `GET /channels` — List all channels (supports search)
-- `POST /channels` — Add a new channel
-- `GET /channels/{id}` — Get channel details
-- `PUT /channels/{id}` — Update channel settings (quality, download dir, enabled)
-- `DELETE /channels/{id}` — Delete a channel (optionally delete files)
-- `POST /channels/{id}/scan` — Trigger a manual scan
-- `GET /channels/{id}/videos` — List channel videos (filterable by status)
-- `POST /channels/{id}/download-all` — Queue all pending videos
-- `POST /channels/{id}/videos/bulk-queue` — Queue selected videos
-- `POST /channels/{id}/videos/bulk-skip` — Skip selected videos
-- `POST /channels/{id}/videos/bulk-unskip` — Unskip selected videos
-- `POST /channels/{id}/refresh-metadata` — Re-fetch channel metadata from platform
-- `POST /channels/{id}/import/scan` — Scan folder for existing video files
-- `POST /channels/{id}/import/confirm` — Import matched files
-- `POST /channels/download-all-missing` — Queue all pending/failed videos across all channels
-- `GET /channels/{id}/shorts` — List videos identified as shorts
-- `POST /channels/{id}/shorts/detect` — Scan existing videos and mark shorts
-- `POST /channels/{id}/shorts/delete` — Delete downloaded shorts from disk
+- `GET /channels`  - List all channels (supports search)
+- `POST /channels`  - Add a new channel
+- `GET /channels/{id}`  - Get channel details
+- `PUT /channels/{id}`  - Update channel settings (quality, download dir, enabled)
+- `DELETE /channels/{id}`  - Delete a channel (optionally delete files)
+- `POST /channels/{id}/scan`  - Trigger a manual scan
+- `GET /channels/{id}/videos`  - List channel videos (filterable by status)
+- `POST /channels/{id}/download-all`  - Queue all pending videos
+- `POST /channels/{id}/videos/bulk-queue`  - Queue selected videos
+- `POST /channels/{id}/videos/bulk-skip`  - Skip selected videos
+- `POST /channels/{id}/videos/bulk-unskip`  - Unskip selected videos
+- `POST /channels/{id}/refresh-metadata`  - Re-fetch channel metadata from platform
+- `POST /channels/{id}/import/scan`  - Scan folder for existing video files
+- `POST /channels/{id}/import/confirm`  - Import matched files
+- `POST /channels/download-all-missing`  - Queue all pending/failed videos across all channels
+- `GET /channels/{id}/shorts`  - List videos identified as shorts
+- `POST /channels/{id}/shorts/detect`  - Scan existing videos and mark shorts
+- `POST /channels/{id}/shorts/delete`  - Delete downloaded shorts from disk
 
 ### Downloads
-- `GET /downloads/queue` — Current download queue with progress
-- `POST /downloads/queue` — Add video to queue
-- `DELETE /downloads/queue/{id}` — Remove from queue
-- `POST /downloads/queue/bulk-remove` — Remove multiple items from queue
-- `POST /downloads/queue/{id}/priority` — Set queue item priority
-- `POST /downloads/queue/{id}/download-now` — Start download immediately, bypassing queue
-- `POST /downloads/clear-queue` — Clear all queued (non-active) downloads
-- `GET /downloads/active` — Currently downloading
-- `GET /downloads/paused` — Check if queue is paused
-- `POST /downloads/pause` — Pause the download queue
-- `POST /downloads/resume` — Resume the download queue
-- `GET /downloads/history` — Filterable download history
-- `POST /downloads/retry/{id}` — Retry a failed download
-- `POST /downloads/retry-all-failed` — Retry all failed downloads
-- `POST /downloads/standalone` — Download a standalone video by URL
-- `GET /downloads/standalone/settings` — Get standalone download directory
-- `PUT /downloads/standalone/settings` — Update standalone download directory
+- `GET /downloads/queue`  - Current download queue with progress
+- `POST /downloads/queue`  - Add video to queue
+- `DELETE /downloads/queue/{id}`  - Remove from queue
+- `POST /downloads/queue/bulk-remove`  - Remove multiple items from queue
+- `POST /downloads/queue/{id}/priority`  - Set queue item priority
+- `POST /downloads/queue/{id}/download-now`  - Start download immediately, bypassing queue
+- `POST /downloads/clear-queue`  - Clear all queued (non-active) downloads
+- `GET /downloads/active`  - Currently downloading
+- `GET /downloads/paused`  - Check if queue is paused
+- `POST /downloads/pause`  - Pause the download queue
+- `POST /downloads/resume`  - Resume the download queue
+- `GET /downloads/history`  - Filterable download history
+- `POST /downloads/retry/{id}`  - Retry a failed download
+- `POST /downloads/retry-all-failed`  - Retry all failed downloads
+- `POST /downloads/standalone`  - Download a standalone video by URL
+- `GET /downloads/standalone/settings`  - Get standalone download directory
+- `PUT /downloads/standalone/settings`  - Update standalone download directory
 
 ### Dashboard
-- `GET /dashboard/stats` — Aggregate statistics
-- `GET /dashboard/recent` — Recent downloads
-- `GET /dashboard/storage` — Storage breakdown by channel
+- `GET /dashboard/stats`  - Aggregate statistics
+- `GET /dashboard/recent`  - Recent downloads
+- `GET /dashboard/storage`  - Storage breakdown by channel
 
 ### Authentication
-- `POST /auth/cookies/upload` — Upload cookies.txt file
-- `POST /auth/cookies/push` — Push cookies as JSON (for browser extensions and scripts)
-- `GET /auth/cookies/status` — Cookie file status
-- `POST /auth/cookies/validate` — Force a cookie health check
-- `DELETE /auth/cookies` — Remove cookies
-- `PUT /auth/api-key` — Set YouTube API key
-- `PUT /auth/player-client` — Set yt-dlp player client strategy
-- `GET /auth/status` — Overall auth status
+- `POST /auth/cookies/upload`  - Upload cookies.txt file
+- `POST /auth/cookies/push`  - Push cookies as JSON (for browser extensions and scripts)
+- `GET /auth/cookies/status`  - Cookie file status
+- `POST /auth/cookies/validate`  - Force a cookie health check
+- `DELETE /auth/cookies`  - Remove cookies
+- `PUT /auth/api-key`  - Set YouTube API key
+- `PUT /auth/player-client`  - Set yt-dlp player client strategy
+- `GET /auth/status`  - Overall auth status
 
 ### Settings
-- `GET /settings` — Get all settings
-- `PUT /settings` — Update settings
-- `GET /settings/userscript.user.js` — Download pre-configured Tampermonkey script
-- `GET /settings/export` — Export config backup (JSON)
-- `POST /settings/import` — Import config backup
-- `POST /settings/webhook/test` — Test notification delivery
+- `GET /settings`  - Get all settings
+- `PUT /settings`  - Update settings
+- `GET /settings/userscript.user.js`  - Download pre-configured Tampermonkey script
+- `GET /settings/export`  - Export config backup (JSON)
+- `POST /settings/import`  - Import config backup
+- `POST /settings/webhook/test`  - Test notification delivery
 
 ### System
-- `GET /system/health` — Health check with version
-- `GET /system/diagnostics` — Full diagnostic report
-- `GET /system/diagnostics/{video_id}` — Per-video diagnostic report
-- `GET /system/logs` — System logs with filtering
-- `GET /system/pot-server-log` — PO token server logs and process status
-- `POST /system/test-download` — Test download capability (multi-strategy)
-- `POST /system/scan-all` — Scan all enabled channels
-- `GET /system/ytdlp/version` — Current yt-dlp version
-- `POST /system/ytdlp/update` — Update yt-dlp
+- `GET /system/health`  - Health check with version
+- `GET /system/diagnostics`  - Full diagnostic report
+- `GET /system/diagnostics/{video_id}`  - Per-video diagnostic report
+- `GET /system/logs`  - System logs with filtering
+- `GET /system/pot-server-log`  - PO token server logs and process status
+- `POST /system/test-download`  - Test download capability (multi-strategy)
+- `POST /system/scan-all`  - Scan all enabled channels
+- `GET /system/ytdlp/version`  - Current yt-dlp version
+- `POST /system/ytdlp/update`  - Update yt-dlp
 
 ### WebSocket
-- `WS /ws/progress` — Real-time download progress updates
+- `WS /ws/progress`  - Real-time download progress updates
 
 ## Known Limitations
 
-- **YouTube Shorts** — Videos ≤60 seconds are skipped by default (configurable per channel)
-- **Livestreams / long videos** — Videos over the max duration setting are skipped by default
-- **Geo-blocked content** — Cannot download region-restricted videos
-- **Private / deleted videos** — Automatically skipped if no longer available
-- **No built-in auth** — Designed for trusted local networks; use a reverse proxy if internet-facing
-- **Rate limiting** — YouTube may throttle requests; the PO token server and configurable delays help mitigate this
+- **YouTube Shorts**  - Videos ≤60 seconds are skipped by default (configurable per channel)
+- **Livestreams / long videos**  - Videos over the max duration setting are skipped by default
+- **Geo-blocked content**  - Cannot download region-restricted videos
+- **Private / deleted videos**  - Automatically skipped if no longer available
+- **No built-in auth**  - Designed for trusted local networks; use a reverse proxy if internet-facing
+- **Rate limiting**  - YouTube may throttle requests; the PO token server and configurable delays help mitigate this
 
 ## Troubleshooting
 
@@ -427,7 +427,7 @@ All endpoints are under `/api/v1/`:
 - If cookies expired, upload fresh ones via Settings → Authentication
 
 **"Sign in to confirm you're not a bot"**
-- Your session has been flagged — try uploading fresh cookies
+- Your session has been flagged  - try uploading fresh cookies
 - Adding a YouTube Data API key improves reliability
 - Wait 1–2 hours if recently rate-limited
 
@@ -437,7 +437,7 @@ All endpoints are under `/api/v1/`:
 - Check that `PUID`/`PGID` match your Plex user so files are readable
 
 **Port conflict on 8587**
-- Change the host-side port: `"8590:8000"` — then access via `:8590`
+- Change the host-side port: `"8590:8000"`  - then access via `:8590`
 
 **Container writes files as root**
 - Ensure `PUID` and `PGID` are set correctly in your compose/template
@@ -451,4 +451,4 @@ For support, open a GitHub issue and include the diagnostic report from **Settin
 
 ## License
 
-MIT License — free to use, modify, and distribute with attribution. See [LICENSE](LICENSE) for details.
+MIT License  - free to use, modify, and distribute with attribution. See [LICENSE](LICENSE) for details.

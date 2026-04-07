@@ -23,9 +23,9 @@ fi
 # Create directories and set ownership
 mkdir -p /config /downloads /cookies /home/appuser
 chown -R appuser:appuser /config /home/appuser /app /opt/pot-provider
-# Downloads and cookies may be NFS/SMB mounts that reject chown — don't fail the container
-chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?) — continuing"
-chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?) — continuing"
+# Downloads and cookies may be NFS/SMB mounts that reject chown  - don't fail the container
+chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?)  - continuing"
+chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?)  - continuing"
 
 # Set up bgutil symlink in user's home so the yt-dlp plugin can find its files
 ln -sf /opt/bgutil-ytdlp-pot-provider /home/appuser/bgutil-ytdlp-pot-provider

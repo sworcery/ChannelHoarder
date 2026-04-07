@@ -62,7 +62,7 @@ class YtdlpService:
                 if entries:
                     sample = entries[0]
                     logger.info(
-                        "Sample entry fields — upload_date=%s, timestamp=%s, keys=%s",
+                        "Sample entry fields  - upload_date=%s, timestamp=%s, keys=%s",
                         sample.get("upload_date"),
                         sample.get("timestamp"),
                         [k for k in sample.keys() if "date" in k.lower() or "time" in k.lower() or "publish" in k.lower()],
@@ -80,7 +80,7 @@ class YtdlpService:
 
         Returns a dict mapping video_id -> upload_date (YYYYMMDD format).
         The RSS feed covers the ~15 most recent videos.
-        Only works for YouTube — returns empty dict for other platforms.
+        Only works for YouTube  - returns empty dict for other platforms.
         """
         if platform != "youtube":
             return {}
@@ -176,7 +176,7 @@ class YtdlpService:
                 logger.info("yt-dlp download completed: %s", video_url)
                 return info or {}
         except Exception as e:
-            logger.error("yt-dlp download failed: %s — %s", video_url, e)
+            logger.error("yt-dlp download failed: %s  - %s", video_url, e)
             raise
         finally:
             self._cleanup_cookie_tmp(opts)
@@ -223,7 +223,7 @@ class YtdlpService:
 
         PO token generation is handled entirely by the bgutil-ytdlp-pot-provider
         plugin, which generates per-video tokens via the HTTP provider (bgutil:http).
-        We do NOT manually inject PO tokens — YouTube now binds GVS tokens to
+        We do NOT manually inject PO tokens  - YouTube now binds GVS tokens to
         specific video IDs, so pre-generated generic tokens are rejected.
 
         YouTube-specific extractor args are only injected when platform == "youtube".

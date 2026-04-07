@@ -113,7 +113,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
         except (json.JSONDecodeError, TypeError):
             settings_dict[s.key] = s.value
 
-    # Channels (no videos — just channel config)
+    # Channels (no videos  - just channel config)
     result = await db.execute(select(Channel))
     channels = result.scalars().all()
     channels_list = [
