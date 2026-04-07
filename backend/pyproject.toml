@@ -4,6 +4,18 @@ version = "1.5.0"
 description = "Self-hosted YouTube channel archiver with Plex-compatible naming"
 requires-python = ">=3.12"
 
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    "E712",  # SQLAlchemy requires == True/False for column comparisons
+    "F401",  # Unused imports — many are used implicitly or by framework
+    "F841",  # Unused variables — some are intentional placeholders
+    "E501",  # Line too long
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

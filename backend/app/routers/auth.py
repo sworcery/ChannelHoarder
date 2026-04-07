@@ -2,15 +2,13 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
 
 from app.config import settings
 from app.database import async_session
-from app.deps import get_db
 from app.models import AppSetting
 from app.services.youtube_api_service import YouTubeAPIService
 

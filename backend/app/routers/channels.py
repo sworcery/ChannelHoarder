@@ -10,7 +10,6 @@ from app.deps import get_db
 from app.utils.file_utils import escape_like
 from app.models import Channel, Video, DownloadQueue
 from pydantic import BaseModel, Field
-from sqlalchemy.orm import joinedload
 
 from app.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, VideoResponse,
