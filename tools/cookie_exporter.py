@@ -258,7 +258,7 @@ def extract_cookies(
             if not value:
                 continue
 
-            # Skip expired cookies (expiry=0 means session cookie — include those)
+            # Skip expired cookies (expiry=0 means session cookie  - include those)
             if expiry > 0 and expiry < now:
                 continue
 
@@ -368,7 +368,7 @@ def main():
 
     if not os.path.exists(args.config):
         logger.error("Config file not found: %s", args.config)
-        logger.info("Create a cookie_exporter.ini file — see cookie_exporter.ini for reference")
+        logger.info("Create a cookie_exporter.ini file  - see cookie_exporter.ini for reference")
         sys.exit(1)
 
     cfg = load_config(args.config)
@@ -407,7 +407,7 @@ def main():
         sys.exit(1)
 
     if count == 0:
-        logger.warning("No cookies exported — is Firefox logged into YouTube?")
+        logger.warning("No cookies exported  - is Firefox logged into YouTube?")
         sys.exit(1)
 
     logger.info("Extracted %d cookies", count)
@@ -437,7 +437,7 @@ def main():
         logger.error("All delivery methods failed")
         sys.exit(1)
 
-    logger.info("Done — cookies delivered successfully")
+    logger.info("Done  - cookies delivered successfully")
 
 
 if __name__ == "__main__":

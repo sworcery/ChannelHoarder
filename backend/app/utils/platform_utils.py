@@ -70,7 +70,7 @@ PLATFORMS: dict[str, dict] = {
     },
 }
 
-# Fallback for unknown platforms — yt-dlp will still try to handle them
+# Fallback for unknown platforms  - yt-dlp will still try to handle them
 _GENERIC_PLATFORM = {
     "label": "Other",
     "domains": [],

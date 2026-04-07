@@ -107,7 +107,7 @@ async def get_cookie_status():
         message = f"Cookies present ({age_days:.0f} days old)"
         if age_days > 7:
             status = "warning"
-            message = f"Cookies are {age_days:.0f} days old — may need re-uploading"
+            message = f"Cookies are {age_days:.0f} days old  - may need re-uploading"
 
     return {
         "status": status,
@@ -159,7 +159,7 @@ async def set_api_key(api_key: str):
     settings.YOUTUBE_API_KEY = api_key
     logger.info("YouTube API key saved to %s", api_key_file)
 
-    # Try to validate (non-blocking — key is saved regardless)
+    # Try to validate (non-blocking  - key is saved regardless)
     yt_api = YouTubeAPIService()
     valid, message = await yt_api.validate_api_key()
 
@@ -237,7 +237,7 @@ async def get_auth_status():
 
             if db_settings.get("cookies_expired") == "true":
                 cookies_status = "expired"
-                cookies_message = "Cookies expired — please upload fresh cookies.txt"
+                cookies_message = "Cookies expired  - please upload fresh cookies.txt"
 
             last_auth = db_settings.get("last_successful_auth")
 

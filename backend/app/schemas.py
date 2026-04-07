@@ -86,7 +86,7 @@ class VideoResponse(UTCBaseModel):
 
 
 class VideoSummary(UTCBaseModel):
-    """Lightweight video schema for queue listings — omits large text blobs."""
+    """Lightweight video schema for queue listings  - omits large text blobs."""
     id: int
     video_id: str
     channel_id: int

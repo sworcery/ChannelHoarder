@@ -1,7 +1,7 @@
 """Push notifications via Telegram and Pushover.
 
 Reads provider credentials from AppSettings. All failures are logged
-but silently swallowed — webhook errors must never disrupt downloads.
+but silently swallowed  - webhook errors must never disrupt downloads.
 """
 
 import json
@@ -140,7 +140,7 @@ async def _send_pushover(app_token: str, user_key: str, title: str, message: str
 async def send_notification(event_type: str, payload: dict[str, Any]) -> None:
     """Dispatch push notification to all configured providers.
 
-    Called from NotificationService.broadcast() — must never raise.
+    Called from NotificationService.broadcast()  - must never raise.
     """
     try:
         cfg = await _get_webhook_settings()
@@ -176,7 +176,7 @@ async def send_notification(event_type: str, payload: dict[str, Any]) -> None:
 async def send_test_notification(provider: str) -> dict[str, Any]:
     """Send a test message to verify provider config. Returns result dict."""
     cfg = await _get_webhook_settings()
-    test_text = "🧪 ChannelHoarder test notification — your webhook is working!"
+    test_text = "🧪 ChannelHoarder test notification  - your webhook is working!"
 
     if provider == "telegram":
         token = cfg.get("telegram_bot_token", "")

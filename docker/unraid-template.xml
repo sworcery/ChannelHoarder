@@ -22,12 +22,12 @@
     <ExtraParams>--init</ExtraParams>
     <Changes>
 ### v1.4.2
-- Fixed PUID/PGID — downloaded files are now owned by the configured user instead of root
+- Fixed PUID/PGID  - downloaded files are now owned by the configured user instead of root
 - Added /cookies volume mount to template
 - Removed deprecated docker-compose version key
 
 ### v1.4.1
-- Simplified queue controls — download-now button for direct queue bypass
+- Simplified queue controls  - download-now button for direct queue bypass
 
 ### v1.4.0
 - Queue controls with download-now and inline standalone download progress

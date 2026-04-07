@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
 
     # Reset any "active" queue entries left over from a previous run.
     # When the container restarts, in-flight downloads are killed but their
-    # queue rows still have started_at set — blocking new downloads until
+    # queue rows still have started_at set  - blocking new downloads until
     # the 20-minute stale timeout kicks in.
     from app.database import async_session
     from sqlalchemy import select, delete
@@ -107,7 +107,7 @@ if static_dir.exists():
     @app.get("/{full_path:path}")
     async def serve_spa(full_path: str):
         file_path = static_dir / full_path
-        # Prevent path traversal — ensure resolved path stays under static_dir
+        # Prevent path traversal  - ensure resolved path stays under static_dir
         try:
             file_path = file_path.resolve()
             if not file_path.is_relative_to(static_dir.resolve()):

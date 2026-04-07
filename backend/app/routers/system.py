@@ -178,9 +178,9 @@ async def test_download():
             diagnostics["cookies_format"] = "Netscape" if has_header else "UNKNOWN (missing Netscape header)"
             diagnostics["cookies_youtube_entries"] = len(yt_entries)
         except Exception as e:
-            diagnostics["cookies_validation"] = f"FAILED — {e}"
+            diagnostics["cookies_validation"] = f"FAILED  - {e}"
 
-    # Check PO token server (ping only — don't call /get_pot to avoid starving the plugin)
+    # Check PO token server (ping only  - don't call /get_pot to avoid starving the plugin)
     if settings.POT_SERVER_ENABLED:
         try:
             import httpx
@@ -188,7 +188,7 @@ async def test_download():
                 resp = await client.get(f"{settings.POT_SERVER_URL}/ping", timeout=5)
             diagnostics["pot_server_ping"] = f"OK (status {resp.status_code}): {resp.text[:200]}"
         except Exception as e:
-            diagnostics["pot_server_ping"] = f"FAILED — {e}"
+            diagnostics["pot_server_ping"] = f"FAILED  - {e}"
 
         # Check plugin
         try:
@@ -213,21 +213,21 @@ async def test_download():
                 with yt_dlp.YoutubeDL(test_opts) as ydl:
                     info = await asyncio.to_thread(ydl.extract_info, test_url, False)
                     if info and info.get("formats"):
-                        diagnostics["strategy_results"][label] = f"OK — {len(info['formats'])} formats"
+                        diagnostics["strategy_results"][label] = f"OK  - {len(info['formats'])} formats"
                     else:
-                        diagnostics["strategy_results"][label] = "FAILED — no info"
+                        diagnostics["strategy_results"][label] = "FAILED  - no info"
         except Exception as e:
             err = str(e)
             if "Sign in to confirm" in err:
-                diagnostics["strategy_results"][label] = "FAILED — bot detected"
+                diagnostics["strategy_results"][label] = "FAILED  - bot detected"
             else:
-                diagnostics["strategy_results"][label] = f"FAILED — {err[:150]}"
+                diagnostics["strategy_results"][label] = f"FAILED  - {err[:150]}"
         return capture.getvalue()
 
     # Each strategy gets its own _base_opts (with temp cookie copy); clean up after each
     all_opts = []
 
-    # Strategy 1: Current config (web client + plugin) — full verbose capture
+    # Strategy 1: Current config (web client + plugin)  - full verbose capture
     opts1 = ytdlp._base_opts()
     all_opts.append(opts1)
     verbose_output = await _test_verbose("web_current_config", opts1)

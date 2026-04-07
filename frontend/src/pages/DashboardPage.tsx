@@ -145,7 +145,7 @@ export default function DashboardPage() {
                   <div className="truncate flex-1">
                     <span>{video.title}</span>
                     {video.channel_name && (
-                      <span className="text-xs text-muted-foreground ml-1.5">— {video.channel_name}</span>
+                      <span className="text-xs text-muted-foreground ml-1.5"> - {video.channel_name}</span>
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground flex-shrink-0">

@@ -168,7 +168,7 @@ class ChannelService:
                 continue
             new_entries.append(entry)
 
-        # Fetch upload dates from RSS feed (free, no auth, covers ~15 recent videos — YouTube only)
+        # Fetch upload dates from RSS feed (free, no auth, covers ~15 recent videos  - YouTube only)
         rss_dates = await asyncio.to_thread(
             self.ytdlp.get_rss_upload_dates, channel.channel_id, platform
         )
@@ -274,7 +274,7 @@ class ChannelService:
                 shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
                 if not shorts_globally_enabled or not channel.include_shorts:
                     video.status = "skipped"
-                    logger.info("Skipped short: %s (%s) — %ds", vid_id, title, duration or 0)
+                    logger.info("Skipped short: %s (%s)  - %ds", vid_id, title, duration or 0)
                     new_count += 1
                     continue
 
@@ -283,7 +283,7 @@ class ChannelService:
             if max_dur and max_dur > 0 and duration and duration > max_dur:
                 video.status = "pending_review"
                 logger.info(
-                    "Video %s (%s) exceeds max duration (%ds > %ds) — needs review",
+                    "Video %s (%s) exceeds max duration (%ds > %ds)  - needs review",
                     vid_id, title, duration, max_dur,
                 )
                 hours = duration // 3600

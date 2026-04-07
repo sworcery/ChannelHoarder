@@ -1,4 +1,4 @@
-"""Runtime settings reader — reads from DB with config.py fallbacks."""
+"""Runtime settings reader  - reads from DB with config.py fallbacks."""
 
 import json
 import logging

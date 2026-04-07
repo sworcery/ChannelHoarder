@@ -33,7 +33,7 @@ async def get_queue(
         count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{escape_like(search)}%"))
     total = await db.scalar(count_query) or 0
 
-    # Data query with eager loading — defer large text blobs not needed for queue display
+    # Data query with eager loading  - defer large text blobs not needed for queue display
     data_query = select(DownloadQueue).options(
         joinedload(DownloadQueue.video)
         .defer(Video.description)
@@ -137,13 +137,13 @@ async def get_history(
     if error_code:
         conditions.append(Video.error_code == error_code)
 
-    # Count query — lightweight, no joins
+    # Count query  - lightweight, no joins
     count_query = select(func.count(Video.id))
     for cond in conditions:
         count_query = count_query.where(cond)
     total = await db.scalar(count_query) or 0
 
-    # Data query — eager-load channel for channel_name display
+    # Data query  - eager-load channel for channel_name display
     data_query = (
         select(Video)
         .options(joinedload(Video.channel))
