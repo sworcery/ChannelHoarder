@@ -479,8 +479,7 @@ export default function DownloadsPage() {
               </button>
               {selectedQueueIds.size > 0 && (
                 <button
-                  onClick={() => setConfirmAction(() => () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)))
-                  }}
+                  onClick={() => setConfirmAction(() => () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)))}
                   disabled={bulkRemoveMutation.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                 >
