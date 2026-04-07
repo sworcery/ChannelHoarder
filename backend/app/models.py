@@ -51,7 +51,10 @@ class Channel(Base):
 
 class Video(Base):
     __tablename__ = "videos"
-    __table_args__ = (Index("ix_videos_channel_season", "channel_id", "season"),)
+    __table_args__ = (
+        Index("ix_videos_channel_season", "channel_id", "season"),
+        Index("ix_videos_status_downloaded_at", "status", "downloaded_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     video_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)

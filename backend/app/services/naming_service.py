@@ -1,10 +1,28 @@
 import os
+import re
 from datetime import date
 
 from app.config import settings
 from app.utils.file_utils import sanitize_filename
 
 DEFAULT_TEMPLATE = "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
+
+ALLOWED_TEMPLATE_VARS = {"channel_name", "season", "episode", "title", "upload_date", "video_id"}
+
+
+def validate_template(template: str) -> None:
+    """Reject templates with attribute access, indexing, or unknown variables."""
+    # Find all {field_name} references, allowing optional format specs like {:03d}
+    fields = re.findall(r"\{([^}]*)\}", template)
+    for field in fields:
+        # Strip format spec (everything after ":")
+        var_name = field.split(":")[0].strip()
+        if not var_name:
+            continue
+        if "." in var_name or "[" in var_name:
+            raise ValueError(f"Template variable '{var_name}' contains unsafe attribute access or indexing")
+        if var_name not in ALLOWED_TEMPLATE_VARS:
+            raise ValueError(f"Unknown template variable '{var_name}'. Allowed: {', '.join(sorted(ALLOWED_TEMPLATE_VARS))}")
 
 
 def build_output_path(
@@ -19,6 +37,7 @@ def build_output_path(
 ) -> str:
     """Build the full output path for a downloaded video (without extension)."""
     template = naming_template or DEFAULT_TEMPLATE
+    validate_template(template)
     base = base_dir or settings.DOWNLOAD_DIR
 
     safe_channel = sanitize_filename(channel_name)
@@ -47,6 +66,7 @@ def preview_naming(
     episode: int = 3,
 ) -> str:
     """Preview a naming template with sample data."""
+    validate_template(template)
     safe_channel = sanitize_filename(channel_name)
     safe_title = sanitize_filename(title)
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
@@ -51,11 +52,15 @@ async def upload_cookies(file: UploadFile = File(...)):
     return {"message": "Cookies uploaded successfully. Queue resumed.", "size": len(content)}
 
 
+class CookiePushRequest(BaseModel):
+    cookies_txt: str = Field(..., min_length=1, max_length=2_000_000)
+
+
 @router.post("/cookies/push")
-async def push_cookies(body: dict):
+async def push_cookies(body: CookiePushRequest):
     """Accept cookies as JSON text (for browser extensions like Tampermonkey)."""
-    cookies_txt = body.get("cookies_txt", "")
-    if not cookies_txt or not cookies_txt.strip():
+    cookies_txt = body.cookies_txt
+    if not cookies_txt.strip():
         raise HTTPException(status_code=400, detail="cookies_txt field is required and must not be empty")
 
     content = cookies_txt.encode("utf-8")

@@ -43,6 +43,6 @@ class NotificationService:
         if event_type not in _SKIP_WEBHOOK_EVENTS:
             try:
                 from app.services.webhook_service import send_notification
-                asyncio.ensure_future(send_notification(event_type, payload))
+                asyncio.create_task(send_notification(event_type, payload))
             except Exception:
                 pass  # Never let webhook errors disrupt the app

@@ -81,29 +81,8 @@ async def check_system_health():
 
             # If the failure looks like an auth/bot issue, auto-pause queue
             if "Sign in" in message or "bot" in message.lower() or "cookies" in message.lower():
-                # Pause the queue
-                result = await db.execute(
-                    select(AppSetting).where(AppSetting.key == "queue_paused")
-                )
-                flag = result.scalar_one_or_none()
-                if flag:
-                    flag.value = "true"
-                else:
-                    db.add(AppSetting(key="queue_paused", value="true"))
-
-                # Flag cookies as expired
-                result = await db.execute(
-                    select(AppSetting).where(AppSetting.key == "cookies_expired")
-                )
-                ce_flag = result.scalar_one_or_none()
-                if ce_flag:
-                    ce_flag.value = "true"
-                else:
-                    db.add(AppSetting(key="cookies_expired", value="true"))
-                # Delete the local cookies file so the watcher can re-import from /cookies
-                settings.cookies_path.unlink(missing_ok=True)
-
-                logger.warning("Health check: auth failure — queue auto-paused, cookies deleted, flagged expired")
+                from app.utils.cookie_utils import flag_cookies_expired
+                await flag_cookies_expired(db)
                 await NotificationService.broadcast("cookies_expired", {
                     "message": "Health check detected expired cookies. Queue paused. Please upload fresh cookies.",
                 })

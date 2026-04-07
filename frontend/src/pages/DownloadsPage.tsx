@@ -6,6 +6,7 @@ import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/components/ui/toaster"
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import {
   RotateCcw,
   Loader2,
@@ -114,6 +115,7 @@ export default function DownloadsPage() {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set())
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null)
+  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null)
 
   // Smoothing state: max percent (no-backward), speed history (rolling avg)
   const maxPercentRef = useRef<Record<string, number>>({})
@@ -173,6 +175,8 @@ export default function DownloadsPage() {
         delete speedHistoryRef.current[vid]
         queryClient.invalidateQueries({ queryKey: ["download-queue"] })
         queryClient.invalidateQueries({ queryKey: ["download-history"] })
+        queryClient.invalidateQueries({ queryKey: ["channel-videos"] })
+        queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] })
       }
     })
   }, [subscribe, queryClient])
@@ -395,11 +399,7 @@ export default function DownloadsPage() {
             </button>
           )}
           <button
-            onClick={() => {
-              if (window.confirm("Clear all queued (non-active) downloads?")) {
-                clearQueueMutation.mutate()
-              }
-            }}
+            onClick={() => setConfirmAction(() => () => clearQueueMutation.mutate())}
             disabled={clearQueueMutation.isPending}
             className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
           >
@@ -479,10 +479,7 @@ export default function DownloadsPage() {
               </button>
               {selectedQueueIds.size > 0 && (
                 <button
-                  onClick={() => {
-                    if (window.confirm(`Remove ${selectedQueueIds.size} items from queue?`)) {
-                      bulkRemoveMutation.mutate(Array.from(selectedQueueIds))
-                    }
+                  onClick={() => setConfirmAction(() => () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)))
                   }}
                   disabled={bulkRemoveMutation.isPending}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
@@ -887,6 +884,16 @@ export default function DownloadsPage() {
           )}
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmAction}
+        title="Confirm Action"
+        message="Are you sure you want to proceed?"
+        onConfirm={() => {
+          confirmAction?.()
+          setConfirmAction(null)
+        }}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   )
 }

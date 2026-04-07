@@ -5,6 +5,37 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-06
+
+### Security
+- **Path traversal fix** — Validate all user-supplied filesystem paths (import scan/confirm, download dirs, channel create/update) against allowed roots using `validate_download_path()`
+- **Settings export no longer leaks credentials** — Telegram tokens, Pushover keys, and API keys are excluded from the export endpoint
+- **Naming template injection prevention** — Templates are validated against a whitelist of allowed variables; attribute access and indexing are rejected
+- **Typed cookie push endpoint** — Cookie push now uses a Pydantic model with size limits instead of untyped `dict`
+
+### Fixed
+- **Blocking async calls** — `httpx.get()` and `subprocess.run()` in system endpoints now use async patterns instead of blocking the event loop
+- **N+1 queries** — `bulk_skip_videos` and `retry_all_failed` now batch-load queue entries in a single query instead of per-video SELECTs
+- **Scan performance** — Episode numbering during channel scans pre-fetches counts per season instead of running a COUNT query per video
+- **NFS/SMB mount support** — `chown` on `/downloads` and `/cookies` volumes is now non-fatal, preventing container startup failures on network mounts
+- **Health check is now real** — The `/health` endpoint pings the database instead of returning a static "healthy" response
+- **WebSocket reconnect race** — Added mounted-ref guard to prevent ghost connections after navigation
+- **Missing cache invalidation** — Channel video statuses now update after downloads complete
+- **Standalone download page** — Replaced DOM query with controlled React input; fixed WebSocket re-subscription dropping progress messages
+- **Confirm dialogs work in Unraid iframes** — Replaced `window.confirm()` with custom modal component
+- **Error boundary** — Added React ErrorBoundary so crashes show a friendly error with reload button instead of a blank white screen
+- **Channel sort performance** — Memoized sort computation on the channels page
+
+### Improved
+- **Code deduplication** — Consolidated `_format_bytes` (3 copies), `escape_like` (6 inline copies), `_parse_upload_date` (2 copies), cookie expiry flagging (2 copies) into shared utilities
+- **Dead code removed** — `BulkMoveRequest` schema, `_safe_dirname` (replaced with `sanitize_filename`), dead variable assignments, redundant session close
+- **Deprecated API replaced** — `asyncio.ensure_future` replaced with `asyncio.create_task`
+- **Circular import fixed** — Settings router no longer imports from `app.main`; uses `request.app.state` instead
+- **Health log cleanup** — `system_health_log` table is trimmed to 7 days on startup
+- **Composite index** — Added `(status, downloaded_at)` index on videos table for faster history queries
+- **CI pipeline** — Added Python lint (Ruff) and TypeScript check before Docker build
+- **README** — Added missing API endpoints to documentation
+
 ## [1.4.4] - 2026-04-06
 
 ### Fixed

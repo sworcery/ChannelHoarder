@@ -9,10 +9,12 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer, joinedload
 
+from app.config import settings as app_settings
 from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
 from app.services.ytdlp_service import YtdlpService
+from app.utils.file_utils import escape_like, validate_download_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -28,7 +30,7 @@ async def get_queue(
     # Count query (no eager loading needed)
     count_query = select(func.count(DownloadQueue.id))
     if search:
-        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{escape_like(search)}%"))
     total = await db.scalar(count_query) or 0
 
     # Data query with eager loading — defer large text blobs not needed for queue display
@@ -40,7 +42,7 @@ async def get_queue(
         .joinedload(Video.channel)
     )
     if search:
-        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{escape_like(search)}%"))
 
     result = await db.execute(
         data_query
@@ -131,7 +133,7 @@ async def get_history(
     if status:
         conditions.append(Video.status == status)
     if search:
-        conditions.append(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        conditions.append(Video.title.ilike(f"%{escape_like(search)}%"))
     if error_code:
         conditions.append(Video.error_code == error_code)
 
@@ -189,6 +191,13 @@ async def retry_all_failed(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Video).where(Video.status == "failed"))
     videos = result.scalars().all()
 
+    # Batch-load existing queue entries to avoid N+1
+    video_ids = [v.id for v in videos]
+    existing_result = await db.execute(
+        select(DownloadQueue.video_id).where(DownloadQueue.video_id.in_(video_ids))
+    )
+    already_queued = {row[0] for row in existing_result.all()}
+
     count = 0
     for video in videos:
         video.status = "queued"
@@ -196,8 +205,7 @@ async def retry_all_failed(db: AsyncSession = Depends(get_db)):
         video.error_message = None
         video.error_details = None
 
-        existing = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
-        if not existing.scalar_one_or_none():
+        if video.id not in already_queued:
             db.add(DownloadQueue(video_id=video.id))
             count += 1
 
@@ -348,7 +356,6 @@ class StandaloneDownloadRequest(BaseModel):
 
 async def _get_or_create_standalone_channel(db: AsyncSession, download_dir: Optional[str] = None) -> Channel:
     """Get or create the special 'Standalone Downloads' channel."""
-    from app.config import settings as app_settings
 
     result = await db.execute(
         select(Channel).where(Channel.channel_id == STANDALONE_CHANNEL_ID)
@@ -387,6 +394,12 @@ async def download_standalone_video(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    if body.download_dir:
+        try:
+            validate_download_path(body.download_dir, [app_settings.DOWNLOAD_DIR])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     ytdlp = YtdlpService()
 
     # Extract video info
@@ -424,16 +437,8 @@ async def download_standalone_video(
     channel = await _get_or_create_standalone_channel(db, body.download_dir)
 
     # Parse upload date
-    upload_date_str = info.get("upload_date")
-    upload_date = date.today()
-    if upload_date_str:
-        try:
-            if len(upload_date_str) == 8:
-                upload_date = date(int(upload_date_str[:4]), int(upload_date_str[4:6]), int(upload_date_str[6:8]))
-            else:
-                upload_date = date.fromisoformat(upload_date_str[:10])
-        except (ValueError, TypeError):
-            pass
+    from app.utils.file_utils import parse_upload_date
+    upload_date = parse_upload_date(info.get("upload_date")) or date.today()
 
     season = upload_date.year
 
@@ -478,8 +483,6 @@ async def download_standalone_video(
 @router.get("/standalone/settings")
 async def get_standalone_settings(db: AsyncSession = Depends(get_db)):
     """Get the current standalone download directory."""
-    from app.config import settings as app_settings
-
     result = await db.execute(
         select(Channel).where(Channel.channel_id == STANDALONE_CHANNEL_ID)
     )
@@ -500,5 +503,10 @@ async def update_standalone_settings(
     db: AsyncSession = Depends(get_db),
 ):
     """Update the standalone download directory."""
+    try:
+        validate_download_path(body.download_dir, [app_settings.DOWNLOAD_DIR])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     channel = await _get_or_create_standalone_channel(db, body.download_dir)
     return {"download_dir": channel.download_dir, "message": "Standalone download directory updated"}

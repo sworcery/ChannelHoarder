@@ -173,6 +173,14 @@ class ChannelService:
             self.ytdlp.get_rss_upload_dates, channel.channel_id, platform
         )
 
+        # Pre-fetch episode counts per season to avoid per-video COUNT queries
+        season_counts_result = await self.db.execute(
+            select(Video.season, func.count(Video.id))
+            .where(Video.channel_id == channel.id)
+            .group_by(Video.season)
+        )
+        season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
+
         # Second pass: enrich entries with upload dates and add to DB
         new_count = 0
         consecutive_metadata_failures = 0
@@ -231,13 +239,10 @@ class ChannelService:
 
             season = upload_date.year
 
-            # Calculate episode number: count existing videos in same channel+season + 1
-            episode_count = await self.db.execute(
-                select(func.count(Video.id))
-                .where(Video.channel_id == channel.id)
-                .where(Video.season == season)
-            )
-            episode = episode_count.scalar() + 1
+            # Calculate episode number from pre-fetched counts, increment locally
+            season_episode_counts.setdefault(season, 0)
+            season_episode_counts[season] += 1
+            episode = season_episode_counts[season]
 
             video = Video(
                 video_id=vid_id,
@@ -440,28 +445,12 @@ class ChannelService:
     async def delete_channel_files(self, channel: Channel):
         """Delete all downloaded files for a channel."""
         base = channel.download_dir or settings.DOWNLOAD_DIR
-        channel_dir = Path(base) / self._safe_dirname(channel.channel_name)
+        channel_dir = Path(base) / sanitize_filename(channel.channel_name)
         if channel_dir.exists():
             await asyncio.to_thread(shutil.rmtree, str(channel_dir))
             logger.info("Deleted files for channel: %s at %s", channel.channel_name, channel_dir)
 
     @staticmethod
     def _parse_upload_date(date_str: str | None):
-        if not date_str:
-            return None
-        try:
-            from datetime import date
-            if len(date_str) == 8:
-                return date(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8]))
-            return date.fromisoformat(date_str[:10])
-        except (ValueError, TypeError):
-            return None
-
-    @staticmethod
-    def _safe_dirname(name: str) -> str:
-        """Make a safe directory name."""
-        unsafe = '<>:"/\\|?*'
-        result = name
-        for char in unsafe:
-            result = result.replace(char, "_")
-        return result.strip(". ")
+        from app.utils.file_utils import parse_upload_date
+        return parse_upload_date(date_str)

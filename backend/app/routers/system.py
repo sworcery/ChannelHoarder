@@ -1,13 +1,17 @@
+import asyncio
 import logging
+import subprocess
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy.orm import joinedload
 
 from app.config import settings
+from app.utils.file_utils import escape_like
 from app.deps import get_db
 from app.models import Channel, DownloadLog, Video
 from app.schemas import DiagnosticReport, DownloadLogResponse
@@ -19,8 +23,15 @@ router = APIRouter()
 
 
 @router.get("/health")
-async def health_check():
-    return {"status": "healthy", "version": settings.APP_VERSION}
+async def health_check(db: AsyncSession = Depends(get_db)):
+    try:
+        await db.execute(select(func.count()).select_from(Channel))
+        return {"status": "healthy", "version": settings.APP_VERSION}
+    except Exception:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "version": settings.APP_VERSION},
+        )
 
 
 @router.get("/ytdlp/version")
@@ -73,7 +84,7 @@ async def get_logs(
     if event:
         query = query.where(DownloadLog.event == event)
     if search:
-        query = query.where(DownloadLog.message.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        query = query.where(DownloadLog.message.ilike(f"%{escape_like(search)}%"))
     if channel_id:
         video_ids = select(Video.id).where(Video.channel_id == channel_id)
         query = query.where(DownloadLog.video_id.in_(video_ids))
@@ -119,7 +130,7 @@ async def get_pot_server_log():
 
     # Check if server process is running
     try:
-        ps = subprocess.run(["pgrep", "-f", "main.js.*4416"], capture_output=True, text=True)
+        ps = await asyncio.to_thread(subprocess.run, ["pgrep", "-f", "main.js.*4416"], capture_output=True, text=True)
         result["server_pid"] = ps.stdout.strip() if ps.returncode == 0 else None
     except Exception:
         result["server_pid"] = "unknown"
@@ -174,7 +185,8 @@ async def test_download():
     if settings.POT_SERVER_ENABLED:
         try:
             import httpx
-            resp = httpx.get(f"{settings.POT_SERVER_URL}/ping", timeout=5)
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"{settings.POT_SERVER_URL}/ping", timeout=5)
             diagnostics["pot_server_ping"] = f"OK (status {resp.status_code}): {resp.text[:200]}"
         except Exception as e:
             diagnostics["pot_server_ping"] = f"FAILED — {e}"

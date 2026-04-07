@@ -364,18 +364,8 @@ class DownloadService:
 
             # Flag cookies as expired and auto-pause queue
             if code == ErrorCode.AUTH_EXPIRED:
-                for key, value in [("cookies_expired", "true"), ("queue_paused", "true")]:
-                    result = await db.execute(
-                        select(AppSetting).where(AppSetting.key == key)
-                    )
-                    flag = result.scalar_one_or_none()
-                    if flag:
-                        flag.value = value
-                    else:
-                        db.add(AppSetting(key=key, value=value))
-                # Delete the local cookies file so the watcher can re-import from /cookies
-                settings.cookies_path.unlink(missing_ok=True)
-                logger.warning("Cookies expired — queue auto-paused, cookies deleted")
+                from app.utils.cookie_utils import flag_cookies_expired
+                await flag_cookies_expired(db)
 
             await db.commit()
 
@@ -405,11 +395,8 @@ class DownloadService:
 
     @staticmethod
     def _format_bytes(size: int) -> str:
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size < 1024:
-                return f"{size:.2f} {unit}"
-            size /= 1024
-        return f"{size:.2f} PB"
+        from app.services.storage_service import format_bytes
+        return format_bytes(size)
 
     @staticmethod
     def _format_eta(seconds: float) -> str:

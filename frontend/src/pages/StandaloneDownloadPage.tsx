@@ -36,9 +36,11 @@ export default function StandaloneDownloadPage() {
   const [customDir, setCustomDir] = useState("")
   const [useCustomDir, setUseCustomDir] = useState(false)
   const [lastResult, setLastResult] = useState<{ message: string; success: boolean } | null>(null)
+  const [defaultDir, setDefaultDir] = useState("")
 
   // Tracked downloads on this page
   const [trackedVideos, setTrackedVideos] = useState<QueuedVideo[]>([])
+  const trackedVideosRef = useRef<QueuedVideo[]>(trackedVideos)
   const [progress, setProgress] = useState<Record<string, any>>({})
   const [completedVideos, setCompletedVideos] = useState<Set<string>>(new Set())
   const [failedVideos, setFailedVideos] = useState<Record<string, string>>({})
@@ -52,6 +54,14 @@ export default function StandaloneDownloadPage() {
     staleTime: 60000,
   })
 
+  // Sync default directory from query data
+  useEffect(() => {
+    if (settings?.download_dir) setDefaultDir(settings.download_dir)
+  }, [settings?.download_dir])
+
+  // Keep ref in sync with state
+  useEffect(() => { trackedVideosRef.current = trackedVideos }, [trackedVideos])
+
   // Subscribe to WebSocket for progress on tracked videos
   useEffect(() => {
     return subscribe((msg) => {
@@ -60,7 +70,7 @@ export default function StandaloneDownloadPage() {
         const vid = String(p.video_id)
 
         // Only track videos we queued from this page
-        if (!trackedVideos.some((v) => v.videoDbId === vid)) return
+        if (!trackedVideosRef.current.some((v) => v.videoDbId === vid)) return
 
         if (!startTimeRef.current[vid]) startTimeRef.current[vid] = Date.now()
 
@@ -108,7 +118,7 @@ export default function StandaloneDownloadPage() {
         queryClient.invalidateQueries({ queryKey: ["download-queue"] })
       }
     })
-  }, [subscribe, queryClient, trackedVideos])
+  }, [subscribe, queryClient])
 
   const downloadMutation = useMutation({
     mutationFn: () =>
@@ -396,15 +406,14 @@ export default function StandaloneDownloadPage() {
         <div className="flex gap-2">
           <input
             type="text"
-            defaultValue={settings?.download_dir || ""}
+            value={defaultDir}
+            onChange={(e) => setDefaultDir(e.target.value)}
             placeholder={settings?.default_dir || "/downloads"}
-            id="default-dir-input"
             className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
           />
           <button
             onClick={() => {
-              const input = document.getElementById("default-dir-input") as HTMLInputElement
-              if (input?.value.trim()) saveDirMutation.mutate(input.value.trim())
+              if (defaultDir.trim()) saveDirMutation.mutate(defaultDir.trim())
             }}
             disabled={saveDirMutation.isPending}
             className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"

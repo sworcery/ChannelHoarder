@@ -33,7 +33,7 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/")
-async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
+async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     update_data = body.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
@@ -48,8 +48,7 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
     # Apply runtime-reactive settings immediately
     if "global_schedule_cron" in update_data:
         try:
-            from app.main import app
-            scheduler = app.state.scheduler
+            scheduler = request.app.state.scheduler
             scheduler.reschedule_scan(update_data["global_schedule_cron"])
         except Exception as e:
             logger.warning("Could not reschedule scan: %s", e)
@@ -101,8 +100,14 @@ async def export_config(db: AsyncSession = Depends(get_db)):
     # Settings
     result = await db.execute(select(AppSetting))
     settings_list = result.scalars().all()
+    SENSITIVE_KEYS = {
+        "telegram_bot_token", "pushover_app_token", "pushover_user_key",
+        "youtube_api_key", "telegram_chat_id",
+    }
     settings_dict = {}
     for s in settings_list:
+        if s.key in SENSITIVE_KEYS:
+            continue
         try:
             settings_dict[s.key] = json.loads(s.value)
         except (json.JSONDecodeError, TypeError):

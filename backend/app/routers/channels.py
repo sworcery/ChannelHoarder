@@ -5,7 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.deps import get_db
+from app.utils.file_utils import escape_like
 from app.models import Channel, Video, DownloadQueue
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import joinedload
@@ -30,7 +32,7 @@ async def list_channels(
 ):
     query = select(Channel).where(Channel.channel_id != "__standalone__").order_by(Channel.channel_name)
     if search:
-        query = query.where(Channel.channel_name.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        query = query.where(Channel.channel_name.ilike(f"%{escape_like(search)}%"))
     query = query.offset(skip).limit(limit)
     result = await db.execute(query)
     channels = result.scalars().all()
@@ -86,11 +88,17 @@ async def add_channel(
     body: ChannelCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    from app.utils.file_utils import validate_url_scheme
+    from app.utils.file_utils import validate_url_scheme, validate_download_path
     try:
         validate_url_scheme(body.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    if body.download_dir:
+        try:
+            validate_download_path(body.download_dir, [settings.DOWNLOAD_DIR])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     service = ChannelService(db)
     try:
@@ -136,6 +144,14 @@ async def update_channel(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     update_data = body.model_dump(exclude_unset=True)
+
+    if "download_dir" in update_data and update_data["download_dir"]:
+        from app.utils.file_utils import validate_download_path
+        try:
+            validate_download_path(update_data["download_dir"], [settings.DOWNLOAD_DIR])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     for field, value in update_data.items():
         setattr(channel, field, value)
 
@@ -176,7 +192,7 @@ async def list_channel_videos(
     if status:
         query = query.where(Video.status == status)
     if search:
-        query = query.where(Video.title.ilike(f"%{search.replace('%', '\\%').replace('_', '\\_')}%"))
+        query = query.where(Video.title.ilike(f"%{escape_like(search)}%"))
 
     # Total count
     count_query = select(func.count()).select_from(query.subquery())
@@ -299,13 +315,16 @@ async def bulk_skip_videos(
     )
     videos = result.scalars().all()
 
+    # Batch-load queue entries to avoid N+1
+    video_ids = [v.id for v in videos]
+    queue_result = await db.execute(
+        select(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids))
+    )
+    queue_entries = {q.video_id: q for q in queue_result.scalars().all()}
+
     skipped = 0
     for video in videos:
-        # Remove from queue if present
-        queue_result = await db.execute(
-            select(DownloadQueue).where(DownloadQueue.video_id == video.id)
-        )
-        queue_entry = queue_result.scalar_one_or_none()
+        queue_entry = queue_entries.get(video.id)
         if queue_entry:
             await db.delete(queue_entry)
         video.status = "skipped"
@@ -346,6 +365,12 @@ async def scan_for_import(
     db: AsyncSession = Depends(get_db),
 ):
     """Scan a folder for video files that match un-downloaded videos for this channel."""
+    from app.utils.file_utils import validate_download_path
+    try:
+        validate_download_path(body.folder_path, [settings.DOWNLOAD_DIR])
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Channel not found")

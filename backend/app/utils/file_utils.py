@@ -33,6 +33,19 @@ def escape_like(search: str) -> str:
     return search.replace("%", "\\%").replace("_", "\\_")
 
 
+def parse_upload_date(date_str: str | None):
+    """Parse a date string in YYYYMMDD or ISO-8601 format."""
+    if not date_str:
+        return None
+    try:
+        from datetime import date
+        if len(date_str) == 8:
+            return date(int(date_str[:4]), int(date_str[4:6]), int(date_str[6:8]))
+        return date.fromisoformat(date_str[:10])
+    except (ValueError, TypeError):
+        return None
+
+
 def sanitize_filename(name: str, max_length: int = 200) -> str:
     """Make a string safe for use as a filename."""
     # Normalize unicode

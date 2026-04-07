@@ -346,6 +346,7 @@ All endpoints are under `/api/v1/`:
 - `POST /channels/{id}/videos/bulk-queue` — Queue selected videos
 - `POST /channels/{id}/videos/bulk-skip` — Skip selected videos
 - `POST /channels/{id}/videos/bulk-unskip` — Unskip selected videos
+- `POST /channels/{id}/refresh-metadata` — Re-fetch channel metadata from platform
 - `POST /channels/{id}/import/scan` — Scan folder for existing video files
 - `POST /channels/{id}/import/confirm` — Import matched files
 - `POST /channels/download-all-missing` — Queue all pending/failed videos across all channels
@@ -358,6 +359,8 @@ All endpoints are under `/api/v1/`:
 - `POST /downloads/queue` — Add video to queue
 - `DELETE /downloads/queue/{id}` — Remove from queue
 - `POST /downloads/queue/bulk-remove` — Remove multiple items from queue
+- `POST /downloads/queue/{id}/priority` — Set queue item priority
+- `POST /downloads/queue/{id}/download-now` — Start download immediately, bypassing queue
 - `POST /downloads/clear-queue` — Clear all queued (non-active) downloads
 - `GET /downloads/active` — Currently downloading
 - `GET /downloads/paused` — Check if queue is paused

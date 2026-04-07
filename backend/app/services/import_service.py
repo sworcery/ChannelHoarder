@@ -189,17 +189,9 @@ async def import_matched_files(
 
             # Write tvshow.nfo if it doesn't exist yet
             safe_name = sanitize_filename(channel.channel_name)
-            base_dir = channel.download_dir or None
-            tvshow_nfo = os.path.join(
-                base_dir or "",
-                safe_name,
-                "tvshow.nfo",
-            )
-            if base_dir:
-                tvshow_nfo = os.path.join(base_dir, safe_name, "tvshow.nfo")
-            else:
-                from app.config import settings
-                tvshow_nfo = os.path.join(settings.DOWNLOAD_DIR, safe_name, "tvshow.nfo")
+            from app.config import settings
+            base_dir = channel.download_dir or settings.DOWNLOAD_DIR
+            tvshow_nfo = os.path.join(base_dir, safe_name, "tvshow.nfo")
 
             if not os.path.exists(tvshow_nfo):
                 write_tvshow_nfo(

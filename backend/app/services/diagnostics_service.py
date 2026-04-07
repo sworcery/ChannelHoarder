@@ -74,7 +74,6 @@ class DiagnosticsService:
         disk = shutil.disk_usage(settings.DOWNLOAD_DIR)
 
         # PO token status
-        pot_status = "unknown"
         pot_healthy = await self._check_pot_health()
         pot_status = "healthy" if pot_healthy else "unhealthy"
 
@@ -252,9 +251,5 @@ class DiagnosticsService:
 
     @staticmethod
     def _format_bytes(size: int) -> str:
-        """Format bytes to human-readable string."""
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if size < 1024:
-                return f"{size:.2f} {unit}"
-            size /= 1024
-        return f"{size:.2f} PB"
+        from app.services.storage_service import format_bytes
+        return format_bytes(size)

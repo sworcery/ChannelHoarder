@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
@@ -114,7 +114,7 @@ export default function ChannelsPage() {
   const setSize = (s: CardSize) => { setCardSize(s); localStorage.setItem("ch_size", s) }
   const setSort = (s: SortBy) => { setSortBy(s); localStorage.setItem("ch_sort", s) }
 
-  const sortedChannels = channels ? sortChannels(channels, sortBy) : []
+  const sortedChannels = useMemo(() => channels ? sortChannels(channels, sortBy) : [], [channels, sortBy])
 
   // Thumbnail sizes per card size
   const thumbSize = { small: "h-10 w-10", medium: "h-16 w-16", large: "h-20 w-20" }

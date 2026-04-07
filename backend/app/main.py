@@ -32,9 +32,10 @@ async def lifespan(app: FastAPI):
     # queue rows still have started_at set — blocking new downloads until
     # the 20-minute stale timeout kicks in.
     from app.database import async_session
-    from sqlalchemy import select
+    from sqlalchemy import select, delete
     from sqlalchemy.orm import joinedload
-    from app.models import DownloadQueue, Video
+    from app.models import DownloadQueue, Video, SystemHealthLog
+    from datetime import datetime, timezone, timedelta
     async with async_session() as db:
         result = await db.execute(
             select(DownloadQueue)
@@ -54,6 +55,11 @@ async def lifespan(app: FastAPI):
                     entry.video.status = "queued"
             await db.commit()
             logger.info("Reset %d stale queue entries on startup", len(stale))
+
+        # Clean up old health log entries (keep last 7 days)
+        cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+        await db.execute(delete(SystemHealthLog).where(SystemHealthLog.checked_at < cutoff))
+        await db.commit()
 
     # Start scheduler
     from app.services.scheduler_service import SchedulerService
