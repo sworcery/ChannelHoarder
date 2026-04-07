@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import subprocess
+import subprocess  # noqa: F401 — used via asyncio.to_thread(subprocess.run)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query

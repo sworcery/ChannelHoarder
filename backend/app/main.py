@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     from app.database import async_session
     from sqlalchemy import select, delete
     from sqlalchemy.orm import joinedload
-    from app.models import DownloadQueue, Video, SystemHealthLog
+    from app.models import DownloadQueue, SystemHealthLog
     from datetime import datetime, timezone, timedelta
     async with async_session() as db:
         result = await db.execute(
