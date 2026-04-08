@@ -42,7 +42,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-      security-events: write
 
     steps:
       - name: Checkout repository
@@ -67,7 +66,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            # Push to main = edge tag (for developer testing)
+            type=raw,value=edge,enable={{is_default_branch}}
+            # Release tags = latest + version tags (for users)
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
@@ -85,6 +87,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ghcr.io/sworcery/channelhoarder:latest
