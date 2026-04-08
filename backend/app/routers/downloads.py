@@ -396,7 +396,7 @@ async def download_standalone_video(
 
     if body.download_dir:
         try:
-            validate_download_path(body.download_dir, [app_settings.DOWNLOAD_DIR])
+            validate_download_path(body.download_dir, app_settings.allowed_download_roots)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -504,7 +504,7 @@ async def update_standalone_settings(
 ):
     """Update the standalone download directory."""
     try:
-        validate_download_path(body.download_dir, [app_settings.DOWNLOAD_DIR])
+        validate_download_path(body.download_dir, app_settings.allowed_download_roots)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
