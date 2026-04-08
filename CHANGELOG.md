@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.6] - 2026-04-08
+
+### Changed
+- **Smart auth strategy** - When valid cookies are present, downloads use cookies as primary auth and skip PO token generation entirely. PO tokens are only used as a fallback when no cookies are available. This eliminates the BotGuard VM hanging issue for users with the cookie exporter running.
+
 ## [1.5.5] - 2026-04-08
 
 ### Fixed
