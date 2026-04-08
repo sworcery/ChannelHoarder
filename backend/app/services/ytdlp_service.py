@@ -169,14 +169,15 @@ class YtdlpService:
         if progress_hook:
             opts["progress_hooks"] = [progress_hook]
 
-        logger.info("yt-dlp download starting: %s → %s", video_url, output_path)
+        logger.info("yt-dlp download starting: %s -> %s", video_url, output_path)
+        logger.info("yt-dlp extracting info and acquiring PO token (this may take a moment)...")
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(video_url, download=True)
                 logger.info("yt-dlp download completed: %s", video_url)
                 return info or {}
         except Exception as e:
-            logger.error("yt-dlp download failed: %s  - %s", video_url, e)
+            logger.error("yt-dlp download failed: %s - %s", video_url, e)
             raise
         finally:
             self._cleanup_cookie_tmp(opts)

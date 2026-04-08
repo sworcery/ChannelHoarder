@@ -27,9 +27,14 @@ class DiagnosticsService:
 
         system_ctx = self._get_system_context_sync()
 
+        # For UNKNOWN errors, include the raw error in the summary so it's visible in the UI
+        summary = info.summary
+        if code == ErrorCode.UNKNOWN and error_str:
+            summary = f"Unknown error: {error_str[:200]}"
+
         return ErrorDiagnosis(
             code=info.code.value,
-            summary=info.summary,
+            summary=summary,
             explanation=info.explanation,
             suggested_fix=info.suggested_fix,
             retry_strategy=info.retry_strategy,
