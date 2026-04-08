@@ -223,54 +223,71 @@ class DownloadService:
             return False
 
         # ── Phase 3 (success): record completion ─────────────────────────
-        async with async_session() as db:
-            video = await db.get(Video, video_id)
-            channel = await db.get(Channel, channel_id)
-            queue_entry = await db.get(DownloadQueue, queue_id)
+        try:
+            async with async_session() as db:
+                video = await db.get(Video, video_id)
+                channel = await db.get(Channel, channel_id)
+                queue_entry = await db.get(DownloadQueue, queue_id)
 
-            if not video:
-                return False
+                if not video:
+                    return False
 
-            video.status = "completed"
-            video.file_path = mp4_path
-            video.file_size = file_size
-            video.downloaded_at = datetime.now(timezone.utc)
-            video.quality_downloaded = cdata.quality
-            video.error_code = None
-            video.error_message = None
-            video.error_details = None
+                video.status = "completed"
+                video.file_path = mp4_path
+                video.file_size = file_size
+                video.downloaded_at = datetime.now(timezone.utc)
+                video.quality_downloaded = cdata.quality
+                video.error_code = None
+                video.error_message = None
+                video.error_details = None
 
-            if channel:
-                channel.downloaded_count = (
-                    await db.scalar(
-                        select(func.count(Video.id))
-                        .where(Video.channel_id == channel.id)
-                        .where(Video.status == "completed")
-                    )
-                ) or 0
-                channel.health_status = "healthy"
+                if channel:
+                    channel.downloaded_count = (
+                        await db.scalar(
+                            select(func.count(Video.id))
+                            .where(Video.channel_id == channel.id)
+                            .where(Video.status == "completed")
+                        )
+                    ) or 0
+                    channel.health_status = "healthy"
 
-            if queue_entry:
-                await db.delete(queue_entry)
+                if queue_entry:
+                    await db.delete(queue_entry)
 
-            db.add(DownloadLog(
-                video_id=video.id,
-                event="completed",
-                message=f"Downloaded successfully: {self._format_bytes(file_size)}",
-            ))
+                db.add(DownloadLog(
+                    video_id=video.id,
+                    event="completed",
+                    message=f"Downloaded successfully: {self._format_bytes(file_size)}",
+                ))
 
-            # Track last successful auth time (for cookie health dashboard)
-            result = await db.execute(
-                select(AppSetting).where(AppSetting.key == "last_successful_auth")
-            )
-            auth_ts = result.scalar_one_or_none()
-            now_str = datetime.now(timezone.utc).isoformat()
-            if auth_ts:
-                auth_ts.value = now_str
-            else:
-                db.add(AppSetting(key="last_successful_auth", value=now_str))
+                # Track last successful auth time (for cookie health dashboard)
+                result = await db.execute(
+                    select(AppSetting).where(AppSetting.key == "last_successful_auth")
+                )
+                auth_ts = result.scalar_one_or_none()
+                now_str = datetime.now(timezone.utc).isoformat()
+                if auth_ts:
+                    auth_ts.value = now_str
+                else:
+                    db.add(AppSetting(key="last_successful_auth", value=now_str))
 
-            await db.commit()
+                await db.commit()
+                logger.info("Downloaded: %s (%s)", vdata.title, self._format_bytes(file_size))
+
+        except Exception as e:
+            logger.error("Phase 3 success recording failed for %s: %s", vdata.title, e, exc_info=True)
+            # Even if recording failed, ensure the queue entry is cleaned up
+            try:
+                async with async_session() as db:
+                    queue_entry = await db.get(DownloadQueue, queue_id)
+                    if queue_entry:
+                        await db.delete(queue_entry)
+                    video = await db.get(Video, video_id)
+                    if video and video.status == "downloading":
+                        video.status = "completed"
+                    await db.commit()
+            except Exception:
+                logger.error("Failed to clean up queue entry %d", queue_id, exc_info=True)
 
         await self.notification.broadcast("download_complete", {
             "video_id": vdata.video_id,
@@ -278,7 +295,6 @@ class DownloadService:
             "file_size": self._format_bytes(file_size),
         })
 
-        logger.info("Downloaded: %s (%s)", vdata.title, self._format_bytes(file_size))
         return True
 
     async def _record_failure(
