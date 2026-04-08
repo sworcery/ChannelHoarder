@@ -222,14 +222,15 @@ class YtdlpService:
     def _base_opts(self, platform: str = "youtube") -> dict:
         """Build base yt-dlp options with anti-detection settings.
 
-        PO token generation is handled entirely by the bgutil-ytdlp-pot-provider
-        plugin, which generates per-video tokens via the HTTP provider (bgutil:http).
-        We do NOT manually inject PO tokens  - YouTube now binds GVS tokens to
-        specific video IDs, so pre-generated generic tokens are rejected.
+        Auth strategy:
+        - If valid cookies exist, use cookies as primary auth (skip PO tokens)
+        - If no cookies, fall back to PO token server for authentication
+        This avoids hammering the PO token server when cookies are available.
 
         YouTube-specific extractor args are only injected when platform == "youtube".
         """
         extractor_args = {}
+        use_pot = False
 
         # YouTube-specific anti-detection and PO token config
         if platform == "youtube":
@@ -238,14 +239,25 @@ class YtdlpService:
                 yt_args = {"player_client": ["mweb"]}
             else:
                 yt_args = {"player_client": player_client.split(",")}
-            yt_args["fetch_pot"] = ["always"]
+
+            # Only use PO tokens if cookies are not available
+            if settings.has_cookies:
+                logger.info("Cookies available - using cookies as primary auth (PO tokens skipped)")
+                yt_args["fetch_pot"] = ["never"]
+            elif settings.POT_SERVER_ENABLED:
+                logger.info("No cookies - falling back to PO token server: %s", settings.POT_SERVER_URL)
+                yt_args["fetch_pot"] = ["always"]
+                use_pot = True
+            else:
+                logger.warning("No cookies and PO token server disabled - downloads may fail")
+                yt_args["fetch_pot"] = ["never"]
+
             extractor_args["youtube"] = yt_args
 
-            if settings.POT_SERVER_ENABLED:
+            if use_pot:
                 extractor_args["youtubepot-bgutilhttp"] = {
                     "base_url": [settings.POT_SERVER_URL],
                 }
-                logger.info("PO token plugin configured with server: %s", settings.POT_SERVER_URL)
 
         opts = {
             "quiet": True,
