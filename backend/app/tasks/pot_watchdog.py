@@ -50,7 +50,6 @@ async def _restart_pot_server():
         return
 
     env = os.environ.copy()
-    env["HOME"] = "/home/appuser"
     env["NODE_OPTIONS"] = "--max-old-space-size=256"
 
     with open(pot_log, "w") as log_file:
