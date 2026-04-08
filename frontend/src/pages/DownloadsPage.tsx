@@ -633,7 +633,7 @@ export default function DownloadsPage() {
                             </div>
                           ) : entry.started_at ? (
                             <p className="text-xs text-yellow-500 mt-1">
-                              Waiting for download to begin (rate limiting, extracting info, or acquiring PO token)...
+                              Waiting for download to begin (extracting info, rate limiting)...
                             </p>
                           ) : null}
                         </div>
