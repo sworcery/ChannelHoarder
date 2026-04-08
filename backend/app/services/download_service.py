@@ -165,7 +165,14 @@ class DownloadService:
                     timeout=900,
                 )
             except asyncio.TimeoutError:
-                raise Exception("Download timed out after 15 minutes  - YouTube may be throttling or blocking requests")
+                # Trigger a PO token server restart since a timeout usually means it's hung
+                logger.warning("Download timed out - triggering PO token server watchdog")
+                try:
+                    from app.tasks.pot_watchdog import _restart_pot_server
+                    await _restart_pot_server()
+                except Exception:
+                    pass
+                raise Exception("Download timed out after 15 minutes - the PO token server may have been stuck and has been restarted. Retry this download.")
 
             mark_download_complete()
 

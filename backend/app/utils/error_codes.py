@@ -171,6 +171,12 @@ def classify_error(error_str: str) -> ErrorCode:
     if "age" in error_lower and ("restricted" in error_lower or "gate" in error_lower):
         return ErrorCode.AGE_RESTRICTED
 
+    if "timed out" in error_lower and "po token" in error_lower:
+        return ErrorCode.PO_TOKEN_FAILURE
+
+    if "download timed out" in error_lower:
+        return ErrorCode.PO_TOKEN_FAILURE
+
     if any(x in error_lower for x in ["connection", "timeout", "dns", "socket", "network", "ssl"]):
         return ErrorCode.NETWORK_ERROR
 

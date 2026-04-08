@@ -5,6 +5,13 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.4] - 2026-04-08
+
+### Fixed
+- **Download timeout triggers PO token server restart** - When a download times out (usually because the PO token server is hung), the watchdog now restarts the Node process automatically and the error message tells you to retry
+- **"Unknown error" now shows the actual error** - UNKNOWN errors in the UI and diagnostic report now include the raw error message instead of just "Unknown error"
+- **PO token timeout detection** - Downloads that time out waiting for a PO token are now classified as PO_TOKEN_FAILURE instead of NETWORK_ERROR
+
 ## [1.5.3] - 2026-04-08
 
 ### Added
