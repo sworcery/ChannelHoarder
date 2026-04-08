@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.5] - 2026-04-08
+
+### Fixed
+- **PO token server runs as root** - BotGuard VM requires root privileges to function. The v1.5.0 PUID/PGID change caused it to run as appuser, which made token generation hang indefinitely. PO token server now runs as root while uvicorn still runs as appuser for file ownership.
+
 ## [1.5.4] - 2026-04-08
 
 ### Fixed

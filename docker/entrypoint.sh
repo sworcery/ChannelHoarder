@@ -45,7 +45,7 @@ if [ "${POT_SERVER_ENABLED:-true}" = "true" ]; then
     echo "Starting PO token provider server on port ${POT_SERVER_PORT:-4416}..."
     if [ -d "/opt/pot-provider/server/build" ]; then
         cd /opt/pot-provider/server
-        HOME=/home/appuser NODE_OPTIONS="--max-old-space-size=256" gosu appuser node build/main.js --port "${POT_SERVER_PORT:-4416}" > "$POT_LOG" 2>&1 &
+        NODE_OPTIONS="--max-old-space-size=256" node build/main.js --port "${POT_SERVER_PORT:-4416}" > "$POT_LOG" 2>&1 &
         POT_PID=$!
         echo "PO token server started (PID: $POT_PID), logging to $POT_LOG"
         cd /app
