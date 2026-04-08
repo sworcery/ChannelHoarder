@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.7] - 2026-04-08
+
+### Fixed
+- **Queue stuck after successful download** - Post-download Phase 3 was not wrapped in error handling. If any exception occurred while recording completion (e.g. NFO write, DB update), the queue entry was never deleted, blocking all future downloads. Now has a fallback cleanup that always removes the queue entry even if recording fails.
+
 ## [1.5.6] - 2026-04-08
 
 ### Changed
