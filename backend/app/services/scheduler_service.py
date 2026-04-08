@@ -55,6 +55,16 @@ class SchedulerService:
             name="Check for yt-dlp updates",
         )
 
+        # PO token server watchdog (every 5 minutes)
+        from app.tasks.pot_watchdog import check_pot_server
+        self.scheduler.add_job(
+            check_pot_server,
+            IntervalTrigger(minutes=5),
+            id="pot_watchdog",
+            replace_existing=True,
+            name="PO token server watchdog",
+        )
+
         # Cookie file watcher (every 60 seconds)
         from app.tasks.cookie_watcher import watch_cookie_file
         self.scheduler.add_job(
