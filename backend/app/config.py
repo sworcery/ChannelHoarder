@@ -10,6 +10,7 @@ class Settings(BaseSettings):
 
     CONFIG_DIR: str = "/config"
     DOWNLOAD_DIR: str = "/downloads"
+    EXTRA_DOWNLOAD_DIRS: str = ""  # Comma-separated additional allowed download paths (e.g. /cartoons,/media)
     COOKIE_WATCH_DIR: str = "/cookies"
     DATABASE_URL: str = ""
 
@@ -32,6 +33,13 @@ class Settings(BaseSettings):
     TZ: str = "America/New_York"
 
     model_config = {"env_prefix": "", "case_sensitive": True}
+
+    @property
+    def allowed_download_roots(self) -> list[str]:
+        roots = [self.DOWNLOAD_DIR]
+        if self.EXTRA_DOWNLOAD_DIRS:
+            roots.extend(d.strip() for d in self.EXTRA_DOWNLOAD_DIRS.split(",") if d.strip())
+        return roots
 
     @property
     def db_url(self) -> str:

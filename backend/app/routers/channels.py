@@ -95,7 +95,7 @@ async def add_channel(
 
     if body.download_dir:
         try:
-            validate_download_path(body.download_dir, [settings.DOWNLOAD_DIR])
+            validate_download_path(body.download_dir, settings.allowed_download_roots)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -147,7 +147,7 @@ async def update_channel(
     if "download_dir" in update_data and update_data["download_dir"]:
         from app.utils.file_utils import validate_download_path
         try:
-            validate_download_path(update_data["download_dir"], [settings.DOWNLOAD_DIR])
+            validate_download_path(update_data["download_dir"], settings.allowed_download_roots)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -366,7 +366,7 @@ async def scan_for_import(
     """Scan a folder for video files that match un-downloaded videos for this channel."""
     from app.utils.file_utils import validate_download_path
     try:
-        validate_download_path(body.folder_path, [settings.DOWNLOAD_DIR])
+        validate_download_path(body.folder_path, settings.allowed_download_roots)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
