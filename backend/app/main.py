@@ -61,6 +61,17 @@ async def lifespan(app: FastAPI):
         await db.execute(delete(SystemHealthLog).where(SystemHealthLog.checked_at < cutoff))
         await db.commit()
 
+    # Detect PO token server PID for watchdog
+    if settings.POT_SERVER_ENABLED:
+        import subprocess as _sp
+        try:
+            ps = _sp.run(["pgrep", "-f", "main.js.*4416"], capture_output=True, text=True)
+            if ps.returncode == 0 and ps.stdout.strip():
+                from app.tasks.pot_watchdog import set_pot_pid
+                set_pot_pid(int(ps.stdout.strip().split()[0]))
+        except Exception:
+            logger.warning("Could not detect PO token server PID for watchdog")
+
     # Start scheduler
     from app.services.scheduler_service import SchedulerService
     scheduler = SchedulerService()

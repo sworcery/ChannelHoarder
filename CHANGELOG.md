@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.3] - 2026-04-08
+
+### Added
+- **PO token server watchdog** - Monitors the PO token server every 5 minutes by testing actual token generation (not just /ping). Automatically kills and restarts the Node.js process if it hangs, which resolves the "Waiting for download to begin" stuck state without requiring a full container restart.
+
 ## [1.5.0] - 2026-04-06
 
 ### Security
