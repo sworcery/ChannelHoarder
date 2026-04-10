@@ -75,6 +75,12 @@ export const api = {
       body: JSON.stringify({ video_ids: videoIds }),
     }),
 
+  // Episode renumbering
+  renumberPreview: (channelId: number) =>
+    request<any>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),
+  renumberConfirm: (channelId: number) =>
+    request<any>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
+
   // Downloads
   getQueue: (params?: { skip?: number; limit?: number; search?: string }) => {
     const qs = new URLSearchParams()

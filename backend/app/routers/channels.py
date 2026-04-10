@@ -225,24 +225,84 @@ async def refresh_metadata(channel_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Metadata refresh failed: {e}")
 
 
-@router.post("/{channel_id}/renumber", status_code=200)
-async def renumber_episodes(channel_id: int, db: AsyncSession = Depends(get_db)):
-    """Re-number all episodes for a channel based on upload date order.
-
-    Recalculates season/episode numbers chronologically and renames
-    downloaded files on disk to match the new numbering.
-    """
+@router.post("/{channel_id}/renumber/preview", status_code=200)
+async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
+    """Preview what episode renumbering would change without applying anything."""
     import os
-    import shutil
     from app.services.naming_service import build_output_path
-    from app.utils.file_utils import sanitize_filename
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Get all videos sorted by upload date (chronological)
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .order_by(Video.upload_date.asc(), Video.id.asc())
+    )
+    videos = result.scalars().all()
+
+    season_counts: dict[int, int] = {}
+    changes = []
+
+    for video in videos:
+        season = video.upload_date.year
+        season_counts.setdefault(season, 0)
+        season_counts[season] += 1
+        new_episode = season_counts[season]
+
+        if video.season != season or video.episode != new_episode:
+            old_label = f"S{video.season}E{video.episode:03d}"
+            new_label = f"S{season}E{new_episode:03d}"
+
+            # Figure out new file path
+            new_file_path = None
+            has_file = False
+            if video.file_path and os.path.exists(video.file_path):
+                has_file = True
+                new_file_path = build_output_path(
+                    channel_name=channel.channel_name,
+                    video_title=video.title,
+                    video_id=video.video_id,
+                    upload_date=video.upload_date,
+                    season=season,
+                    episode=new_episode,
+                    naming_template=channel.naming_template,
+                    base_dir=channel.download_dir,
+                ) + ".mp4"
+
+            changes.append({
+                "video_id": video.id,
+                "title": video.title,
+                "upload_date": str(video.upload_date),
+                "old_episode": old_label,
+                "new_episode": new_label,
+                "has_file": has_file,
+                "old_path": os.path.basename(video.file_path) if video.file_path else None,
+                "new_path": os.path.basename(new_file_path) if new_file_path else None,
+            })
+
+    return {
+        "channel_name": channel.channel_name,
+        "total_videos": len(videos),
+        "changes": changes,
+        "total_changes": len(changes),
+    }
+
+
+@router.post("/{channel_id}/renumber/confirm", status_code=200)
+async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
+    """Apply episode renumbering and rename files on disk."""
+    import os
+    import shutil
+    from app.services.naming_service import build_output_path
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -262,12 +322,10 @@ async def renumber_episodes(channel_id: int, db: AsyncSession = Depends(get_db))
 
         if video.season != season or video.episode != new_episode:
             old_path = video.file_path
-
             video.season = season
             video.episode = new_episode
             updated += 1
 
-            # Rename file on disk if it exists
             if old_path and os.path.exists(old_path):
                 new_path = build_output_path(
                     channel_name=channel.channel_name,
@@ -285,7 +343,6 @@ async def renumber_episodes(channel_id: int, db: AsyncSession = Depends(get_db))
                     shutil.move(old_path, new_path)
                     video.file_path = new_path
 
-                    # Move NFO and thumbnail too
                     for ext in [".nfo", "-thumb.jpg", ".jpg"]:
                         old_extra = old_path.rsplit(".mp4", 1)[0] + ext
                         new_extra = new_path.rsplit(".mp4", 1)[0] + ext
