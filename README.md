@@ -16,43 +16,55 @@
 ## Features
 
 ### Channel Management
-- **Subscribe to Channels**  - Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
-- **Channel Artwork**  - Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
-- **Grid/List Views**  - Toggle between grid cards and compact list view, with small/medium/large card size options
-- **Sorting**  - Sort channels by name, recently added, most videos, or health status
-- **Automatic Scanning**  - Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
-- **Auto-Scan on Add**  - Optionally trigger an immediate scan when adding a new channel
-- **Channel Health Indicators**  - Green/yellow/red status showing each channel's download success rate
-- **Per-Channel Quality**  - Set download quality independently for each channel (best, 1080p, 720p, 480p)
-- **Per-Channel Download Directories**  - Route channels to different storage locations
-- **Pause/Resume**  - Pause a channel to discover new videos without downloading them
+- **Subscribe to Channels** - Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
+- **Playlist Support** - Add YouTube playlists by URL, tracked and scanned like channels
+- **Channel Artwork** - Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
+- **Grid/List Views** - Toggle between grid cards and compact list view, with small/medium/large card size options
+- **Sorting** - Sort channels by name, recently added, most videos, or health status
+- **Automatic Scanning** - Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
+- **Auto-Scan on Add** - Optionally trigger an immediate scan when adding a new channel
+- **Auto-Download Toggle** - Choose whether new videos are automatically queued or left as pending for manual selection
+- **Channel Health Indicators** - Green/yellow/red status showing each channel's download success rate
+- **Per-Channel Quality** - Set download quality independently for each channel (best, 1080p, 720p, 480p)
+- **Quality Cutoff** - Set minimum acceptable quality per channel with upgrade detection and search
+- **Per-Channel Download Directories** - Route channels to different storage locations
+- **Minimum Duration Filter** - Per-channel setting to skip videos shorter than a configurable duration
 
 ### Plex Integration
-- **TV Show Naming**  - Organizes videos in Plex TV Show format (seasons by year, episodes numbered in upload order)
-- **Customizable Naming Templates**  - Configure the output filename format with variables like `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`  - with live preview
-- **Per-Channel Naming Overrides**  - Each channel can use its own naming template
-- **NFO Metadata**  - Generates tvshow.nfo and episode.nfo files for Plex/Jellyfin/Emby
-- **Poster Art**  - Downloads channel thumbnails as poster images
+- **TV Show Naming** - Organizes videos in Plex TV Show format (seasons by year, episodes numbered chronologically)
+- **Customizable Naming Templates** - Configure the output filename format with variables like `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}` - with live preview
+- **Per-Channel Naming Overrides** - Each channel can use its own naming template
+- **NFO Metadata** - Generates tvshow.nfo and episode.nfo files for Plex/Jellyfin/Emby
+- **Poster Art** - Downloads channel thumbnails as poster images, with automatic season posters
+- **Fix Episode Numbers** - Preview and fix chronological episode numbering with file renames on disk
+
+### Episode Management
+- **Monitored/Unmonitored** - Toggle monitoring per episode, bulk monitor/unmonitor, filter by monitored state
+- **Status Icons** - Distinct colored icons for each state: downloaded (green), missing/monitored (orange), unmonitored (gray), queued (blue), downloading (animated), failed (red), skipped (gray)
+- **Collapsible Seasons** - Videos grouped by year with per-season Monitor and Download Missing buttons
+- **Per-Episode Actions** - Three-dot menu with: Retry, Re-download, Rename File, Delete File, Skip Episode
+- **Subtitle Download** - Toggle in Settings to download subtitles and auto-generated captions with videos
 
 ### Downloads
-- **Queue-Based Pipeline**  - Downloads are queued and processed sequentially with configurable delays
-- **Standalone Video Download**  - Download individual videos by URL without subscribing to a channel, with configurable download directory
-- **Download All Missing**  - One-click button to queue all pending/failed videos across all channels, plus per-channel download buttons
-- **Pause/Resume Queue**  - Pause the entire download queue and resume when ready
-- **Real-Time Progress**  - WebSocket-powered live download speed, ETA, and progress bars
-- **Retry Failed Downloads**  - Retry individual failures or all failed downloads at once
-- **Bulk Video Management**  - Select multiple videos to queue, skip, or unskip at once
-- **Import Existing Files**  - Scan a folder of previously downloaded videos and match them to channel entries by title. Matched files are moved into the proper Plex-compatible directory structure. Video filenames must contain the original video title for matching to work.
-- **Livestream / Long Video Filter**  - Auto-skip videos over a configurable duration (e.g., livestreams), with optional notification for manual review
-- **YouTube Shorts Filter**  - Shorts (videos under 60 seconds) are excluded by default. Global toggle in Settings to allow shorts, with per-channel opt-in. Detect and bulk-delete already-downloaded shorts per channel
+- **Queue-Based Pipeline** - Downloads are queued and processed sequentially with configurable delays
+- **Standalone Video Download** - Download individual videos by URL without subscribing to a channel, with configurable download directory
+- **Download All Missing** - One-click button to queue all monitored pending/failed videos across all channels, plus per-channel and per-season download buttons
+- **Pause/Resume Queue** - Pause the entire download queue and resume when ready
+- **Real-Time Progress** - WebSocket-powered live download speed, ETA, and progress bars with quality badges
+- **Retry Failed Downloads** - Retry individual failures or all failed downloads at once
+- **Bulk Video Management** - Select multiple videos to queue, skip, unskip, monitor, or unmonitor at once
+- **Import Existing Files** - Scan a folder of previously downloaded videos and match them to channel entries by title
+- **Livestream / Long Video Filter** - Auto-skip videos over a configurable duration, with optional notification for manual review
+- **YouTube Shorts Filter** - Shorts (videos under 60 seconds) are excluded by default. Global toggle with per-channel opt-in.
 
 ### Authentication
-- **PO Token Authentication**  - Built-in PO token server (bgutil-ytdlp-pot-provider) for YouTube authentication with no manual setup
-- **Automatic Cookie Sync**  - Windows cookie exporter reads Firefox cookies and pushes to ChannelHoarder every 30 minutes
-- **Browser Cookie Sync**  - Tampermonkey userscript exports cookies on each YouTube page load
-- **Manual Cookie Upload**  - Upload a cookies.txt file directly
-- **YouTube Data API**  - Optional API key for faster, more reliable channel discovery
-- **Multiple Player Clients**  - Supports mweb, web, and web_creator strategies
+- **Smart Auth** - Uses cookies as primary auth when available, falls back to PO tokens only when needed
+- **PO Token Authentication** - Built-in PO token server with automatic watchdog that restarts if it hangs
+- **Automatic Cookie Sync** - Windows cookie exporter reads Firefox cookies and pushes to ChannelHoarder every 30 minutes
+- **Browser Cookie Sync** - Tampermonkey userscript exports cookies on each YouTube page load
+- **Manual Cookie Upload** - Upload a cookies.txt file directly
+- **YouTube Data API** - Optional API key for faster, more reliable channel discovery and thumbnails
+- **In-App Help** - Hover tooltips throughout settings with setup guides for API keys, cookies, and configuration
 
 ### Anti-Detection
 - **Configurable Download Delays**  - Set minimum and maximum delay between downloads
