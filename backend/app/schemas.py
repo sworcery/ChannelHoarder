@@ -77,6 +77,7 @@ class VideoResponse(UTCBaseModel):
     episode: int
     status: str
     is_short: bool
+    monitored: bool
     file_path: Optional[str]
     file_size: Optional[int]
     quality_downloaded: Optional[str]
@@ -100,6 +101,7 @@ class VideoSummary(UTCBaseModel):
     duration: Optional[int]
     thumbnail_url: Optional[str]
     status: str
+    monitored: bool
     error_code: Optional[str]
     error_message: Optional[str]
     retry_count: int

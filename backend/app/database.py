@@ -69,6 +69,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN is_short BOOLEAN DEFAULT 0 NOT NULL")
             )
+        if "monitored" not in video_columns:
+            await conn.execute(
+                text("ALTER TABLE videos ADD COLUMN monitored BOOLEAN DEFAULT 1 NOT NULL")
+            )
 
 
 # Note: get_db() dependency is defined in deps.py  - do not duplicate here

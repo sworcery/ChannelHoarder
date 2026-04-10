@@ -25,6 +25,8 @@ import {
   Play,
   ListX,
   ListOrdered,
+  Bookmark,
+  BookmarkX,
   Tv,
 } from "lucide-react"
 import { useState, useCallback } from "react"
@@ -72,7 +74,8 @@ export default function ChannelDetailPage() {
     queryFn: () => api.getChannelVideos(channelId, {
       limit: PAGE_SIZE,
       skip: page * PAGE_SIZE,
-      status: statusFilter || undefined,
+      status: statusFilter && !["monitored", "unmonitored"].includes(statusFilter) ? statusFilter : undefined,
+      monitored: statusFilter === "monitored" ? true : statusFilter === "unmonitored" ? false : undefined,
       search: searchQuery || undefined,
     }),
     placeholderData: keepPreviousData,
@@ -115,6 +118,20 @@ export default function ChannelDetailPage() {
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
     onSuccess: () => { invalidateVideos(); toast("Video queued for retry") },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const toggleMonitorMutation = useMutation({
+    mutationFn: ({ videoId, monitored }: { videoId: number; monitored: boolean }) =>
+      api.toggleVideoMonitored(channelId, videoId, monitored),
+    onSuccess: () => invalidateVideos(),
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const bulkMonitorMutation = useMutation({
+    mutationFn: ({ monitored }: { monitored: boolean }) =>
+      api.bulkMonitorVideos(channelId, Array.from(selectedVideoIds), monitored),
+    onSuccess: (data: any) => { invalidateVideos(); setSelectedVideoIds(new Set()); toast(data.message) },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -587,6 +604,8 @@ export default function ChannelDetailPage() {
             <option value="downloading">Downloading</option>
             <option value="failed">Failed</option>
             <option value="skipped">Skipped</option>
+            <option value="monitored">Monitored</option>
+            <option value="unmonitored">Unmonitored</option>
           </select>
         </div>
 
@@ -618,6 +637,22 @@ export default function ChannelDetailPage() {
             >
               <RotateCcw className="h-3 w-3" />
               Unskip Selected
+            </button>
+            <button
+              onClick={() => bulkMonitorMutation.mutate({ monitored: true })}
+              disabled={isBulkLoading}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+            >
+              <Bookmark className="h-3 w-3" />
+              Monitor
+            </button>
+            <button
+              onClick={() => bulkMonitorMutation.mutate({ monitored: false })}
+              disabled={isBulkLoading}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+            >
+              <BookmarkX className="h-3 w-3" />
+              Unmonitor
             </button>
             <button
               onClick={() => setSelectedVideoIds(new Set())}
@@ -700,6 +735,13 @@ export default function ChannelDetailPage() {
                         </td>
                         <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => toggleMonitorMutation.mutate({ videoId: video.id, monitored: !video.monitored })}
+                              className={`p-1 rounded ${video.monitored ? "text-primary hover:bg-primary/10" : "text-muted-foreground hover:bg-accent"}`}
+                              title={video.monitored ? "Monitored (click to unmonitor)" : "Unmonitored (click to monitor)"}
+                            >
+                              {video.monitored ? <Bookmark className="h-3.5 w-3.5 fill-current" /> : <Bookmark className="h-3.5 w-3.5" />}
+                            </button>
                             {video.status === "failed" && (
                               <button
                                 onClick={() => retryMutation.mutate(video.id)}

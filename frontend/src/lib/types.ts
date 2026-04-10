@@ -37,6 +37,7 @@ export interface Video {
   episode: number
   status: string
   is_short: boolean
+  monitored: boolean
   file_path: string | null
   file_size: number | null
   quality_downloaded: string | null

@@ -25,11 +25,12 @@ export const api = {
     request<any>(`/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteChannel: (id: number, deleteFiles = false) =>
     request<void>(`/channels/${id}?delete_files=${deleteFiles}`, { method: "DELETE" }),
-  getChannelVideos: (id: number, params?: { skip?: number; limit?: number; status?: string; search?: string }) => {
+  getChannelVideos: (id: number, params?: { skip?: number; limit?: number; status?: string; monitored?: boolean; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.skip) qs.set("skip", String(params.skip))
     if (params?.limit) qs.set("limit", String(params.limit))
     if (params?.status) qs.set("status", params.status)
+    if (params?.monitored !== undefined) qs.set("monitored", String(params.monitored))
     if (params?.search) qs.set("search", params.search)
     return request<{ items: any[]; total: number; skip: number; limit: number }>(`/channels/${id}/videos?${qs}`)
   },
@@ -78,6 +79,14 @@ export const api = {
   // Video management
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
     request<any>(`/channels/${channelId}/videos/${videoId}?delete_files=${deleteFiles}`, { method: "DELETE" }),
+
+  // Monitoring
+  toggleVideoMonitored: (channelId: number, videoId: number, monitored: boolean) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/monitored`, { method: "PATCH", body: JSON.stringify({ monitored }) }),
+  bulkMonitorVideos: (channelId: number, videoIds: number[], monitored: boolean) =>
+    request<any>(`/channels/${channelId}/videos/bulk-monitor`, { method: "POST", body: JSON.stringify({ video_ids: videoIds, monitored }) }),
+  monitorAllVideos: (channelId: number, monitored: boolean) =>
+    request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
   // Episode renumbering
   renumberPreview: (channelId: number) =>

@@ -320,6 +320,7 @@ class ChannelService:
                 shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
                 if not shorts_globally_enabled or not channel.include_shorts:
                     video.status = "skipped"
+                    video.monitored = False
                     logger.info("Skipped short: %s (%s)  - %ds", vid_id, title, duration or 0)
                     new_count += 1
                     continue
