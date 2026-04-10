@@ -26,6 +26,7 @@ class ChannelCreate(BaseModel):
     enabled: bool = True
     auto_download: bool = True
     quality_cutoff: Optional[str] = None
+    min_video_duration: Optional[int] = None
 
 
 class ChannelUpdate(BaseModel):
@@ -37,6 +38,7 @@ class ChannelUpdate(BaseModel):
     include_shorts: Optional[bool] = None
     auto_download: Optional[bool] = None
     quality_cutoff: Optional[str] = None
+    min_video_duration: Optional[int] = None
 
 
 class ChannelResponse(UTCBaseModel):
@@ -56,6 +58,7 @@ class ChannelResponse(UTCBaseModel):
     include_shorts: bool
     auto_download: bool
     quality_cutoff: Optional[str]
+    min_video_duration: Optional[int]
     last_scanned_at: Optional[datetime]
     total_videos: int
     downloaded_count: int
@@ -193,6 +196,7 @@ class SettingsUpdate(BaseModel):
     pushover_user_key: Optional[str] = None
     webhook_events: Optional[list[str]] = None
     shorts_enabled: Optional[bool] = None  # Global toggle to allow shorts downloading
+    subtitles_enabled: Optional[bool] = None  # Download subtitles/captions with videos
     # Livestream / long video filter
     max_video_duration: Optional[int] = None  # Max duration in seconds (0 = disabled)
     # System

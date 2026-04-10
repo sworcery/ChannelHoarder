@@ -456,6 +456,17 @@ export default function ChannelDetailPage() {
               </div>
             </div>
             <div>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon side="bottom" text="Skip videos shorter than this duration (in seconds). Set to 0 or leave empty to disable. Useful for filtering trailers, teasers, and shorts posted as regular videos." /></label>
+              <input
+                type="number"
+                value={channel.min_video_duration || ""}
+                placeholder="0 (disabled)"
+                onChange={(e) => updateMutation.mutate({ min_video_duration: Number(e.target.value) || null })}
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                min={0}
+              />
+            </div>
+            <div>
               <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
               <div className="flex gap-1">
                 <input
