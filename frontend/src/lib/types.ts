@@ -14,6 +14,7 @@ export interface Channel {
   enabled: boolean
   include_shorts: boolean
   auto_download: boolean
+  quality_cutoff: string | null
   last_scanned_at: string | null
   total_videos: number
   downloaded_count: number

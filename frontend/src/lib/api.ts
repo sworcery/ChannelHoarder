@@ -88,6 +88,10 @@ export const api = {
   monitorAllVideos: (channelId: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
+  // Quality management
+  upgradeQuality: (channelId: number) =>
+    request<any>(`/channels/${channelId}/upgrade-quality`, { method: "POST" }),
+
   // Season management
   monitorSeason: (channelId: number, season: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/seasons/${season}/monitor`, { method: "POST", body: JSON.stringify({ monitored }) }),

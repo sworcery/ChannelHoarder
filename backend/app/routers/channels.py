@@ -656,6 +656,40 @@ async def download_missing_season(
     return {"message": f"Queued {queued} videos from Season {season}", "queued": queued}
 
 
+@router.post("/{channel_id}/upgrade-quality")
+async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
+    """Re-queue completed videos where quality is below the channel's cutoff."""
+    from app.utils.quality_utils import quality_met
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    if not channel.quality_cutoff:
+        return {"message": "No quality cutoff set for this channel", "queued": 0}
+
+    subquery = select(DownloadQueue.video_id)
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.status == "completed")
+        .where(Video.monitored == True)
+        .where(Video.id.notin_(subquery))
+    )
+    videos = result.scalars().all()
+
+    queued = 0
+    for video in videos:
+        if not quality_met(video.quality_downloaded, channel.quality_cutoff):
+            video.status = "queued"
+            db.add(DownloadQueue(video_id=video.id))
+            queued += 1
+
+    await db.commit()
+    return {"message": f"Queued {queued} videos for quality upgrade", "queued": queued}
+
+
 @router.post("/{channel_id}/import/scan")
 async def scan_for_import(
     channel_id: int,

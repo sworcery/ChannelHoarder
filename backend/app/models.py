@@ -31,6 +31,7 @@ class Channel(Base):
     banner_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     quality: Mapped[str] = mapped_column(String(10), nullable=False, default="best")
+    quality_cutoff: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     download_dir: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     check_schedule: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
