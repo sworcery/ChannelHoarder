@@ -75,6 +75,10 @@ export const api = {
       body: JSON.stringify({ video_ids: videoIds }),
     }),
 
+  // Video management
+  deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}?delete_files=${deleteFiles}`, { method: "DELETE" }),
+
   // Episode renumbering
   renumberPreview: (channelId: number) =>
     request<any>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),

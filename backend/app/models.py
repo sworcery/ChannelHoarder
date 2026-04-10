@@ -36,6 +36,7 @@ class Channel(Base):
     check_schedule: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_shorts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    auto_download: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     total_videos: Mapped[int] = mapped_column(Integer, default=0)
     downloaded_count: Mapped[int] = mapped_column(Integer, default=0)

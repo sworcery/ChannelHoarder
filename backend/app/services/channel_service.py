@@ -29,25 +29,32 @@ class ChannelService:
         self.yt_api = YouTubeAPIService() if settings.has_youtube_api_key else None
 
     async def add_channel(self, data: ChannelCreate) -> Channel:
-        from app.utils.platform_utils import detect_platform, get_tab_suffixes
+        from app.utils.platform_utils import detect_platform, get_tab_suffixes, is_playlist_url
 
         # Auto-detect platform from URL
         platform = detect_platform(data.url)
+        is_playlist = is_playlist_url(data.url)
 
         # Resolve channel info via yt-dlp
         info = await asyncio.to_thread(self.ytdlp.get_channel_info, data.url)
         if not info:
             raise ValueError(f"Could not find channel for: {data.url}")
 
-        channel_id = info.get("channel_id") or info.get("id", "")
-        channel_name = info.get("channel") or info.get("uploader") or info.get("title", "Unknown")
-        # Prefer channel_url (base channel URL) over webpage_url (may include /featured etc.)
-        channel_url = info.get("channel_url") or info.get("webpage_url") or data.url
-        # Strip platform-specific tab suffixes so scanning can append /videos reliably
-        for suffix in get_tab_suffixes(platform):
-            if channel_url.endswith(suffix):
-                channel_url = channel_url[:-len(suffix)]
-                break
+        if is_playlist:
+            # Playlists use different keys than channels
+            channel_id = info.get("id", "")
+            channel_name = info.get("title") or info.get("channel") or "Unknown Playlist"
+            channel_url = info.get("webpage_url") or data.url
+        else:
+            channel_id = info.get("channel_id") or info.get("id", "")
+            channel_name = info.get("channel") or info.get("uploader") or info.get("title", "Unknown")
+            # Prefer channel_url (base channel URL) over webpage_url (may include /featured etc.)
+            channel_url = info.get("channel_url") or info.get("webpage_url") or data.url
+            # Strip platform-specific tab suffixes so scanning can append /videos reliably
+            for suffix in get_tab_suffixes(platform):
+                if channel_url.endswith(suffix):
+                    channel_url = channel_url[:-len(suffix)]
+                    break
 
         # Check if already subscribed
         existing = await self.db.execute(
@@ -79,6 +86,7 @@ class ChannelService:
             naming_template=data.naming_template,
             download_dir=data.download_dir,
             enabled=data.enabled,
+            auto_download=data.auto_download,
             health_status="healthy",
         )
 
@@ -308,9 +316,12 @@ class ChannelService:
                     "message": f"Long video detected: {title} ({hours}h {mins}m). Queue manually if desired.",
                 })
             else:
-                # Auto-queue for download
-                self.db.add(DownloadQueue(video_id=video.id))
-                video.status = "queued"
+                # Auto-queue for download (if enabled for this channel)
+                if channel.auto_download:
+                    self.db.add(DownloadQueue(video_id=video.id))
+                    video.status = "queued"
+                else:
+                    video.status = "pending"
 
             new_count += 1
 

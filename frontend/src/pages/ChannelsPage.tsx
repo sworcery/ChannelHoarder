@@ -50,6 +50,7 @@ export default function ChannelsPage() {
   const [addQuality, setAddQuality] = useState("best")
   const [addDownloadDir, setAddDownloadDir] = useState("")
   const [scanAfterAdd, setScanAfterAdd] = useState(true)
+  const [autoDownload, setAutoDownload] = useState(true)
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>(() => getStored("ch_view", "grid"))
   const [cardSize, setCardSize] = useState<CardSize>(() => getStored("ch_size", "medium"))
@@ -66,7 +67,7 @@ export default function ChannelsPage() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (data: { url: string; quality: string; download_dir?: string }) => api.addChannel(data),
+    mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean }) => api.addChannel(data),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       setShowAdd(false)
@@ -254,6 +255,16 @@ export default function ChannelsPage() {
                 />
                 <span className="text-sm">Scan for videos after adding</span>
               </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoDownload}
+                  onChange={(e) => setAutoDownload(e.target.checked)}
+                  className="rounded"
+                />
+                <span className="text-sm">Auto-download new videos</span>
+                <span className="text-xs text-muted-foreground">(uncheck to browse before downloading)</span>
+              </label>
               {addMutation.error && (
                 <p className="text-sm text-red-500">{(addMutation.error as Error).message}</p>
               )}
@@ -265,7 +276,7 @@ export default function ChannelsPage() {
                   Cancel
                 </button>
                 <button
-                  onClick={() => addMutation.mutate({ url: addUrl, quality: addQuality, ...(addDownloadDir ? { download_dir: addDownloadDir } : {}) })}
+                  onClick={() => addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addDownloadDir ? { download_dir: addDownloadDir } : {}) })}
                   disabled={!addUrl || addMutation.isPending}
                   className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
                 >

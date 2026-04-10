@@ -57,6 +57,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN include_shorts BOOLEAN DEFAULT 0 NOT NULL")
             )
+        if "auto_download" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN auto_download BOOLEAN DEFAULT 1 NOT NULL")
+            )
 
         # Add is_short column to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))

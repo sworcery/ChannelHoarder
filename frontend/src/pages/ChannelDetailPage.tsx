@@ -117,6 +117,13 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const deleteVideoMutation = useMutation({
+    mutationFn: ({ videoId, deleteFiles }: { videoId: number; deleteFiles: boolean }) =>
+      api.deleteVideo(channelId, videoId, deleteFiles),
+    onSuccess: (data: any) => { invalidateVideos(); toast(data.message) },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const updateMutation = useMutation({
     mutationFn: (data: any) => api.updateChannel(channelId, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["channel", channelId] }); toast("Channel updated") },
@@ -690,15 +697,29 @@ export default function ChannelDetailPage() {
                           {video.file_size ? formatBytes(video.file_size) : "-"}
                         </td>
                         <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                          {video.status === "failed" && (
-                            <button
-                              onClick={() => retryMutation.mutate(video.id)}
-                              className="p-1 hover:bg-accent rounded"
-                              title="Retry"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {video.status === "failed" && (
+                              <button
+                                onClick={() => retryMutation.mutate(video.id)}
+                                className="p-1 hover:bg-accent rounded"
+                                title="Retry"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {video.status !== "downloading" && (
+                              <button
+                                onClick={() => deleteVideoMutation.mutate({
+                                  videoId: video.id,
+                                  deleteFiles: !!video.file_path,
+                                })}
+                                className="p-1 hover:bg-red-500/10 rounded text-muted-foreground hover:text-red-500"
+                                title={video.file_path ? "Delete video and files" : "Skip video"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )
