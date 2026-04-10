@@ -7,6 +7,7 @@ import { useWebSocket } from "@/hooks/useWebSocket"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/components/ui/toaster"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import {
   RotateCcw,
   Loader2,
@@ -377,7 +378,10 @@ export default function DownloadsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Downloads</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Downloads</h1>
+          <HelpIcon side="bottom" text="Pause stops new downloads from starting but lets any in-progress download finish. Clear removes all queued items that haven't started yet." />
+        </div>
         <div className="flex items-center gap-2">
           {isPaused ? (
             <button
