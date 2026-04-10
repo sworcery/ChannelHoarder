@@ -24,6 +24,7 @@ class ChannelCreate(BaseModel):
     naming_template: Optional[str] = None
     download_dir: Optional[str] = Field(default=None, description="Custom download directory (overrides global default)")
     enabled: bool = True
+    auto_download: bool = True
 
 
 class ChannelUpdate(BaseModel):
@@ -33,6 +34,7 @@ class ChannelUpdate(BaseModel):
     check_schedule: Optional[str] = None
     enabled: Optional[bool] = None
     include_shorts: Optional[bool] = None
+    auto_download: Optional[bool] = None
 
 
 class ChannelResponse(UTCBaseModel):
@@ -50,6 +52,7 @@ class ChannelResponse(UTCBaseModel):
     check_schedule: Optional[str]
     enabled: bool
     include_shorts: bool
+    auto_download: bool
     last_scanned_at: Optional[datetime]
     total_videos: int
     downloaded_count: int

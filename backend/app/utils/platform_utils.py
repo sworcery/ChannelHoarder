@@ -83,6 +83,12 @@ _GENERIC_PLATFORM = {
 }
 
 
+def is_playlist_url(url: str) -> bool:
+    """Check if a URL is a YouTube playlist (not a channel)."""
+    lower = url.lower()
+    return "playlist?list=" in lower or "/playlist/" in lower
+
+
 def detect_platform(url: str) -> str:
     """Detect the platform from a URL. Returns platform key or 'other'."""
     try:
@@ -112,7 +118,10 @@ def build_video_url(platform: str, video_id: str) -> str:
 
 
 def get_channel_videos_url(platform: str, channel_url: str) -> str:
-    """Append the platform-appropriate suffix for listing videos."""
+    """Append the platform-appropriate suffix for listing videos.
+    Playlists are returned as-is (no suffix needed)."""
+    if is_playlist_url(channel_url):
+        return channel_url
     config = get_platform_config(platform)
     suffix = config["channel_video_suffix"]
     if suffix and not channel_url.rstrip("/").endswith(suffix):

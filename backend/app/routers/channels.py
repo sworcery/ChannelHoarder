@@ -491,6 +491,48 @@ async def bulk_unskip_videos(
     return {"message": f"Unskipped {unskipped} videos", "unskipped": unskipped}
 
 
+@router.delete("/{channel_id}/videos/{video_id}")
+async def delete_video(
+    channel_id: int,
+    video_id: int,
+    delete_files: bool = Query(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a single video. Optionally removes files from disk."""
+    import os
+
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    files_removed = False
+    if delete_files and video.file_path:
+        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+            path = base + ext
+            if os.path.exists(path):
+                os.remove(path)
+                files_removed = True
+
+    # Remove from queue if present
+    queue_result = await db.execute(
+        select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+    )
+    queue_entry = queue_result.scalar_one_or_none()
+    if queue_entry:
+        await db.delete(queue_entry)
+
+    video.status = "skipped"
+    video.file_path = None
+    video.file_size = None
+    await db.commit()
+
+    return {"message": f"Video '{video.title}' deleted", "files_removed": files_removed}
+
+
 @router.post("/{channel_id}/import/scan")
 async def scan_for_import(
     channel_id: int,

@@ -216,6 +216,15 @@ class DownloadService:
                 platform=cdata.platform,
             )
 
+            # Create season poster if it doesn't exist
+            from app.services.metadata_service import write_season_poster
+            write_season_poster(
+                channel_name=cdata.channel_name,
+                season=vdata.season,
+                thumbnail_url=cdata.thumbnail_url,
+                base_dir=cdata.download_dir,
+            )
+
         except Exception as e:
             mark_download_complete()
             # ── Phase 3 (error): record failure ──────────────────────────

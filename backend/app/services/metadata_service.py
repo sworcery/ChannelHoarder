@@ -153,15 +153,16 @@ def write_episode_nfo(
     return nfo_path
 
 
-def _download_image(url: str, dest_path: str) -> bool:
+def _download_image(url: str, dest_path: str, force: bool = False) -> bool:
     """Download an image URL to a local path. Returns True on success."""
-    if os.path.exists(dest_path):
+    if not force and os.path.exists(dest_path):
         return True  # Already have it
 
     try:
         with httpx.Client(timeout=30, follow_redirects=True) as client:
             resp = client.get(url)
             resp.raise_for_status()
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             with open(dest_path, "wb") as f:
                 f.write(resp.content)
         logger.info("Downloaded poster: %s", dest_path)
@@ -169,3 +170,24 @@ def _download_image(url: str, dest_path: str) -> bool:
     except Exception as e:
         logger.warning("Failed to download image %s: %s", url, e)
         return False
+
+
+def write_season_poster(
+    channel_name: str,
+    season: int,
+    thumbnail_url: str | None,
+    base_dir: str | None = None,
+) -> bool:
+    """Create a season poster by downloading the channel thumbnail into the season folder."""
+    if not thumbnail_url:
+        return False
+
+    from app.config import settings
+    from app.utils.file_utils import sanitize_filename
+
+    base = base_dir or settings.DOWNLOAD_DIR
+    safe_name = sanitize_filename(channel_name)
+    season_dir = os.path.join(base, safe_name, f"Season {season}")
+    poster_path = os.path.join(season_dir, "poster.jpg")
+
+    return _download_image(thumbnail_url, poster_path)

@@ -13,6 +13,7 @@ export interface Channel {
   check_schedule: string | null
   enabled: boolean
   include_shorts: boolean
+  auto_download: boolean
   last_scanned_at: string | null
   total_videos: number
   downloaded_count: number
