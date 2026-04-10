@@ -610,6 +610,52 @@ async def monitor_all_videos(
     return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
 
 
+@router.post("/{channel_id}/seasons/{season}/monitor")
+async def monitor_season(
+    channel_id: int,
+    season: int,
+    body: MonitorRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set monitored state for all videos in a season."""
+    result = await db.execute(
+        select(Video).where(Video.channel_id == channel_id, Video.season == season)
+    )
+    videos = result.scalars().all()
+    count = 0
+    for video in videos:
+        video.monitored = body.monitored
+        count += 1
+    await db.commit()
+    return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos in Season {season}", "count": count}
+
+
+@router.post("/{channel_id}/seasons/{season}/download-missing")
+async def download_missing_season(
+    channel_id: int,
+    season: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Queue all monitored pending/failed videos in a season."""
+    subquery = select(DownloadQueue.video_id)
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.season == season)
+        .where(Video.status.in_(["pending", "failed"]))
+        .where(Video.monitored == True)
+        .where(Video.id.notin_(subquery))
+    )
+    videos = result.scalars().all()
+    queued = 0
+    for video in videos:
+        video.status = "queued"
+        db.add(DownloadQueue(video_id=video.id))
+        queued += 1
+    await db.commit()
+    return {"message": f"Queued {queued} videos from Season {season}", "queued": queued}
+
+
 @router.post("/{channel_id}/import/scan")
 async def scan_for_import(
     channel_id: int,
