@@ -74,12 +74,22 @@ class ChannelService:
                 banner_url = thumb.get("url")
                 break
 
+        # Get thumbnail - try yt-dlp first, fall back to YouTube Data API
+        thumbnail_url = info.get("thumbnail")
+        if not thumbnail_url and platform == "youtube" and settings.has_youtube_api_key:
+            try:
+                from app.services.youtube_api_service import YouTubeAPIService
+                api_svc = YouTubeAPIService()
+                thumbnail_url = await api_svc.get_channel_thumbnail(channel_id)
+            except Exception as e:
+                logger.warning("Could not fetch thumbnail via API: %s", e)
+
         channel = Channel(
             channel_id=channel_id,
             channel_name=channel_name,
             channel_url=channel_url,
             platform=platform,
-            thumbnail_url=info.get("thumbnail"),
+            thumbnail_url=thumbnail_url,
             banner_url=banner_url,
             description=info.get("description"),
             quality=data.quality,
@@ -112,10 +122,23 @@ class ChannelService:
     async def refresh_channel_metadata(self, channel: Channel) -> Channel:
         """Re-fetch thumbnail, banner, and description from the platform."""
         info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
+
+        if info:
+            channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
+
+        # Fall back to YouTube Data API for thumbnail if yt-dlp didn't return one
+        if not channel.thumbnail_url and channel.platform == "youtube" and settings.has_youtube_api_key:
+            try:
+                from app.services.youtube_api_service import YouTubeAPIService
+                api_svc = YouTubeAPIService()
+                api_thumb = await api_svc.get_channel_thumbnail(channel.channel_id)
+                if api_thumb:
+                    channel.thumbnail_url = api_thumb
+            except Exception as e:
+                logger.warning("Could not fetch thumbnail via API: %s", e)
+
         if not info:
             raise ValueError("Could not fetch channel metadata")
-
-        channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
         channel.description = info.get("description") or channel.description
 
         # Extract banner URL from thumbnails list (widest image)
