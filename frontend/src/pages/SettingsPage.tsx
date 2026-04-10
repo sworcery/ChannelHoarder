@@ -758,6 +758,7 @@ function AntiDetectTab() {
   const [jitter, setJitter] = useState(true)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
 
   const { data: settings } = useQuery({
     queryKey: ["app-settings"],
@@ -772,6 +773,7 @@ function AntiDetectTab() {
       if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
+      if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
     }
   }, [settings])
 
@@ -784,6 +786,7 @@ function AntiDetectTab() {
         jitter_enabled: jitter,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
+        subtitles_enabled: subtitlesEnabled,
       }),
     onSuccess: () => toast("Anti-detection settings saved"),
     onError: (e: Error) => toast(e.message, "error"),
@@ -873,6 +876,22 @@ function AntiDetectTab() {
             ? "Channels can individually enable shorts downloading in their settings."
             : "Shorts are excluded from all channel downloads."}
         </p>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Subtitles / Captions</h3>
+          <HelpIcon side="bottom" text="Downloads available subtitles and auto-generated captions (English) alongside each video. Subtitle files (.srt/.vtt) are saved next to the video file." />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={subtitlesEnabled}
+            onChange={(e) => setSubtitlesEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Download subtitles and auto-generated captions</span>
+        </label>
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">

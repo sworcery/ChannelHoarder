@@ -325,6 +325,15 @@ class ChannelService:
                     new_count += 1
                     continue
 
+            # Check per-channel minimum duration filter
+            if channel.min_video_duration and duration and duration < channel.min_video_duration:
+                video.status = "skipped"
+                video.monitored = False
+                logger.info("Skipped short video: %s (%s) - %ds < %ds minimum",
+                            vid_id, title, duration, channel.min_video_duration)
+                new_count += 1
+                continue
+
             # Check livestream / long video filter
             max_dur = await self._get_max_duration()
             if max_dur and max_dur > 0 and duration and duration > max_dur:

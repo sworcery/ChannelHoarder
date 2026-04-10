@@ -44,7 +44,7 @@ async def list_channels(
     counts_result = await db.execute(
         select(
             Video.channel_id,
-            func.count(Video.id).label("total"),
+            func.count(Video.id).filter(Video.status != "skipped", Video.monitored == True).label("total"),
             func.count(Video.id).filter(Video.status == "completed").label("downloaded"),
         )
         .where(Video.channel_id.in_(channel_ids))
@@ -120,7 +120,7 @@ async def get_channel(channel_id: int, db: AsyncSession = Depends(get_db)):
     # Compute live counts from Video table
     counts = await db.execute(
         select(
-            func.count(Video.id),
+            func.count(Video.id).filter(Video.status != "skipped", Video.monitored == True),
             func.count(Video.id).filter(Video.status == "completed"),
         ).where(Video.channel_id == channel.id)
     )

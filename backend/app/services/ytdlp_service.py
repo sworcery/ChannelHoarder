@@ -154,6 +154,9 @@ class YtdlpService:
             "outtmpl": output_path + ".%(ext)s",
             "writethumbnail": True,
             "writeinfojson": True,
+            "writesubtitles": self._subtitles_enabled(),
+            "writeautomaticsub": self._subtitles_enabled(),
+            "subtitleslangs": ["en"] if self._subtitles_enabled() else [],
             "postprocessors": [
                 {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
                 {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
@@ -292,6 +295,26 @@ class YtdlpService:
             opts["http_headers"] = {"User-Agent": get_random_user_agent()}
 
         return opts
+
+    @staticmethod
+    def _subtitles_enabled() -> bool:
+        """Check if subtitle downloading is enabled in settings."""
+        try:
+            import json
+            from pathlib import Path
+            db_path = Path(settings.CONFIG_DIR) / "archiver.db"
+            if not db_path.exists():
+                return False
+            import sqlite3
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.execute("SELECT value FROM app_settings WHERE key = 'subtitles_enabled'")
+            row = cursor.fetchone()
+            conn.close()
+            if row:
+                return json.loads(row[0]) is True
+        except Exception:
+            pass
+        return False
 
     @staticmethod
     def _cleanup_cookie_tmp(opts: dict) -> None:

@@ -61,6 +61,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN quality_cutoff VARCHAR(10)")
             )
+        if "min_video_duration" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN min_video_duration INTEGER")
+            )
         if "auto_download" not in columns:
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN auto_download BOOLEAN DEFAULT 1 NOT NULL")
