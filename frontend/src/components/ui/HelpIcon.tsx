@@ -1,16 +1,27 @@
-import { HelpCircle } from "lucide-react"
-import { Tooltip } from "./Tooltip"
-import type { ReactNode } from "react"
+import { ExternalLink } from "lucide-react"
+
+const REPO_URL = "https://github.com/sworcery/ChannelHoarder"
 
 interface HelpIconProps {
-  text: ReactNode
-  side?: "top" | "bottom" | "left" | "right"
+  text: string
+  anchor?: string
+  side?: string // kept for backwards compat, ignored now
 }
 
-export function HelpIcon({ text, side = "top" }: HelpIconProps) {
+export function HelpIcon({ text, anchor }: HelpIconProps) {
   return (
-    <Tooltip content={text} side={side}>
-      <HelpCircle className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-help flex-shrink-0" />
-    </Tooltip>
+    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+      <span>{text}</span>
+      {anchor && (
+        <a
+          href={`${REPO_URL}#${anchor}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-0.5 text-primary hover:underline whitespace-nowrap"
+        >
+          Learn more <ExternalLink className="h-3 w-3" />
+        </a>
+      )}
+    </span>
   )
 }

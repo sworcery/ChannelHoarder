@@ -166,7 +166,7 @@ function GeneralTab() {
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Scan Schedule</h3>
-          <HelpIcon side="bottom" text="Sets how often ChannelHoarder checks your subscribed channels for new videos. Uses cron syntax for custom schedules (e.g. '0 */6 * * *' = every 6 hours). New videos found during scans are automatically queued for download." />
+          <HelpIcon text="Cron schedule for checking channels." anchor="channel-management" />
         </div>
         <p className="text-sm text-muted-foreground">
           How often to check subscribed channels for new uploads.
@@ -420,7 +420,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">PO Tokens</h3>
-          <HelpIcon side="bottom" text="Proof of Origin tokens prove to YouTube that requests come from a real browser. Generated automatically by the built-in server. When cookies are available, PO tokens are skipped and cookies are used instead." />
+          <HelpIcon text="Auto-generated tokens for YouTube auth. Cookies take priority when available." anchor="authentication" />
         </div>
         <p className="text-sm text-muted-foreground">
           PO tokens are generated automatically by the built-in server. When cookies are available, they take priority.
@@ -547,16 +547,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Globe className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Browser Cookie Sync</h3>
-          <HelpIcon side="bottom" text={
-            <span>
-              <strong>Setup:</strong><br/>
-              1. Install Tampermonkey browser extension<br/>
-              2. Click "Install Tampermonkey Script" below<br/>
-              3. Confirm the install in Tampermonkey<br/>
-              4. Visit youtube.com - cookies sync automatically<br/><br/>
-              The script is pre-configured with your server address.
-            </span>
-          } />
+          <HelpIcon text="Auto-sync cookies from your browser using Tampermonkey." anchor="authentication" />
         </div>
         <p className="text-sm text-muted-foreground">
           Automatically sync your browser cookies to ChannelHoarder using a Tampermonkey userscript.
@@ -592,17 +583,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">YouTube Data API Key (Optional)</h3>
-          <HelpIcon side="bottom" text={
-            <span>
-              <strong>How to get a free API key:</strong><br/>
-              1. Go to console.cloud.google.com<br/>
-              2. Create a new project<br/>
-              3. Enable "YouTube Data API v3"<br/>
-              4. Go to Credentials and create an API key<br/>
-              5. Paste it here<br/><br/>
-              The free tier gives 10,000 units/day, enough for most use.
-            </span>
-          } />
+          <HelpIcon text="Free API key from Google Cloud Console. 10,000 units/day." anchor="authentication" />
         </div>
         <p className="text-sm text-muted-foreground">
           Provides more reliable channel discovery, thumbnails, and video metadata. Falls back to yt-dlp if not set.
@@ -797,7 +778,7 @@ function AntiDetectTab() {
       <div className="rounded-lg border bg-card p-4 space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">Download Delays</h3>
-          <HelpIcon side="bottom" text="Adds a random wait between the min and max values before starting each download. Helps avoid YouTube detecting rapid automated downloads. Higher values are safer but slower." />
+          <HelpIcon text="Random delay between downloads to avoid rate limiting." anchor="anti-detection" />
         </div>
         <p className="text-sm text-muted-foreground">
           Add delays between downloads to avoid YouTube rate limiting.
@@ -881,7 +862,7 @@ function AntiDetectTab() {
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">Subtitles / Captions</h3>
-          <HelpIcon side="bottom" text="Downloads available subtitles and auto-generated captions (English) alongside each video. Subtitle files (.srt/.vtt) are saved next to the video file." />
+          <HelpIcon text="Downloads English subtitles and auto-generated captions alongside videos." anchor="episode-management" />
         </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
