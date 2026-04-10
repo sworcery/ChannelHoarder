@@ -112,6 +112,32 @@ class YouTubeAPIService:
             logger.warning("YouTube API key validation error: %s", e)
             return False, f"Connection error: {e}"
 
+    async def get_channel_thumbnail(self, channel_id: str) -> str | None:
+        """Fetch the channel avatar/thumbnail URL via the Data API."""
+        if not self.api_key:
+            return None
+
+        try:
+            params = {
+                "part": "snippet",
+                "id": channel_id,
+                "key": self.api_key,
+            }
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(f"{YOUTUBE_API_BASE}/channels", params=params)
+                resp.raise_for_status()
+                data = resp.json()
+
+            items = data.get("items", [])
+            if not items:
+                return None
+
+            thumbnails = items[0].get("snippet", {}).get("thumbnails", {})
+            return self._best_thumbnail(thumbnails)
+        except Exception as e:
+            logger.warning("Failed to fetch channel thumbnail for %s: %s", channel_id, e)
+            return None
+
     @staticmethod
     def _best_thumbnail(thumbnails: dict) -> str | None:
         """Get the best quality thumbnail URL."""

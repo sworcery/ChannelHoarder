@@ -61,6 +61,27 @@ async def lifespan(app: FastAPI):
         await db.execute(delete(SystemHealthLog).where(SystemHealthLog.checked_at < cutoff))
         await db.commit()
 
+    # Backfill missing channel thumbnails via YouTube Data API
+    if settings.has_youtube_api_key:
+        from app.models import Channel as _Ch
+        async with async_session() as db:
+            result = await db.execute(
+                select(_Ch).where(_Ch.thumbnail_url.is_(None), _Ch.platform == "youtube")
+            )
+            channels_missing_thumbs = result.scalars().all()
+            if channels_missing_thumbs:
+                from app.services.youtube_api_service import YouTubeAPIService
+                api_svc = YouTubeAPIService()
+                for ch in channels_missing_thumbs:
+                    try:
+                        thumb = await api_svc.get_channel_thumbnail(ch.channel_id)
+                        if thumb:
+                            ch.thumbnail_url = thumb
+                            logger.info("Backfilled thumbnail for %s", ch.channel_name)
+                    except Exception:
+                        pass
+                await db.commit()
+
     # Detect PO token server PID for watchdog
     if settings.POT_SERVER_ENABLED:
         import subprocess as _sp
