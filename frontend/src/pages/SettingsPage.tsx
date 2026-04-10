@@ -442,10 +442,10 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <FileText className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Cookie Authentication</h3>
+          <HelpIcon text="Upload cookies from your browser for YouTube auth." anchor="cookie-authentication-optional" />
         </div>
         <p className="text-sm text-muted-foreground">
           Export cookies from your browser using a browser extension (e.g. "Get cookies.txt LOCALLY") and upload the file here.
-          Cookies allow yt-dlp to access age-restricted content and avoid bot detection.
         </p>
         <div className="flex items-center gap-2">
           {authLoading ? (
@@ -654,7 +654,10 @@ function NamingTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border bg-card p-4 space-y-4">
-        <h3 className="font-semibold">Default Naming Template</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Default Naming Template</h3>
+          <HelpIcon text="Controls how downloaded files are named and organized." anchor="file-organization" />
+        </div>
         <p className="text-sm text-muted-foreground">
           Available variables: {"{channel_name}"}, {"{season}"}, {"{episode}"}, {"{title}"}, {"{upload_date}"}, {"{video_id}"}
         </p>
@@ -709,7 +712,10 @@ function YtdlpTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border bg-card p-4 space-y-4">
-        <h3 className="font-semibold">yt-dlp</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">yt-dlp</h3>
+          <HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm">Current version: <span className="font-mono">{version?.version || "unknown"}</span></p>
@@ -983,9 +989,10 @@ function NotificationsTab() {
         <div className="flex items-center gap-2">
           <Send className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Telegram</h3>
+          <HelpIcon text="Get notified via Telegram bot." anchor="notifications" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Create a bot via @BotFather, then use the bot token and your chat ID to receive notifications.
+          Create a bot via @BotFather, then use the bot token and your chat ID.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -1024,9 +1031,10 @@ function NotificationsTab() {
         <div className="flex items-center gap-2">
           <Bell className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Pushover</h3>
+          <HelpIcon text="Push notifications to your phone." anchor="notifications" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Get push notifications on your phone. Create an app at pushover.net to get your tokens.
+          Create an app at pushover.net to get your tokens.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>

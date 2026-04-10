@@ -6,6 +6,7 @@ import { formatDateTime } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import { useDebounce } from "@/hooks/useDebounce"
 import {
   Plus,
@@ -210,7 +211,10 @@ export default function ChannelsPage() {
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-card rounded-lg p-6 w-full max-w-md mx-4 border shadow-lg">
-            <h2 className="text-lg font-semibold mb-4">Add Channel</h2>
+            <div className="flex items-center gap-2 mb-4">
+              <h2 className="text-lg font-semibold">Add Channel</h2>
+              <HelpIcon text="Add by URL, @handle, or playlist link." anchor="adding-channels" />
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Channel URL or @handle</label>
