@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { formatDate, formatDateTime, formatBytes, formatDuration } from "@/lib/utils"
 import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import {
   ArrowLeft,
   RefreshCw,
@@ -394,7 +395,7 @@ export default function ChannelDetailPage() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Download Settings</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="block text-xs text-muted-foreground mb-1">Quality</label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon side="bottom" text="'Best' downloads the highest quality available. Specific resolutions (1080p, 720p, 480p) limit the maximum quality. This setting applies to new downloads only - already downloaded videos keep their quality." /></label>
               <select
                 value={channel.quality}
                 onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
@@ -446,6 +447,7 @@ export default function ChannelDetailPage() {
                         className="rounded"
                       />
                       <span className="text-sm">Include shorts when downloading</span>
+                      <HelpIcon side="right" text="YouTube Shorts are videos 60 seconds or shorter. When disabled, shorts are detected during scan and skipped automatically." />
                     </label>
                     <p className="text-xs text-muted-foreground">
                       {channel.include_shorts

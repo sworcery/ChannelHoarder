@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { useToast } from "@/components/ui/toaster"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import {
   Upload,
   Key,
@@ -165,6 +166,7 @@ function GeneralTab() {
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Scan Schedule</h3>
+          <HelpIcon side="bottom" text="Sets how often ChannelHoarder checks your subscribed channels for new videos. Uses cron syntax for custom schedules (e.g. '0 */6 * * *' = every 6 hours). New videos found during scans are automatically queued for download." />
         </div>
         <p className="text-sm text-muted-foreground">
           How often to check subscribed channels for new uploads.
@@ -417,10 +419,11 @@ function AuthTab() {
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
           <Shield className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">PO Tokens (Primary)</h3>
+          <h3 className="font-semibold">PO Tokens</h3>
+          <HelpIcon side="bottom" text="Proof of Origin tokens prove to YouTube that requests come from a real browser. Generated automatically by the built-in server. When cookies are available, PO tokens are skipped and cookies are used instead." />
         </div>
         <p className="text-sm text-muted-foreground">
-          PO tokens are generated automatically by the built-in server. No configuration needed.
+          PO tokens are generated automatically by the built-in server. When cookies are available, they take priority.
         </p>
         <div className="flex items-center gap-2">
           {authLoading ? (
@@ -544,6 +547,16 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Globe className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Browser Cookie Sync</h3>
+          <HelpIcon side="bottom" text={
+            <span>
+              <strong>Setup:</strong><br/>
+              1. Install Tampermonkey browser extension<br/>
+              2. Click "Install Tampermonkey Script" below<br/>
+              3. Confirm the install in Tampermonkey<br/>
+              4. Visit youtube.com - cookies sync automatically<br/><br/>
+              The script is pre-configured with your server address.
+            </span>
+          } />
         </div>
         <p className="text-sm text-muted-foreground">
           Automatically sync your browser cookies to ChannelHoarder using a Tampermonkey userscript.
@@ -579,9 +592,20 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">YouTube Data API Key (Optional)</h3>
+          <HelpIcon side="bottom" text={
+            <span>
+              <strong>How to get a free API key:</strong><br/>
+              1. Go to console.cloud.google.com<br/>
+              2. Create a new project<br/>
+              3. Enable "YouTube Data API v3"<br/>
+              4. Go to Credentials and create an API key<br/>
+              5. Paste it here<br/><br/>
+              The free tier gives 10,000 units/day, enough for most use.
+            </span>
+          } />
         </div>
         <p className="text-sm text-muted-foreground">
-          Provides more reliable channel/video discovery. Free at Google Cloud Console. Falls back to yt-dlp if not set.
+          Provides more reliable channel discovery, thumbnails, and video metadata. Falls back to yt-dlp if not set.
         </p>
         <div className="flex items-center gap-2">
           {authLoading ? (
@@ -768,7 +792,10 @@ function AntiDetectTab() {
   return (
     <div className="space-y-6">
       <div className="rounded-lg border bg-card p-4 space-y-4">
-        <h3 className="font-semibold">Download Delays</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Download Delays</h3>
+          <HelpIcon side="bottom" text="Adds a random wait between the min and max values before starting each download. Helps avoid YouTube detecting rapid automated downloads. Higher values are safer but slower." />
+        </div>
         <p className="text-sm text-muted-foreground">
           Add delays between downloads to avoid YouTube rate limiting.
         </p>
