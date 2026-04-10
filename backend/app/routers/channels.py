@@ -537,6 +537,137 @@ async def delete_video(
     return {"message": f"Video '{video.title}' deleted", "files_removed": files_removed}
 
 
+@router.post("/{channel_id}/videos/{video_id}/redownload")
+async def redownload_video(
+    channel_id: int,
+    video_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete existing file and re-queue video for download."""
+    import os
+
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    # Delete existing file if present
+    if video.file_path:
+        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+            path = base + ext
+            if os.path.exists(path):
+                os.remove(path)
+
+    video.file_path = None
+    video.file_size = None
+    video.quality_downloaded = None
+    video.error_code = None
+    video.error_message = None
+    video.error_details = None
+    video.status = "queued"
+
+    # Add to queue if not already there
+    queue_check = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
+    if not queue_check.scalar_one_or_none():
+        db.add(DownloadQueue(video_id=video.id))
+
+    await db.commit()
+    return {"message": f"Re-queued '{video.title}' for download"}
+
+
+@router.delete("/{channel_id}/videos/{video_id}/file")
+async def delete_video_file(
+    channel_id: int,
+    video_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete file from disk but keep the video record as pending."""
+    import os
+
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    files_removed = False
+    if video.file_path:
+        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+            path = base + ext
+            if os.path.exists(path):
+                os.remove(path)
+                files_removed = True
+
+    video.file_path = None
+    video.file_size = None
+    video.quality_downloaded = None
+    video.status = "pending"
+    await db.commit()
+
+    return {"message": f"Deleted files for '{video.title}'", "files_removed": files_removed}
+
+
+@router.post("/{channel_id}/videos/{video_id}/rename")
+async def rename_video_file(
+    channel_id: int,
+    video_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename video file on disk based on current naming template."""
+    import os
+    import shutil
+    from app.services.naming_service import build_output_path
+
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if not video.file_path or not os.path.exists(video.file_path):
+        raise HTTPException(status_code=400, detail="No file on disk to rename")
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    new_path = build_output_path(
+        channel_name=channel.channel_name,
+        video_title=video.title,
+        video_id=video.video_id,
+        upload_date=video.upload_date,
+        season=video.season,
+        episode=video.episode,
+        naming_template=channel.naming_template,
+        base_dir=channel.download_dir,
+    ) + ".mp4"
+
+    old_path = video.file_path
+    if old_path == new_path:
+        return {"message": "File already has the correct name", "renamed": False}
+
+    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+    shutil.move(old_path, new_path)
+    video.file_path = new_path
+
+    # Move associated files
+    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+        old_extra = old_path.rsplit(".mp4", 1)[0] + ext
+        new_extra = new_path.rsplit(".mp4", 1)[0] + ext
+        if os.path.exists(old_extra):
+            shutil.move(old_extra, new_extra)
+
+    await db.commit()
+    return {"message": f"Renamed '{video.title}'", "renamed": True, "new_path": new_path}
+
+
 class MonitorRequest(BaseModel):
     monitored: bool
 
