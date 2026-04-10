@@ -80,6 +80,14 @@ export const api = {
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
     request<any>(`/channels/${channelId}/videos/${videoId}?delete_files=${deleteFiles}`, { method: "DELETE" }),
 
+  // File management
+  redownloadVideo: (channelId: number, videoId: number) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/redownload`, { method: "POST" }),
+  deleteVideoFile: (channelId: number, videoId: number) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/file`, { method: "DELETE" }),
+  renameVideoFile: (channelId: number, videoId: number) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/rename`, { method: "POST" }),
+
   // Monitoring
   toggleVideoMonitored: (channelId: number, videoId: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/videos/${videoId}/monitored`, { method: "PATCH", body: JSON.stringify({ monitored }) }),

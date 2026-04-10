@@ -6,6 +6,7 @@ import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
 import { StatusIcon } from "@/components/ui/StatusIcon"
+import { DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/DropdownMenu"
 import {
   ArrowLeft,
   RefreshCw,
@@ -29,6 +30,10 @@ import {
   ListOrdered,
   Bookmark,
   BookmarkX,
+  MoreVertical,
+  RefreshCcw,
+  FileX,
+  FileEdit,
   Tv,
 } from "lucide-react"
 import { useState, useCallback, useMemo } from "react"
@@ -826,27 +831,36 @@ export default function ChannelDetailPage() {
                             >
                               {video.monitored ? <Bookmark className="h-3.5 w-3.5 fill-current" /> : <Bookmark className="h-3.5 w-3.5" />}
                             </button>
-                            {video.status === "failed" && (
-                              <button
-                                onClick={() => retryMutation.mutate(video.id)}
-                                className="p-1 hover:bg-accent rounded"
-                                title="Retry"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                            {video.status !== "downloading" && (
-                              <button
-                                onClick={() => deleteVideoMutation.mutate({
-                                  videoId: video.id,
-                                  deleteFiles: !!video.file_path,
-                                })}
-                                className="p-1 hover:bg-red-500/10 rounded text-muted-foreground hover:text-red-500"
-                                title={video.file_path ? "Delete video and files" : "Skip video"}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
+                            <DropdownMenu trigger={<MoreVertical className="h-3.5 w-3.5" />}>
+                              {video.status === "failed" && (
+                                <DropdownItem onClick={() => retryMutation.mutate(video.id)}>
+                                  <RotateCcw className="h-3.5 w-3.5" /> Retry
+                                </DropdownItem>
+                              )}
+                              {(video.status === "completed" || video.status === "failed") && (
+                                <DropdownItem onClick={() => api.redownloadVideo(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })}>
+                                  <RefreshCcw className="h-3.5 w-3.5" /> Re-download
+                                </DropdownItem>
+                              )}
+                              {video.status === "completed" && video.file_path && (
+                                <>
+                                  <DropdownItem onClick={() => api.renameVideoFile(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })}>
+                                    <FileEdit className="h-3.5 w-3.5" /> Rename File
+                                  </DropdownItem>
+                                  <DropdownItem onClick={() => api.deleteVideoFile(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })} variant="danger">
+                                    <FileX className="h-3.5 w-3.5" /> Delete File
+                                  </DropdownItem>
+                                </>
+                              )}
+                              {video.status !== "downloading" && (
+                                <>
+                                  <DropdownSeparator />
+                                  <DropdownItem onClick={() => deleteVideoMutation.mutate({ videoId: video.id, deleteFiles: !!video.file_path })} variant="danger">
+                                    <Trash2 className="h-3.5 w-3.5" /> Skip Episode
+                                  </DropdownItem>
+                                </>
+                              )}
+                            </DropdownMenu>
                           </div>
                         </td>
                       </tr>
