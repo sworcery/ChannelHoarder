@@ -429,6 +429,28 @@ export default function ChannelDetailPage() {
               </select>
             </div>
             <div>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon side="bottom" text="Minimum acceptable quality. Videos downloaded below this quality will be flagged for upgrade. Use 'Search for Upgrades' to re-queue them." /></label>
+              <div className="flex gap-1">
+                <select
+                  value={channel.quality_cutoff || ""}
+                  onChange={(e) => updateMutation.mutate({ quality_cutoff: e.target.value || null })}
+                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                >
+                  <option value="">None (disabled)</option>
+                  <option value="480p">480p</option>
+                  <option value="720p">720p</option>
+                  <option value="1080p">1080p</option>
+                </select>
+                <button
+                  onClick={() => api.upgradeQuality(channelId).then((r) => { invalidateVideos(); toast(r.message) })}
+                  className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
+                  title="Re-queue completed videos below the quality cutoff"
+                >
+                  Search Upgrades
+                </button>
+              </div>
+            </div>
+            <div>
               <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
               <div className="flex gap-1">
                 <input
@@ -785,7 +807,7 @@ export default function ChannelDetailPage() {
                               status={video.status}
                               monitored={video.monitored}
                               qualityDownloaded={video.quality_downloaded}
-                              targetQuality={channel.quality}
+                              targetQuality={channel.quality_cutoff || channel.quality}
                               errorCode={video.error_code}
                               errorMessage={video.error_message}
                             />
