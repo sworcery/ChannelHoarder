@@ -148,6 +148,8 @@ class QueueEntryResponse(UTCBaseModel):
     progress_percent: float
     speed_bps: Optional[int]
     eta_seconds: Optional[int]
+    target_quality: Optional[str]
+    estimated_size: Optional[int]
     video: VideoSummary
 
 

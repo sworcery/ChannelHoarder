@@ -452,6 +452,16 @@ export default function DownloadsPage() {
       {/* Queue Tab */}
       {tab === "queue" && (
         <div className="space-y-3">
+          {/* Queue summary */}
+          {queueTotal > 0 && (
+            <div className="flex items-center gap-4 text-sm text-muted-foreground px-1">
+              <span>{queueTotal} in queue</span>
+              {queue && (
+                <span>{queue.filter((e: any) => e.started_at).length} downloading</span>
+              )}
+            </div>
+          )}
+
           {/* Search */}
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -558,6 +568,12 @@ export default function DownloadsPage() {
                             <span>Queued {timeSince(entry.queued_at) || formatDateTime(entry.queued_at)}</span>
                             {entry.started_at && (
                               <span>Started {timeSince(entry.started_at)}</span>
+                            )}
+                            {entry.target_quality && (
+                              <span className="inline-flex px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-medium">{entry.target_quality}</span>
+                            )}
+                            {entry.estimated_size && (
+                              <span>{formatBytes(entry.estimated_size)}</span>
                             )}
                             {entry.priority !== 0 && (
                               <span className="text-primary">Priority: {entry.priority}</span>

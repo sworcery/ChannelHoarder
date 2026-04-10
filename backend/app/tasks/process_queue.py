@@ -106,6 +106,7 @@ async def process_download_queue():
         # Mark as started NOW (in this session) so the next scheduler tick
         # sees it as active and doesn't double-pick it
         queue_entry.started_at = datetime.now(timezone.utc)
+        queue_entry.target_quality = channel.quality
         video.status = "downloading"
         await db.commit()
 
