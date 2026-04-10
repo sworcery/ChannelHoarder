@@ -434,7 +434,7 @@ export default function ChannelDetailPage() {
               </select>
             </div>
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon text="Minimum quality before flagging for upgrade." anchor="channel-management" /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon text="Minimum quality before flagging for upgrade." anchor="episode-management" /></label>
               <div className="flex gap-1">
                 <select
                   value={channel.quality_cutoff || ""}
@@ -456,7 +456,7 @@ export default function ChannelDetailPage() {
               </div>
             </div>
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon text="Skip videos shorter than this (seconds)." anchor="channel-management" /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon text="Skip videos shorter than this (seconds)." anchor="downloads" /></label>
               <input
                 type="number"
                 value={channel.min_video_duration || ""}

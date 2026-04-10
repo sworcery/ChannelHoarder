@@ -166,7 +166,7 @@ function GeneralTab() {
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Scan Schedule</h3>
-          <HelpIcon text="Cron schedule for checking channels." anchor="channel-management" />
+          <HelpIcon text="Cron schedule for checking channels." anchor="automatic-scanning" />
         </div>
         <p className="text-sm text-muted-foreground">
           How often to check subscribed channels for new uploads.
@@ -547,7 +547,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Globe className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Browser Cookie Sync</h3>
-          <HelpIcon text="Auto-sync cookies from your browser using Tampermonkey." anchor="authentication" />
+          <HelpIcon text="Auto-sync cookies from your browser using Tampermonkey." anchor="cookie-authentication-optional" />
         </div>
         <p className="text-sm text-muted-foreground">
           Automatically sync your browser cookies to ChannelHoarder using a Tampermonkey userscript.
@@ -583,7 +583,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">YouTube Data API Key (Optional)</h3>
-          <HelpIcon text="Free API key from Google Cloud Console. 10,000 units/day." anchor="authentication" />
+          <HelpIcon text="Free API key from Google Cloud Console. 10,000 units/day." anchor="youtube-data-api-key-optional" />
         </div>
         <p className="text-sm text-muted-foreground">
           Provides more reliable channel discovery, thumbnails, and video metadata. Falls back to yt-dlp if not set.
