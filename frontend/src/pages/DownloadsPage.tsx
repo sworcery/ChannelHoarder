@@ -8,6 +8,7 @@ import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/components/ui/toaster"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { HelpIcon } from "@/components/ui/HelpIcon"
+import { StatusIcon } from "@/components/ui/StatusIcon"
 import {
   RotateCcw,
   Loader2,
@@ -758,8 +759,14 @@ export default function DownloadsPage() {
                             {/* Title row */}
                             <div className="flex items-center gap-2">
                               <p className="font-medium text-sm truncate flex-1">{video.title}</p>
-                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium shrink-0 ${STATUS_COLORS[video.status] || ""}`}>
-                                {video.status}
+                              <span className="inline-flex items-center gap-1 shrink-0">
+                                <StatusIcon
+                                  status={video.status}
+                                  monitored={true}
+                                  errorCode={video.error_code}
+                                  errorMessage={video.error_message}
+                                />
+                                <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
                               </span>
                             </div>
 

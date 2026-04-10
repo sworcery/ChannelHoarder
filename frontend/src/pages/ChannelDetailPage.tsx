@@ -5,6 +5,7 @@ import { formatDate, formatDateTime, formatBytes, formatDuration } from "@/lib/u
 import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
+import { StatusIcon } from "@/components/ui/StatusIcon"
 import {
   ArrowLeft,
   RefreshCw,
@@ -716,19 +717,17 @@ export default function ChannelDetailPage() {
                           {video.duration ? formatDuration(video.duration) : "-"}
                         </td>
                         <td className="px-3 py-2">
-                          <div>
-                            <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[video.status] || ""}`}>
-                              {video.status}
-                            </span>
-                            {video.error_code && (
-                              <span className="ml-1 text-xs text-red-500">{video.error_code}</span>
-                            )}
+                          <div className="flex items-center gap-2">
+                            <StatusIcon
+                              status={video.status}
+                              monitored={video.monitored}
+                              qualityDownloaded={video.quality_downloaded}
+                              targetQuality={channel.quality}
+                              errorCode={video.error_code}
+                              errorMessage={video.error_message}
+                            />
+                            <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
                           </div>
-                          {video.status === "failed" && video.error_message && (
-                            <p className="text-xs text-red-400 mt-1 max-w-xs truncate" title={video.error_message}>
-                              {video.error_message}
-                            </p>
-                          )}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {video.file_size ? formatBytes(video.file_size) : "-"}
