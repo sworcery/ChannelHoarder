@@ -74,15 +74,17 @@ class ChannelService:
                 banner_url = thumb.get("url")
                 break
 
-        # Get thumbnail - try yt-dlp first, fall back to YouTube Data API
-        thumbnail_url = info.get("thumbnail")
-        if not thumbnail_url and platform == "youtube" and settings.has_youtube_api_key:
+        # Get thumbnail - prefer YouTube Data API (more reliable), fall back to yt-dlp
+        thumbnail_url = None
+        if platform == "youtube" and settings.has_youtube_api_key:
             try:
                 from app.services.youtube_api_service import YouTubeAPIService
                 api_svc = YouTubeAPIService()
                 thumbnail_url = await api_svc.get_channel_thumbnail(channel_id)
             except Exception as e:
                 logger.warning("Could not fetch thumbnail via API: %s", e)
+        if not thumbnail_url:
+            thumbnail_url = info.get("thumbnail")
 
         channel = Channel(
             channel_id=channel_id,
@@ -121,13 +123,8 @@ class ChannelService:
 
     async def refresh_channel_metadata(self, channel: Channel) -> Channel:
         """Re-fetch thumbnail, banner, and description from the platform."""
-        info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
-
-        if info:
-            channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
-
-        # Fall back to YouTube Data API for thumbnail if yt-dlp didn't return one
-        if not channel.thumbnail_url and channel.platform == "youtube" and settings.has_youtube_api_key:
+        # Prefer YouTube Data API for thumbnail (more reliable than yt-dlp tab extraction)
+        if channel.platform == "youtube" and settings.has_youtube_api_key:
             try:
                 from app.services.youtube_api_service import YouTubeAPIService
                 api_svc = YouTubeAPIService()
@@ -137,8 +134,12 @@ class ChannelService:
             except Exception as e:
                 logger.warning("Could not fetch thumbnail via API: %s", e)
 
-        if not info:
-            raise ValueError("Could not fetch channel metadata")
+        # Also try yt-dlp for banner and description
+        info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
+
+        if info:
+            if not channel.thumbnail_url:
+                channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
         channel.description = info.get("description") or channel.description
 
         # Extract banner URL from thumbnails list (widest image)
