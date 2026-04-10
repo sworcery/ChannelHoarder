@@ -421,7 +421,7 @@ export default function ChannelDetailPage() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Download Settings</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon side="bottom" text="'Best' downloads the highest quality available. Specific resolutions (1080p, 720p, 480p) limit the maximum quality. This setting applies to new downloads only - already downloaded videos keep their quality." /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon text="Target quality for new downloads." anchor="channel-management" /></label>
               <select
                 value={channel.quality}
                 onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
@@ -434,7 +434,7 @@ export default function ChannelDetailPage() {
               </select>
             </div>
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon side="bottom" text="Minimum acceptable quality. Videos downloaded below this quality will be flagged for upgrade. Use 'Search for Upgrades' to re-queue them." /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon text="Minimum quality before flagging for upgrade." anchor="channel-management" /></label>
               <div className="flex gap-1">
                 <select
                   value={channel.quality_cutoff || ""}
@@ -456,7 +456,7 @@ export default function ChannelDetailPage() {
               </div>
             </div>
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon side="bottom" text="Skip videos shorter than this duration (in seconds). Set to 0 or leave empty to disable. Useful for filtering trailers, teasers, and shorts posted as regular videos." /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon text="Skip videos shorter than this (seconds)." anchor="channel-management" /></label>
               <input
                 type="number"
                 value={channel.min_video_duration || ""}
@@ -506,7 +506,7 @@ export default function ChannelDetailPage() {
                         className="rounded"
                       />
                       <span className="text-sm">Include shorts when downloading</span>
-                      <HelpIcon side="right" text="YouTube Shorts are videos 60 seconds or shorter. When disabled, shorts are detected during scan and skipped automatically." />
+                      <HelpIcon text="Videos under 60 seconds." anchor="episode-management" />
                     </label>
                     <p className="text-xs text-muted-foreground">
                       {channel.include_shorts

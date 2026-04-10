@@ -381,7 +381,7 @@ export default function DownloadsPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold">Downloads</h1>
-          <HelpIcon side="bottom" text="Pause stops new downloads from starting but lets any in-progress download finish. Clear removes all queued items that haven't started yet." />
+          <HelpIcon text="Pause stops new downloads; in-progress downloads finish." anchor="downloads" />
         </div>
         <div className="flex items-center gap-2">
           {isPaused ? (
