@@ -343,7 +343,7 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
                     shutil.move(old_path, new_path)
                     video.file_path = new_path
 
-                    for ext in [".nfo", "-thumb.jpg", ".jpg"]:
+                    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
                         old_extra = old_path.rsplit(".mp4", 1)[0] + ext
                         new_extra = new_path.rsplit(".mp4", 1)[0] + ext
                         if os.path.exists(old_extra):
