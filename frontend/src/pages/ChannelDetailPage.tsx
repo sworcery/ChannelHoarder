@@ -20,6 +20,7 @@ import {
   CheckSquare,
   Square,
   Search,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   SkipForward,
@@ -30,7 +31,7 @@ import {
   BookmarkX,
   Tv,
 } from "lucide-react"
-import { useState, useCallback } from "react"
+import { useState, useCallback, useMemo } from "react"
 
 const PAGE_SIZE = 50
 
@@ -58,6 +59,8 @@ export default function ChannelDetailPage() {
   const [renumberPreview, setRenumberPreview] = useState<any | null>(null)
   const [renumberLoading, setRenumberLoading] = useState(false)
   const [renumberApplying, setRenumberApplying] = useState(false)
+
+  const [collapsedSeasons, setCollapsedSeasons] = useState<Set<number>>(new Set())
 
   // Video multi-select
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
@@ -693,13 +696,73 @@ export default function ChannelDetailPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {videos.map((video: any, idx: number) => {
-                    const isSelected = selectedVideoIds.has(video.id)
-                    return (
+                  {(() => {
+                    // Group videos by season
+                    const seasonGroups: Record<number, any[]> = {}
+                    videos.forEach((v: any) => {
+                      if (!seasonGroups[v.season]) seasonGroups[v.season] = []
+                      seasonGroups[v.season].push(v)
+                    })
+                    const seasons = Object.keys(seasonGroups).map(Number).sort((a, b) => b - a)
+
+                    return seasons.flatMap((season) => {
+                      const seasonVideos = seasonGroups[season]
+                      const isCollapsed = collapsedSeasons.has(season)
+                      const downloaded = seasonVideos.filter((v: any) => v.status === "completed").length
+                      const monitored = seasonVideos.filter((v: any) => v.monitored).length
+
+                      const rows: React.ReactNode[] = []
+
+                      // Season header row
+                      rows.push(
+                        <tr key={`season-${season}`} className="bg-muted/30">
+                          <td colSpan={8} className="px-3 py-2">
+                            <div className="flex items-center justify-between">
+                              <button
+                                onClick={() => setCollapsedSeasons(prev => {
+                                  const next = new Set(prev)
+                                  next.has(season) ? next.delete(season) : next.add(season)
+                                  return next
+                                })}
+                                className="flex items-center gap-2 hover:text-foreground text-muted-foreground"
+                              >
+                                <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                                <span className="font-semibold text-sm">Season {season}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {downloaded}/{seasonVideos.length} downloaded, {monitored} monitored
+                                </span>
+                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => { api.monitorSeason(channelId, season, true).then(() => invalidateVideos()) }}
+                                  className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
+                                  title="Monitor all in this season"
+                                >
+                                  Monitor
+                                </button>
+                                <button
+                                  onClick={() => { api.downloadMissingSeason(channelId, season).then((r) => { invalidateVideos(); toast(r.message) }) }}
+                                  className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
+                                  title="Download all monitored missing videos in this season"
+                                >
+                                  Download Missing
+                                </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+
+                      // Video rows (if not collapsed)
+                      if (!isCollapsed) {
+                        seasonVideos.forEach((video: any) => {
+                          const globalIdx = videos.indexOf(video)
+                          const isSelected = selectedVideoIds.has(video.id)
+                          rows.push(
                       <tr
                         key={video.id}
                         className={`hover:bg-muted/30 cursor-pointer ${isSelected ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
-                        onClick={(e) => toggleVideoSelection(video.id, idx, e.shiftKey)}
+                        onClick={(e) => toggleVideoSelection(video.id, globalIdx, e.shiftKey)}
                       >
                         <td className="px-3 py-2">
                           {isSelected ? (
@@ -765,8 +828,13 @@ export default function ChannelDetailPage() {
                           </div>
                         </td>
                       </tr>
-                    )
-                  })}
+                          )
+                        })
+                      }
+
+                      return rows
+                    })
+                  })()}
                 </tbody>
               </table>
             </div>

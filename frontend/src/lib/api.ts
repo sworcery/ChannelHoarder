@@ -88,6 +88,12 @@ export const api = {
   monitorAllVideos: (channelId: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
+  // Season management
+  monitorSeason: (channelId: number, season: number, monitored: boolean) =>
+    request<any>(`/channels/${channelId}/seasons/${season}/monitor`, { method: "POST", body: JSON.stringify({ monitored }) }),
+  downloadMissingSeason: (channelId: number, season: number) =>
+    request<any>(`/channels/${channelId}/seasons/${season}/download-missing`, { method: "POST" }),
+
   // Episode renumbering
   renumberPreview: (channelId: number) =>
     request<any>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),
