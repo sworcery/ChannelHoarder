@@ -158,13 +158,14 @@ class ChannelService:
 
     async def scan_channel(self, channel: Channel) -> int:
         """Scan a channel for new videos. Returns count of newly discovered videos."""
-        from app.utils.platform_utils import supports_api, supports_rss
+        from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
         logger.info("Scanning channel: %s", channel.channel_name)
 
         platform = getattr(channel, "platform", "youtube")
+        is_playlist = is_playlist_url(channel.channel_url)
 
-        # Try YouTube Data API first (only for platforms that support it), fall back to yt-dlp
-        if self.yt_api and supports_api(platform):
+        # Try YouTube Data API first (only for channels that support it, not playlists), fall back to yt-dlp
+        if self.yt_api and supports_api(platform) and not is_playlist:
             try:
                 video_list = await self.yt_api.get_channel_videos(channel.channel_id)
             except Exception as e:
@@ -173,6 +174,7 @@ class ChannelService:
                     self.ytdlp.get_channel_video_list, channel.channel_url, platform
                 )
         else:
+            # Playlists and non-API platforms always use yt-dlp
             video_list = await asyncio.to_thread(
                 self.ytdlp.get_channel_video_list, channel.channel_url, platform
             )
