@@ -59,6 +59,8 @@ export interface QueueEntry {
   progress_percent: number
   speed_bps: number | null
   eta_seconds: number | null
+  target_quality: string | null
+  estimated_size: number | null
   video: Video
 }
 

@@ -110,6 +110,8 @@ class DownloadQueue(Base):
     progress_percent: Mapped[float] = mapped_column(Float, default=0.0)
     speed_bps: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     eta_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    target_quality: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    estimated_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
 
     video: Mapped["Video"] = relationship("Video", back_populates="queue_entry")
 

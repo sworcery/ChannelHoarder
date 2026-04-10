@@ -78,5 +78,17 @@ async def init_database():
                 text("ALTER TABLE videos ADD COLUMN monitored BOOLEAN DEFAULT 1 NOT NULL")
             )
 
+        # Add target_quality and estimated_size to download_queue
+        result3 = await conn.execute(text("PRAGMA table_info(download_queue)"))
+        queue_columns = {row[1] for row in result3.fetchall()}
+        if "target_quality" not in queue_columns:
+            await conn.execute(
+                text("ALTER TABLE download_queue ADD COLUMN target_quality VARCHAR(10)")
+            )
+        if "estimated_size" not in queue_columns:
+            await conn.execute(
+                text("ALTER TABLE download_queue ADD COLUMN estimated_size BIGINT")
+            )
+
 
 # Note: get_db() dependency is defined in deps.py  - do not duplicate here
