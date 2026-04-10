@@ -32,7 +32,7 @@ export function Tooltip({ content, side = "top", children }: TooltipProps) {
       {children}
       {visible && (
         <span
-          className={`absolute z-50 px-2.5 py-1.5 text-xs leading-relaxed rounded-md border bg-popover text-popover-foreground shadow-md max-w-xs whitespace-normal pointer-events-none ${positionClasses[side]}`}
+          className={`absolute z-50 px-3 py-2 text-xs leading-relaxed rounded-md border bg-popover text-popover-foreground shadow-md min-w-[200px] max-w-md whitespace-normal pointer-events-none ${positionClasses[side]}`}
         >
           {content}
         </span>

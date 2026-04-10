@@ -69,6 +69,7 @@ class Video(Base):
     episode: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     is_short: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    monitored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     file_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     quality_downloaded: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)

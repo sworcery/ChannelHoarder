@@ -184,12 +184,15 @@ async def list_channel_videos(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=500),
     status: Optional[str] = None,
+    monitored: Optional[bool] = None,
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Video).where(Video.channel_id == channel_id).order_by(Video.season.desc(), Video.episode.desc())
     if status:
         query = query.where(Video.status == status)
+    if monitored is not None:
+        query = query.where(Video.monitored == monitored)
     if search:
         query = query.where(Video.title.ilike(f"%{escape_like(search)}%"))
 
@@ -382,12 +385,13 @@ async def queue_all_videos(channel_id: int, db: AsyncSession = Depends(get_db)):
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Find all pending videos not already in queue
+    # Find all monitored pending videos not already in queue
     subquery = select(DownloadQueue.video_id)
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.status.in_(["pending", "failed"]))
+        .where(Video.monitored == True)
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
@@ -531,6 +535,79 @@ async def delete_video(
     await db.commit()
 
     return {"message": f"Video '{video.title}' deleted", "files_removed": files_removed}
+
+
+class MonitorRequest(BaseModel):
+    monitored: bool
+
+
+class BulkMonitorRequest(BaseModel):
+    video_ids: list[int] = Field(..., min_length=1, max_length=1000)
+    monitored: bool
+
+
+@router.patch("/{channel_id}/videos/{video_id}/monitored")
+async def toggle_video_monitored(
+    channel_id: int,
+    video_id: int,
+    body: MonitorRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle monitored state for a single video."""
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video.monitored = body.monitored
+    await db.commit()
+    return {"message": f"{'Monitoring' if body.monitored else 'Unmonitoring'} {video.title}", "monitored": body.monitored}
+
+
+@router.post("/{channel_id}/videos/bulk-monitor")
+async def bulk_monitor_videos(
+    channel_id: int,
+    body: BulkMonitorRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set monitored state for multiple videos."""
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.id.in_(body.video_ids))
+    )
+    videos = result.scalars().all()
+    count = 0
+    for video in videos:
+        video.monitored = body.monitored
+        count += 1
+    await db.commit()
+    return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
+
+
+@router.post("/{channel_id}/monitor-all")
+async def monitor_all_videos(
+    channel_id: int,
+    body: MonitorRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set monitored state for all videos in a channel."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    result = await db.execute(
+        select(Video).where(Video.channel_id == channel_id)
+    )
+    videos = result.scalars().all()
+    count = 0
+    for video in videos:
+        video.monitored = body.monitored
+        count += 1
+    await db.commit()
+    return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
 
 
 @router.post("/{channel_id}/import/scan")
