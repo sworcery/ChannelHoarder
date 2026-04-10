@@ -386,9 +386,23 @@ class DownloadService:
                 channel.health_status = "warning"
 
             # Flag cookies as expired and auto-pause queue
+            # But only if cookies weren't recently uploaded (avoids loop where
+            # an in-flight download with old cookies fails and invalidates fresh ones)
             if code == ErrorCode.AUTH_EXPIRED:
-                from app.utils.cookie_utils import flag_cookies_expired
-                await flag_cookies_expired(db)
+                import os
+                cookie_age_seconds = 0
+                try:
+                    if settings.cookies_path.exists():
+                        cookie_age_seconds = (datetime.now(timezone.utc).timestamp()
+                                              - os.path.getmtime(settings.cookies_path))
+                except Exception:
+                    pass
+
+                if cookie_age_seconds > 120:  # Only invalidate if cookies are older than 2 minutes
+                    from app.utils.cookie_utils import flag_cookies_expired
+                    await flag_cookies_expired(db)
+                else:
+                    logger.info("Skipping cookie invalidation - cookies were uploaded %ds ago", int(cookie_age_seconds))
 
             await db.commit()
 

@@ -150,6 +150,9 @@ def classify_error(error_str: str) -> ErrorCode:
     """Classify an error string into an ErrorCode."""
     error_lower = error_str.lower()
 
+    if "live event" in error_lower or "premieres in" in error_lower or "will begin in" in error_lower:
+        return ErrorCode.VIDEO_UNAVAILABLE
+
     if "sign in" in error_lower or "confirm you're not a bot" in error_lower or "login required" in error_lower:
         return ErrorCode.AUTH_EXPIRED
 
