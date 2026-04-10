@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/utils"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import {
   Stethoscope,
   ClipboardCopy,
@@ -80,7 +81,10 @@ export default function DiagnosticsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Diagnostics</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold">Diagnostics</h1>
+          <HelpIcon text="System health, error history, and troubleshooting." anchor="troubleshooting" />
+        </div>
         {tab === "overview" && diagnostics && (
           <button
             onClick={copyReport}

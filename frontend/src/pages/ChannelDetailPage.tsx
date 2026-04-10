@@ -1030,7 +1030,10 @@ export default function ChannelDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setImportOpen(false)}>
           <div className="bg-card border rounded-lg shadow-lg w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Import Existing Videos</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-semibold">Import Existing Videos</h3>
+                <HelpIcon text="Scan a folder and match files by title." anchor="importing-existing-videos" />
+              </div>
               <button onClick={() => setImportOpen(false)} className="p-1 hover:bg-accent rounded">
                 <X className="h-4 w-4" />
               </button>
