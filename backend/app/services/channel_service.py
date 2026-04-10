@@ -181,15 +181,14 @@ class ChannelService:
         )
         season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
 
-        # Second pass: enrich entries with upload dates and add to DB
-        new_count = 0
+        # Second pass: resolve upload dates for all new entries
+        enriched_entries = []
         consecutive_metadata_failures = 0
         max_consecutive_failures = 3
         skip_metadata_fetch = False
 
         for entry in new_entries:
             vid_id = entry.get("id") or entry.get("video_id", "")
-            # Prefer release_date (public release) over upload_date (when uploaded, may differ)
             upload_date = (
                 self._parse_upload_date(entry.get("release_date"))
                 or self._parse_upload_date(entry.get("upload_date"))
@@ -199,11 +198,9 @@ class ChannelService:
             duration = entry.get("duration")
             thumbnail = entry.get("thumbnail")
 
-            # Try RSS feed date if flat extraction didn't include one
             if not upload_date and vid_id in rss_dates:
                 upload_date = self._parse_upload_date(rss_dates[vid_id])
 
-            # Last resort: per-video yt-dlp fetch (may get bot-detected)
             if not upload_date and not skip_metadata_fetch:
                 logger.info("Fetching metadata for %s to get upload date", vid_id)
                 full_info = await asyncio.to_thread(self.ytdlp.get_video_info, vid_id, platform)
@@ -237,12 +234,30 @@ class ChannelService:
                 upload_date = date_cls.today()
                 logger.warning("Could not determine upload date for %s, defaulting to today", vid_id)
 
+            enriched_entries.append({
+                "vid_id": vid_id, "title": title, "description": description,
+                "upload_date": upload_date, "duration": duration, "thumbnail": thumbnail,
+            })
+
+        # Sort by upload date (oldest first) so episode numbers are chronological
+        enriched_entries.sort(key=lambda e: e["upload_date"])
+
+        # Third pass: assign episode numbers and insert into DB
+        new_count = 0
+        for entry in enriched_entries:
+            vid_id = entry["vid_id"]
+            upload_date = entry["upload_date"]
             season = upload_date.year
 
             # Calculate episode number from pre-fetched counts, increment locally
             season_episode_counts.setdefault(season, 0)
             season_episode_counts[season] += 1
             episode = season_episode_counts[season]
+
+            title = entry["title"]
+            description = entry["description"]
+            duration = entry["duration"]
+            thumbnail = entry["thumbnail"]
 
             video = Video(
                 video_id=vid_id,
@@ -263,9 +278,6 @@ class ChannelService:
             # Detect YouTube Shorts (duration <= 60s)
             is_short = False
             if duration and duration <= 60:
-                is_short = True
-            # Also check if yt-dlp flagged it as a short
-            if entry.get("url", "").startswith("https://www.youtube.com/shorts/"):
                 is_short = True
             video.is_short = is_short
 
