@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -20,6 +21,9 @@ from app.services.ytdlp_service import YtdlpService
 from app.utils.file_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
+
+# Track channels currently being scanned to prevent concurrent scan races
+_scanning_channels: set[int] = set()
 
 
 class ChannelService:
@@ -158,6 +162,20 @@ class ChannelService:
 
     async def scan_channel(self, channel: Channel) -> int:
         """Scan a channel for new videos. Returns count of newly discovered videos."""
+        from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
+
+        # Prevent concurrent scans on the same channel
+        if channel.id in _scanning_channels:
+            logger.info("Skipping scan for %s - already in progress", channel.channel_name)
+            return 0
+        _scanning_channels.add(channel.id)
+        try:
+            return await self._scan_channel_inner(channel)
+        finally:
+            _scanning_channels.discard(channel.id)
+
+    async def _scan_channel_inner(self, channel: Channel) -> int:
+        """Internal scan implementation."""
         from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
         logger.info("Scanning channel: %s", channel.channel_name)
 
@@ -306,8 +324,29 @@ class ChannelService:
                 status="pending",
             )
 
+            # Re-check existence right before insert to handle concurrent scans
+            existing_check = await self.db.execute(
+                select(Video.id).where(Video.video_id == vid_id).limit(1)
+            )
+            if existing_check.scalar_one_or_none() is not None:
+                logger.debug("Skipping video %s (inserted by concurrent scan)", vid_id)
+                continue
+
             self.db.add(video)
-            await self.db.flush()
+            try:
+                await self.db.flush()
+            except IntegrityError:
+                # Narrow race window: concurrent insert between our check and flush
+                await self.db.rollback()
+                logger.debug("Skipping duplicate video %s after IntegrityError", vid_id)
+                # Re-fetch season counts since rollback cleared pending state
+                season_counts_result = await self.db.execute(
+                    select(Video.season, func.count(Video.id))
+                    .where(Video.channel_id == channel.id)
+                    .group_by(Video.season)
+                )
+                season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
+                continue
 
             # Detect YouTube Shorts (duration <= channel threshold or 30s default)
             shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30

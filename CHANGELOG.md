@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.14] - 2026-04-11
+
+### Fixed
+- **Concurrent scan race condition** - When a manual scan and scheduled scan run at the same time on the same channel, the second scan would crash with an IntegrityError trying to insert duplicate videos. Now uses a scan lock to prevent concurrent scans and gracefully handles any remaining duplicate insertions.
+
 ## [1.7.13] - 2026-04-11
 
 ### Added
