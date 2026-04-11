@@ -851,10 +851,28 @@ async def move_channel_files(
     new_dir = body.new_download_dir
     safe_name = sanitize_filename(channel.channel_name)
 
+    # Try to find the actual channel folder on disk
+    # First try sanitized name, then look for any folder matching the channel
     old_channel_dir = os.path.join(old_dir, safe_name)
-    new_channel_dir = os.path.join(new_dir, safe_name)
+    if not os.path.isdir(old_channel_dir):
+        # Try the raw channel name
+        old_channel_dir = os.path.join(old_dir, channel.channel_name)
+    if not os.path.isdir(old_channel_dir):
+        # Try to find from video file paths
+        vid_result = await db.execute(
+            select(Video.file_path).where(Video.channel_id == channel_id, Video.file_path.isnot(None)).limit(1)
+        )
+        sample_path = vid_result.scalar_one_or_none()
+        if sample_path:
+            # Extract the channel folder: /downloads/ChannelName/Season XXXX/file.mp4 -> /downloads/ChannelName
+            parts = sample_path.replace(old_dir, "").strip("/").split("/")
+            if parts:
+                old_channel_dir = os.path.join(old_dir, parts[0])
 
+    new_channel_dir = os.path.join(new_dir, safe_name)
     moved_files = 0
+
+    logger.info("Moving channel '%s': %s -> %s", channel.channel_name, old_channel_dir, new_channel_dir)
 
     # Move the channel folder if it exists
     if os.path.isdir(old_channel_dir):
@@ -862,14 +880,18 @@ async def move_channel_files(
         shutil.move(old_channel_dir, new_channel_dir)
         moved_files += 1
 
-        # Update file paths in database for all videos
-        result = await db.execute(
-            select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
-        )
-        videos = result.scalars().all()
-        for video in videos:
-            if video.file_path and old_dir in video.file_path:
-                video.file_path = video.file_path.replace(old_dir, new_dir, 1)
+    # Update file paths in database for all videos
+    result = await db.execute(
+        select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
+    )
+    videos = result.scalars().all()
+    for video in videos:
+        if video.file_path:
+            # Replace the old base path with the new one
+            old_base = os.path.dirname(os.path.dirname(video.file_path))  # up from Season folder
+            new_path = video.file_path.replace(old_base, os.path.join(new_dir, safe_name), 1)
+            if new_path != video.file_path:
+                video.file_path = new_path
                 moved_files += 1
 
     # Update the channel's download directory
@@ -877,7 +899,7 @@ async def move_channel_files(
     await db.commit()
 
     return {
-        "message": f"Moved '{channel.channel_name}' to {new_dir}",
+        "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files updated)",
         "moved_files": moved_files,
     }
 
@@ -908,6 +930,20 @@ async def move_all_channels(
 
         safe_name = sanitize_filename(channel.channel_name)
         old_channel_dir = os.path.join(old_dir, safe_name)
+        # Try raw name if sanitized doesn't exist
+        if not os.path.isdir(old_channel_dir):
+            old_channel_dir = os.path.join(old_dir, channel.channel_name)
+        # Try deriving from video paths
+        if not os.path.isdir(old_channel_dir):
+            vid_sample = await db.execute(
+                select(Video.file_path).where(Video.channel_id == channel.id, Video.file_path.isnot(None)).limit(1)
+            )
+            sample = vid_sample.scalar_one_or_none()
+            if sample:
+                parts = sample.replace(old_dir, "").strip("/").split("/")
+                if parts:
+                    old_channel_dir = os.path.join(old_dir, parts[0])
+
         new_channel_dir = os.path.join(new_dir, safe_name)
 
         if os.path.isdir(old_channel_dir):
@@ -919,9 +955,12 @@ async def move_all_channels(
                 select(Video).where(Video.channel_id == channel.id, Video.file_path.isnot(None))
             )
             for video in vid_result.scalars().all():
-                if video.file_path and old_dir in video.file_path:
-                    video.file_path = video.file_path.replace(old_dir, new_dir, 1)
-                    total_moved += 1
+                if video.file_path:
+                    old_base = os.path.dirname(os.path.dirname(video.file_path))
+                    new_path = video.file_path.replace(old_base, os.path.join(new_dir, safe_name), 1)
+                    if new_path != video.file_path:
+                        video.file_path = new_path
+                        total_moved += 1
 
             channels_moved += 1
 
