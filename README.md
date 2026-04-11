@@ -11,8 +11,6 @@
 
 ---
 
-![Dashboard](screenshots/dashboard.png)
-
 ## Features
 
 ### Channel Management
