@@ -4,6 +4,7 @@ import { Link } from "react-router-dom"
 import { AlertTriangle, X } from "lucide-react"
 import { api } from "@/lib/api"
 import { useWebSocket } from "@/hooks/useWebSocket"
+import { useToast } from "@/components/ui/toaster"
 import Sidebar from "./Sidebar"
 import Header from "./Header"
 
@@ -52,11 +53,25 @@ function CookieBanner() {
   )
 }
 
+function GlobalNotifications() {
+  const { subscribe } = useWebSocket()
+  const { toast } = useToast()
+  useEffect(() => {
+    return subscribe((msg) => {
+      if (msg.type === "move_complete") {
+        toast(msg.payload.message || "File move complete")
+      }
+    })
+  }, [subscribe, toast])
+  return null
+}
+
 export default function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <GlobalNotifications />
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
