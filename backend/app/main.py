@@ -19,6 +19,11 @@ async def lifespan(app: FastAPI):
         level=getattr(logging, settings.LOG_LEVEL.upper()),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     )
+
+    # Attach in-memory log buffer for the live log viewer
+    from app.utils.log_buffer import log_buffer
+    logging.getLogger().addHandler(log_buffer)
+
     logger.info("Starting ChannelHoarder v%s", settings.APP_VERSION)
 
     Path(settings.CONFIG_DIR).mkdir(parents=True, exist_ok=True)

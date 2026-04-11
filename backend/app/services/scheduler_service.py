@@ -55,6 +55,16 @@ class SchedulerService:
             name="Check for yt-dlp updates",
         )
 
+        # Quality upgrade check (daily at 5 AM)
+        from app.tasks.quality_upgrade import check_quality_upgrades
+        self.scheduler.add_job(
+            check_quality_upgrades,
+            CronTrigger(hour=5, minute=0),
+            id="quality_upgrade",
+            replace_existing=True,
+            name="Check for quality upgrades",
+        )
+
         # PO token server watchdog (every 5 minutes)
         from app.tasks.pot_watchdog import check_pot_server
         self.scheduler.add_job(

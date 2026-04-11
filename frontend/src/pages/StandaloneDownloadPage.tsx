@@ -220,6 +220,7 @@ export default function StandaloneDownloadPage() {
               className="w-full px-3 py-2.5 rounded-md border bg-background text-sm"
             >
               <option value="best">Best Available</option>
+              <option value="2160p">4K (2160p)</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
               <option value="480p">480p</option>

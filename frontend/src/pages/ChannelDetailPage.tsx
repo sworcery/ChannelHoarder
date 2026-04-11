@@ -428,7 +428,8 @@ export default function ChannelDetailPage() {
                 onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
                 className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
               >
-                <option value="best">Best</option>
+                <option value="best">Best Available</option>
+                <option value="2160p">4K (2160p)</option>
                 <option value="1080p">1080p</option>
                 <option value="720p">720p</option>
                 <option value="480p">480p</option>
@@ -446,6 +447,7 @@ export default function ChannelDetailPage() {
                   <option value="480p">480p</option>
                   <option value="720p">720p</option>
                   <option value="1080p">1080p</option>
+                  <option value="2160p">4K (2160p)</option>
                 </select>
                 <button
                   onClick={() => api.upgradeQuality(channelId).then((r) => { invalidateVideos(); toast(r.message) })}

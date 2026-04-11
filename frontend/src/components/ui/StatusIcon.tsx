@@ -24,7 +24,8 @@ const QUALITY_RANK: Record<string, number> = {
   "480p": 1,
   "720p": 2,
   "1080p": 3,
-  "best": 4,
+  "2160p": 4,
+  "best": 5,
 }
 
 function isQualityMet(downloaded: string | null | undefined, target: string | undefined): boolean {

@@ -199,6 +199,22 @@ export const api = {
 
   // System
   getHealth: () => request<any>("/system/health"),
+  getLiveLogs: (params?: { level?: string; limit?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.level) qs.set("level", params.level)
+    if (params?.limit) qs.set("limit", String(params.limit))
+    return request<{ entries: any[]; total: number }>(`/system/live-logs?${qs}`)
+  },
+  exportLogs: async () => {
+    const resp = await fetch("/api/v1/system/live-logs/export")
+    const blob = await resp.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `channelhoarder-debug-${new Date().toISOString().slice(0, 19).replace(/[T:]/g, "-")}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  },
   getYtdlpVersion: () => request<any>("/system/ytdlp/version"),
   updateYtdlp: () => request<any>("/system/ytdlp/update", { method: "POST" }),
   getDiagnostics: () => request<any>("/system/diagnostics"),
