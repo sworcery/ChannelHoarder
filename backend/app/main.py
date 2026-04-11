@@ -61,6 +61,18 @@ async def lifespan(app: FastAPI):
             await db.commit()
             logger.info("Reset %d stale queue entries on startup", len(stale))
 
+        # Fix corrupt settings values (last_successful_auth written without json.dumps in older versions)
+        from app.models import AppSetting as _AS
+        import json as _json
+        corrupt_result = await db.execute(select(_AS))
+        for setting in corrupt_result.scalars().all():
+            try:
+                _json.loads(setting.value)
+            except (_json.JSONDecodeError, TypeError):
+                setting.value = _json.dumps(setting.value)
+                logger.info("Fixed corrupt setting: %s", setting.key)
+        await db.commit()
+
         # Clean up old health log entries (keep last 7 days)
         cutoff = datetime.now(timezone.utc) - timedelta(days=7)
         await db.execute(delete(SystemHealthLog).where(SystemHealthLog.checked_at < cutoff))
