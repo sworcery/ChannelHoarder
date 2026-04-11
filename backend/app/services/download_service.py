@@ -280,7 +280,7 @@ class DownloadService:
                     select(AppSetting).where(AppSetting.key == "last_successful_auth")
                 )
                 auth_ts = result.scalar_one_or_none()
-                now_str = datetime.now(timezone.utc).isoformat()
+                now_str = json.dumps(datetime.now(timezone.utc).isoformat())
                 if auth_ts:
                     auth_ts.value = now_str
                 else:
