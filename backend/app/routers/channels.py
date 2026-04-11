@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.deps import get_db
 from app.utils.file_utils import escape_like
-from app.models import Channel, Video, DownloadQueue
+from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
 from app.schemas import (
@@ -174,6 +174,12 @@ async def delete_channel(
         service = ChannelService(db)
         await service.delete_channel_files(channel)
 
+    # Explicitly delete child records (SQLite may not cascade without PRAGMA foreign_keys)
+    from sqlalchemy import delete as sa_delete
+    video_ids = select(Video.id).where(Video.channel_id == channel.id)
+    await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
+    await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
+    await db.execute(sa_delete(Video).where(Video.channel_id == channel.id))
     await db.delete(channel)
     await db.commit()
 

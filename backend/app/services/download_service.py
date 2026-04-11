@@ -216,6 +216,12 @@ class DownloadService:
                 platform=cdata.platform,
             )
 
+            # Apply file permissions if configured
+            from app.utils.permissions import apply_permissions
+            from app.services.settings_service import get_all_settings
+            perm_settings = await get_all_settings()
+            apply_permissions(mp4_path, perm_settings)
+
             # Create season poster if it doesn't exist
             from app.services.metadata_service import write_season_poster
             write_season_poster(

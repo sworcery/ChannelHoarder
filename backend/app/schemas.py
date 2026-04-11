@@ -197,6 +197,11 @@ class SettingsUpdate(BaseModel):
     webhook_events: Optional[list[str]] = None
     shorts_enabled: Optional[bool] = None  # Global toggle to allow shorts downloading
     subtitles_enabled: Optional[bool] = None  # Download subtitles/captions with videos
+    # File permissions
+    set_permissions: Optional[bool] = None  # Apply chmod after download
+    chmod_folder: Optional[str] = None  # Octal chmod for folders (e.g. "755")
+    chmod_file: Optional[str] = None  # Octal chmod for files (e.g. "644")
+    chown_group: Optional[str] = None  # Group name or GID for downloaded files
     # Livestream / long video filter
     max_video_duration: Optional[int] = None  # Max duration in seconds (0 = disabled)
     # System

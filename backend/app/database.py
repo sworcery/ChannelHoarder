@@ -18,6 +18,7 @@ engine = create_async_engine(
 def _set_sqlite_pragma(dbapi_conn, connection_record):
     """Optimize SQLite for concurrent web-app usage."""
     cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
