@@ -493,15 +493,14 @@ export default function ChannelDetailPage() {
                   </button>
                   <button
                     onClick={() => {
-                      if (editDownloadDir) {
-                        setMovingFiles(true)
-                        api.moveChannelFiles(channelId, editDownloadDir).then((r) => {
+                      const targetDir = editDownloadDir || "/downloads"
+                      setMovingFiles(true)
+                      api.moveChannelFiles(channelId, targetDir).then((r) => {
                           invalidateVideos()
                           queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
                           setEditDownloadDir(null)
                           toast(r.message)
                         }).catch((e) => toast(e.message, "error")).finally(() => setMovingFiles(false))
-                      }
                     }}
                     disabled={movingFiles}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap disabled:opacity-50"
