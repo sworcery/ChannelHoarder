@@ -96,6 +96,12 @@ export const api = {
   monitorAllVideos: (channelId: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
+  // File management
+  moveChannelFiles: (channelId: number, newDownloadDir: string) =>
+    request<any>(`/channels/${channelId}/move-files`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+  moveAllChannels: (newDownloadDir: string) =>
+    request<any>("/channels/move-all", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+
   // Quality management
   upgradeQuality: (channelId: number) =>
     request<any>(`/channels/${channelId}/upgrade-quality`, { method: "POST" }),

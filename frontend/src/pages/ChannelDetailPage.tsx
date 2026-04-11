@@ -480,6 +480,7 @@ export default function ChannelDetailPage() {
                   className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 />
                 {editDownloadDir !== null && editDownloadDir !== (channel.download_dir ?? "") && (
+                  <>
                   <button
                     onClick={() => {
                       updateMutation.mutate({ download_dir: editDownloadDir || null })
@@ -489,6 +490,23 @@ export default function ChannelDetailPage() {
                   >
                     Save
                   </button>
+                  <button
+                    onClick={() => {
+                      if (editDownloadDir) {
+                        api.moveChannelFiles(channelId, editDownloadDir).then((r) => {
+                          invalidateVideos()
+                          queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+                          setEditDownloadDir(null)
+                          toast(r.message)
+                        }).catch((e) => toast(e.message, "error"))
+                      }
+                    }}
+                    className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
+                    title="Move existing files to the new directory"
+                  >
+                    Move Files
+                  </button>
+                  </>
                 )}
               </div>
             </div>

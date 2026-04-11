@@ -51,6 +51,8 @@ export default function ChannelsPage() {
   const [addQuality, setAddQuality] = useState("best")
   const [addDownloadDir, setAddDownloadDir] = useState("")
   const [scanAfterAdd, setScanAfterAdd] = useState(true)
+  const [moveAllDir, setMoveAllDir] = useState("")
+  const [showMoveAll, setShowMoveAll] = useState(false)
   const [autoDownload, setAutoDownload] = useState(true)
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>(() => getStored("ch_view", "grid"))
@@ -145,6 +147,13 @@ export default function ChannelsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" /> Add Channel
+          </button>
+          <button
+            onClick={() => setShowMoveAll(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors"
+            title="Move all channel files to a new directory"
+          >
+            Move All
           </button>
         </div>
       </div>
@@ -512,6 +521,53 @@ export default function ChannelsPage() {
         <div className="text-center py-12 text-muted-foreground">
           <Tv className="h-12 w-12 mx-auto mb-3 opacity-50" />
           <p>No channels yet. Add one to get started.</p>
+        </div>
+      )}
+      {/* Move All Dialog */}
+      {showMoveAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card rounded-lg p-6 w-full max-w-md mx-4 border shadow-lg">
+            <h2 className="text-lg font-semibold mb-4">Move All Channels</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Move all channel files to a new root directory. File paths in the database will be updated automatically.
+            </p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">New Download Directory</label>
+                <input
+                  type="text"
+                  placeholder="/downloads/youtube"
+                  value={moveAllDir}
+                  onChange={(e) => setMoveAllDir(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md border bg-background"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowMoveAll(false); setMoveAllDir("") }}
+                  className="px-4 py-2 rounded-md border hover:bg-accent"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (moveAllDir) {
+                      api.moveAllChannels(moveAllDir).then((r) => {
+                        queryClient.invalidateQueries({ queryKey: ["channels"] })
+                        setShowMoveAll(false)
+                        setMoveAllDir("")
+                        toast(r.message)
+                      }).catch((e) => toast(e.message, "error"))
+                    }
+                  }}
+                  disabled={!moveAllDir}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                >
+                  Move All
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
