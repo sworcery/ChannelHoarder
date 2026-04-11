@@ -868,9 +868,23 @@ async def _move_channel_task(channel_id: int, new_dir: str):
         logger.info("Moving channel '%s': %s -> %s", channel.channel_name, old_channel_dir, new_channel_dir)
 
         if os.path.isdir(old_channel_dir):
-            os.makedirs(new_dir, exist_ok=True)
-            await asyncio.to_thread(shutil.move, old_channel_dir, new_channel_dir)
-            moved_files += 1
+            # Move files individually to handle existing destination
+            for root, dirs, files in os.walk(old_channel_dir):
+                rel_path = os.path.relpath(root, old_channel_dir)
+                dest_dir = os.path.join(new_channel_dir, rel_path)
+                os.makedirs(dest_dir, exist_ok=True)
+                for f in files:
+                    src = os.path.join(root, f)
+                    dst = os.path.join(dest_dir, f)
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    await asyncio.to_thread(shutil.move, src, dst)
+                    moved_files += 1
+            # Clean up empty source directory
+            try:
+                shutil.rmtree(old_channel_dir)
+            except OSError:
+                pass
 
         result = await db.execute(
             select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
@@ -954,8 +968,20 @@ async def _move_all_task(new_dir: str):
             new_channel_dir = os.path.join(new_dir, safe_name)
 
             if os.path.isdir(old_channel_dir):
-                os.makedirs(new_dir, exist_ok=True)
-                await asyncio.to_thread(shutil.move, old_channel_dir, new_channel_dir)
+                for root, dirs, files in os.walk(old_channel_dir):
+                    rel_path = os.path.relpath(root, old_channel_dir)
+                    dest_dir = os.path.join(new_channel_dir, rel_path)
+                    os.makedirs(dest_dir, exist_ok=True)
+                    for f in files:
+                        src = os.path.join(root, f)
+                        dst = os.path.join(dest_dir, f)
+                        if os.path.exists(dst):
+                            os.remove(dst)
+                        await asyncio.to_thread(shutil.move, src, dst)
+                try:
+                    shutil.rmtree(old_channel_dir)
+                except OSError:
+                    pass
 
                 vid_result = await db.execute(
                     select(Video).where(Video.channel_id == channel.id, Video.file_path.isnot(None))
