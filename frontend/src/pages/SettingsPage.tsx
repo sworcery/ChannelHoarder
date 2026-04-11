@@ -370,7 +370,7 @@ function AuthTab() {
 
   const apiKeyMutation = useMutation({
     mutationFn: (key: string) => api.setApiKey(key),
-    onSuccess: () => { refetchAuth(); setApiKey(""); toast("API key saved") },
+    onSuccess: (data: any) => { refetchAuth(); setApiKey(""); toast(data.valid ? "API key saved and validated" : "API key saved but validation failed - check the key") },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -603,8 +603,8 @@ function AuthTab() {
         </div>
         <div className="flex gap-2">
           <input
-            type="password"
-            placeholder="Enter API key..."
+            type="text"
+            placeholder="Paste your API key here..."
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
             className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
