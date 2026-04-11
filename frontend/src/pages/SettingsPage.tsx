@@ -625,6 +625,7 @@ function AuthTab() {
 }
 
 function NamingTab() {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const [template, setTemplate] = useState(
     "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
@@ -643,7 +644,10 @@ function NamingTab() {
 
   const saveMutation = useMutation({
     mutationFn: () => api.updateSettings({ naming_template: template }),
-    onSuccess: () => toast("Naming template saved"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
+      toast("Naming template saved")
+    },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -738,6 +742,7 @@ function YtdlpTab() {
 }
 
 function AntiDetectTab() {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const [minDelay, setMinDelay] = useState(10)
   const [maxDelay, setMaxDelay] = useState(30)
@@ -787,7 +792,10 @@ function AntiDetectTab() {
         chmod_file: chmodFile,
         chown_group: chownGroup || null,
       }),
-    onSuccess: () => toast("Anti-detection settings saved"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
+      toast("Anti-detection settings saved")
+    },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
@@ -989,6 +997,7 @@ const WEBHOOK_EVENTS = [
 ]
 
 function NotificationsTab() {
+  const queryClient = useQueryClient()
   const { toast } = useToast()
   const [telegramToken, setTelegramToken] = useState("")
   const [telegramChatId, setTelegramChatId] = useState("")
@@ -1022,7 +1031,10 @@ function NotificationsTab() {
         pushover_user_key: pushoverUserKey || null,
         webhook_events: enabledEvents,
       }),
-    onSuccess: () => toast("Notification settings saved"),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
+      toast("Notification settings saved")
+    },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
