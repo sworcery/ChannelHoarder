@@ -883,7 +883,7 @@ async def _move_channel_task(channel_id: int, new_dir: str):
                     video.file_path = new_path
                     moved_files += 1
 
-        channel.download_dir = new_dir
+        channel.download_dir = new_dir if new_dir != settings.DOWNLOAD_DIR else None
         await db.commit()
 
         await NotificationService.broadcast("move_complete", {
@@ -906,6 +906,10 @@ async def move_channel_files(
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Update the directory immediately so the UI reflects the change
+    channel.download_dir = body.new_download_dir if body.new_download_dir != settings.DOWNLOAD_DIR else None
+    await db.commit()
 
     asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir))
 
