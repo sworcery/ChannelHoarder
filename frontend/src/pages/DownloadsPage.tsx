@@ -106,7 +106,10 @@ const ERROR_DESCRIPTIONS: Record<string, { label: string; color: string; tip: st
 
 export default function DownloadsPage() {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<"queue" | "history" | "failed">("queue")
+  const [tab, setTab] = useState<"queue" | "history" | "failed">(() => {
+    const saved = localStorage.getItem("downloads_tab")
+    return (saved as any) || "queue"
+  })
   const [search, setSearch] = useState("")
   const [queueSearch, setQueueSearch] = useState("")
   const debouncedSearch = useDebounce(search, 300)
@@ -311,6 +314,7 @@ export default function DownloadsPage() {
   // Clear selection when switching tabs
   const handleTabChange = useCallback((newTab: typeof tab) => {
     setTab(newTab)
+    localStorage.setItem("downloads_tab", newTab)
     setPage(0)
     setQueuePage(0)
     setSelectedQueueIds(new Set())
