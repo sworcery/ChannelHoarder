@@ -53,6 +53,7 @@ export default function ChannelsPage() {
   const [scanAfterAdd, setScanAfterAdd] = useState(true)
   const [moveAllDir, setMoveAllDir] = useState("")
   const [showMoveAll, setShowMoveAll] = useState(false)
+  const [movingAll, setMovingAll] = useState(false)
   const [autoDownload, setAutoDownload] = useState(true)
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>(() => getStored("ch_view", "grid"))
@@ -552,18 +553,19 @@ export default function ChannelsPage() {
                 <button
                   onClick={() => {
                     if (moveAllDir) {
+                      setMovingAll(true)
                       api.moveAllChannels(moveAllDir).then((r) => {
                         queryClient.invalidateQueries({ queryKey: ["channels"] })
                         setShowMoveAll(false)
                         setMoveAllDir("")
                         toast(r.message)
-                      }).catch((e) => toast(e.message, "error"))
+                      }).catch((e) => toast(e.message, "error")).finally(() => setMovingAll(false))
                     }
                   }}
-                  disabled={!moveAllDir}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                  disabled={!moveAllDir || movingAll}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
                 >
-                  Move All
+                  {movingAll ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving...</> : "Move All"}
                 </button>
               </div>
             </div>
