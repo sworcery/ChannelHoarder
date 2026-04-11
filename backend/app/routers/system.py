@@ -33,6 +33,58 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         )
 
 
+@router.get("/live-logs")
+async def get_live_logs(
+    level: Optional[str] = Query(None, description="Minimum log level: DEBUG, INFO, WARNING, ERROR"),
+    limit: int = Query(200, ge=1, le=1000),
+):
+    """Get recent log entries from the in-memory buffer."""
+    from app.utils.log_buffer import log_buffer
+    entries = log_buffer.get_entries(level=level, limit=limit)
+    return {"entries": entries, "total": len(entries)}
+
+
+@router.get("/live-logs/export")
+async def export_live_logs(db: AsyncSession = Depends(get_db)):
+    """Export full diagnostic report + recent logs as a downloadable text file."""
+    from datetime import datetime, timezone
+    from fastapi.responses import PlainTextResponse
+    from app.utils.log_buffer import log_buffer
+
+    # Build diagnostic header
+    diagnostics = DiagnosticsService(db)
+    report = await diagnostics.generate_report()
+
+    lines = [
+        "=== ChannelHoarder Debug Export ===",
+        f"Generated: {datetime.now(timezone.utc).isoformat()}",
+        f"App Version: {settings.APP_VERSION}",
+        f"yt-dlp Version: {report.ytdlp_version}",
+        f"PO Tokens: {report.pot_status}",
+        f"Cookies: {'present' if report.cookies_present else 'not configured'}",
+        f"API Key: {'configured' if report.api_key_configured else 'not configured'}",
+        f"Disk Free: {report.disk_free}",
+        f"Channels: {report.total_channels}",
+        f"Downloads: {report.total_downloaded}",
+        f"Failed: {report.total_failed}",
+        "",
+        "--- Recent System Logs ---",
+        "",
+    ]
+
+    for entry in log_buffer.get_entries(limit=500):
+        lines.append(f"{entry['timestamp']} [{entry['level']}] {entry['logger']}: {entry['message']}")
+
+    lines.append("")
+    lines.append("=== End Export ===")
+
+    content = "\n".join(lines)
+    return PlainTextResponse(
+        content=content,
+        headers={"Content-Disposition": f"attachment; filename=channelhoarder-debug-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"},
+    )
+
+
 @router.get("/ytdlp/version")
 async def get_ytdlp_version():
     ytdlp = YtdlpService()

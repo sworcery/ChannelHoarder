@@ -20,7 +20,7 @@ class UTCBaseModel(BaseModel):
 # --- Channel Schemas ---
 class ChannelCreate(BaseModel):
     url: str = Field(..., description="Channel URL (YouTube, Rumble, Twitch, etc.)")
-    quality: str = Field(default="best", pattern="^(best|1080p|720p|480p)$")
+    quality: str = Field(default="best", pattern="^(best|2160p|1080p|720p|480p)$")
     naming_template: Optional[str] = None
     download_dir: Optional[str] = Field(default=None, description="Custom download directory (overrides global default)")
     enabled: bool = True
@@ -30,7 +30,7 @@ class ChannelCreate(BaseModel):
 
 
 class ChannelUpdate(BaseModel):
-    quality: Optional[str] = Field(default=None, pattern="^(best|1080p|720p|480p)$")
+    quality: Optional[str] = Field(default=None, pattern="^(best|2160p|1080p|720p|480p)$")
     naming_template: Optional[str] = None
     download_dir: Optional[str] = None
     check_schedule: Optional[str] = None

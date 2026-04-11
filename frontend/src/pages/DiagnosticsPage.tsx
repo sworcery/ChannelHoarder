@@ -16,11 +16,12 @@ import {
 } from "lucide-react"
 
 export default function DiagnosticsPage() {
-  const [tab, setTab] = useState<"overview" | "logs">("overview")
+  const [tab, setTab] = useState<"overview" | "logs" | "system-logs">("overview")
   const [logSearch, setLogSearch] = useState("")
   const [logPage, setLogPage] = useState(0)
   const [expandedLog, setExpandedLog] = useState<number | null>(null)
   const [copied, setCopied] = useState(false)
+  const [logLevel, setLogLevel] = useState("")
 
   const { data: diagnostics, isLoading } = useQuery({
     queryKey: ["diagnostics"],
@@ -32,6 +33,13 @@ export default function DiagnosticsPage() {
     queryKey: ["system-logs", logPage, logSearch],
     queryFn: () => api.getLogs({ skip: logPage * 50, limit: 50, search: logSearch || undefined }),
     enabled: tab === "logs",
+  })
+
+  const { data: liveLogs } = useQuery({
+    queryKey: ["live-logs", logLevel],
+    queryFn: () => api.getLiveLogs({ level: logLevel || undefined, limit: 300 }),
+    enabled: tab === "system-logs",
+    refetchInterval: 5000,
   })
 
   const copyReport = async () => {
@@ -108,6 +116,12 @@ export default function DiagnosticsPage() {
           className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
         >
           Error Logs
+        </button>
+        <button
+          onClick={() => setTab("system-logs")}
+          className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "system-logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+        >
+          System Logs
         </button>
       </div>
 
@@ -282,6 +296,67 @@ export default function DiagnosticsPage() {
           ) : (
             <p className="text-center py-8 text-muted-foreground">No logs found</p>
           )}
+        </div>
+      )}
+
+      {/* System Logs Tab */}
+      {tab === "system-logs" && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <select
+                value={logLevel}
+                onChange={(e) => setLogLevel(e.target.value)}
+                className="px-2 py-1.5 rounded-md border bg-background text-sm"
+              >
+                <option value="">All Levels</option>
+                <option value="DEBUG">DEBUG</option>
+                <option value="INFO">INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+              <span className="text-xs text-muted-foreground">
+                {liveLogs?.total || 0} entries (auto-refreshing)
+              </span>
+            </div>
+            <button
+              onClick={() => api.exportLogs()}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+              Export Debug Log
+            </button>
+          </div>
+
+          <div className="rounded-lg border bg-card overflow-hidden">
+            <div className="max-h-[600px] overflow-y-auto p-3 font-mono text-xs leading-relaxed">
+              {liveLogs?.entries?.length ? (
+                liveLogs.entries.map((entry: any, i: number) => {
+                  const levelColor =
+                    entry.level === "ERROR" || entry.level === "CRITICAL"
+                      ? "text-red-500"
+                      : entry.level === "WARNING"
+                        ? "text-yellow-500"
+                        : entry.level === "DEBUG"
+                          ? "text-muted-foreground"
+                          : ""
+                  return (
+                    <div key={i} className={`py-0.5 ${levelColor}`}>
+                      <span className="text-muted-foreground">{entry.timestamp?.slice(11, 19)}</span>
+                      {" "}
+                      <span className="font-semibold">[{entry.level}]</span>
+                      {" "}
+                      <span className="text-muted-foreground">{entry.logger}:</span>
+                      {" "}
+                      {entry.message}
+                    </div>
+                  )
+                })
+              ) : (
+                <p className="text-center py-8 text-muted-foreground">No log entries</p>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

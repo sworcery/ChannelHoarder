@@ -1,6 +1,6 @@
 """Quality tier comparison for upgrade detection."""
 
-QUALITY_ORDER = {"480p": 1, "720p": 2, "1080p": 3, "best": 4}
+QUALITY_ORDER = {"480p": 1, "720p": 2, "1080p": 3, "2160p": 4, "best": 5}
 
 
 def quality_rank(q: str | None) -> int:
