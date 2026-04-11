@@ -43,6 +43,6 @@ Thumbs.db
 # Logs
 *.log
 
-# Claude
+# Dev config
 .claude/
 CLAUDE.md
