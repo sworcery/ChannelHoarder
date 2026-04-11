@@ -233,18 +233,18 @@ Available template variables: `{channel_name}`, `{season}`, `{episode}`, `{title
 
 ### Plex Library Setup
 
-Point your Plex library at the `/downloads` directory as a **TV Shows** library.
+Create a **separate Plex library** for your YouTube channels - do not mix them with your regular TV shows library.
 
-**Important: To see episode titles from NFO files**, set the library agent to **Personal Media Shows**:
+1. In Plex, click **+** to add a new library
+2. Select **TV Shows** as the type
+3. Point it at your ChannelHoarder downloads folder
+4. Under **Advanced**, set the agent to **Personal Media Shows**
+5. Check **Use local assets**
+6. Save and scan
 
-1. In Plex, go to your YouTube library > **Manage Library** > **Edit**
-2. Under **Advanced**, set the agent to **Personal Media Shows**
-3. Check **Use local assets** under the agent settings
-4. Save and **Scan Library Files**
+**Why a separate library?** The Personal Media Shows agent reads episode titles, descriptions, and artwork from the NFO files that ChannelHoarder generates. The default Plex TV agent ignores NFO files and only looks up online databases (TVDB/TMDB), which won't find YouTube channels. Using Personal Media Shows in your regular TV library would break metadata for shows from Sonarr/etc.
 
-The default Plex TV agent ignores NFO files and will only show generic episode numbers. Personal Media Shows reads the episode titles, descriptions, and artwork from the NFO files that ChannelHoarder generates.
-
-If you've already scanned with the default agent, you may need to **Unmatch** each show and re-scan for the NFO data to take effect.
+If you already added channels to an existing TV library, move them to the new library and unmatch each show for the NFO data to take effect.
 
 ## Configuration
 
