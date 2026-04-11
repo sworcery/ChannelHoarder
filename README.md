@@ -231,7 +231,20 @@ The default naming template is:
 
 Available template variables: `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`
 
-Point your Plex library at the `/downloads` directory as a "TV Shows" library and it will automatically pick up channels as shows.
+### Plex Library Setup
+
+Point your Plex library at the `/downloads` directory as a **TV Shows** library.
+
+**Important: To see episode titles from NFO files**, set the library agent to **Personal Media Shows**:
+
+1. In Plex, go to your YouTube library > **Manage Library** > **Edit**
+2. Under **Advanced**, set the agent to **Personal Media Shows**
+3. Check **Use local assets** under the agent settings
+4. Save and **Scan Library Files**
+
+The default Plex TV agent ignores NFO files and will only show generic episode numbers. Personal Media Shows reads the episode titles, descriptions, and artwork from the NFO files that ChannelHoarder generates.
+
+If you've already scanned with the default agent, you may need to **Unmatch** each show and re-scan for the NFO data to take effect.
 
 ## Configuration
 
