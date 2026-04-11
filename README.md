@@ -472,11 +472,9 @@ All endpoints are under `/api/v1/`:
 - Ensure `PUID` and `PGID` are set correctly in your compose/template
 - The internal port is always `8000`; the host port is configurable
 
-## Contributing
+## Support
 
-Issues, feature requests, and pull requests are welcome. Please open an issue on GitHub before starting large changes.
-
-For support, open a GitHub issue and include the diagnostic report from **Settings → System → Copy Diagnostic Report**.
+For bugs or feature requests, open a GitHub issue and include the diagnostic report from **Settings → System → Copy Diagnostic Report**.
 
 ## License
 
