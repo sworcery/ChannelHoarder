@@ -110,7 +110,7 @@ async def init_database():
                 "(SELECT id FROM videos WHERE channel_id NOT IN (SELECT id FROM channels))"
             ))
             await conn.execute(text(
-                "DELETE FROM download_logs WHERE video_id IN "
+                "DELETE FROM download_log WHERE video_id IN "
                 "(SELECT id FROM videos WHERE channel_id NOT IN (SELECT id FROM channels))"
             ))
             await conn.execute(text(
