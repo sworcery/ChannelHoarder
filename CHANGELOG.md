@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.15] - 2026-04-11
+
+### Fixed
+- **Orphan videos blocking channel re-add** - When a channel was deleted and re-added, orphan video records from the old channel (left behind before the foreign key cascade fix) prevented all videos from being detected. Scan now claims orphan records for the new channel instead of silently skipping them.
+- **Orphan cleanup on startup** - Automatically removes video records whose parent channel no longer exists, preventing stale data from accumulating across upgrades.
+
 ## [1.7.14] - 2026-04-11
 
 ### Fixed
