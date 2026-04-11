@@ -26,6 +26,9 @@ EVENT_TITLES: dict[str, str] = {
     "ytdlp_updated": "🔄 yt-dlp Updated",
     "critical_alert": "🚨 Critical Alert",
     "review_required": "👀 Review Required",
+    "move_complete": "📁 Files Moved",
+    "scan_complete": "🔍 Scan Complete",
+    "quality_upgrade": "⬆️ Quality Upgrade",
 }
 
 
@@ -64,6 +67,15 @@ def _format_message(event_type: str, payload: dict[str, Any]) -> str:
         if payload.get("duration"):
             parts.append(f"Duration: {payload['duration']}")
         parts.append("Queue manually in the web UI if you want this video.")
+
+    elif event_type == "move_complete":
+        parts.append(payload.get("message", "Files moved successfully"))
+
+    elif event_type == "quality_upgrade":
+        parts.append(payload.get("message", "Quality upgrade check complete"))
+
+    elif event_type == "scan_complete":
+        parts.append(payload.get("message", "Channel scan complete"))
 
     else:
         # Generic fallback

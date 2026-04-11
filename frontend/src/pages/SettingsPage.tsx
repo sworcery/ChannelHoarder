@@ -995,6 +995,9 @@ const WEBHOOK_EVENTS = [
   { key: "health_alert", label: "Health Alerts" },
   { key: "critical_alert", label: "Critical Alerts" },
   { key: "review_required", label: "Long Video Review Required" },
+  { key: "move_complete", label: "File Move Complete" },
+  { key: "scan_complete", label: "Channel Scan Complete" },
+  { key: "quality_upgrade", label: "Quality Upgrade" },
 ]
 
 function NotificationsTab() {
