@@ -124,6 +124,7 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [movingFiles, setMovingFiles] = useState(false)
 
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
@@ -493,18 +494,20 @@ export default function ChannelDetailPage() {
                   <button
                     onClick={() => {
                       if (editDownloadDir) {
+                        setMovingFiles(true)
                         api.moveChannelFiles(channelId, editDownloadDir).then((r) => {
                           invalidateVideos()
                           queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
                           setEditDownloadDir(null)
                           toast(r.message)
-                        }).catch((e) => toast(e.message, "error"))
+                        }).catch((e) => toast(e.message, "error")).finally(() => setMovingFiles(false))
                       }
                     }}
-                    className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
+                    disabled={movingFiles}
+                    className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap disabled:opacity-50"
                     title="Move existing files to the new directory"
                   >
-                    Save & Move
+                    {movingFiles ? <><Loader2 className="h-3 w-3 animate-spin" /> Moving...</> : "Save & Move"}
                   </button>
                   </>
                 )}
