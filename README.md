@@ -274,12 +274,18 @@ If you already added channels to an existing TV library, move them to the new li
 A YouTube Data API key improves channel scanning reliability and speed. Without it, yt-dlp handles discovery directly, which works but can be slower.
 
 To get a free API key:
-1. Go to the [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project and enable the **YouTube Data API v3**
-3. Create an API key under **Credentials**
-4. Add the key in **Settings > Authentication** in the web UI, or set the `YOUTUBE_API_KEY` environment variable
 
-The free tier provides 10,000 quota units per day, which is enough for most personal use.
+1. Go to [console.cloud.google.com](https://console.cloud.google.com/) and sign in with your Google account
+2. Click **Select a project** at the top, then **New Project**. Name it anything (e.g. "ChannelHoarder") and click **Create**
+3. Make sure your new project is selected, then go to **APIs & Services > Library**
+4. Search for **YouTube Data API v3** and click on it
+5. Click **Enable**
+6. Go to **APIs & Services > Credentials**
+7. Click **+ Create Credentials > API key**
+8. Copy the API key that appears
+9. In ChannelHoarder, go to **Settings > Authentication** and paste the key, or set the `YOUTUBE_API_KEY` environment variable in your container config
+
+The free tier provides 10,000 quota units per day, which is enough for most personal use. No billing account is required.
 
 ### Cookie Authentication (Optional)
 
