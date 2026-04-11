@@ -58,3 +58,9 @@ async def check_quality_upgrades():
 
         await db.commit()
         logger.info("Quality upgrade check complete: queued %d videos across %d channels", total_queued, channels_checked)
+
+        if total_queued > 0:
+            from app.services.notification_service import NotificationService
+            await NotificationService.broadcast("quality_upgrade", {
+                "message": f"Quality upgrade: queued {total_queued} videos for re-download across {channels_checked} channels",
+            })
