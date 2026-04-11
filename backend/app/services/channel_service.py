@@ -309,9 +309,10 @@ class ChannelService:
             self.db.add(video)
             await self.db.flush()
 
-            # Detect YouTube Shorts (duration <= 60s)
+            # Detect YouTube Shorts (duration <= channel threshold or 30s default)
+            shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
             is_short = False
-            if duration and duration <= 60:
+            if duration and duration <= shorts_threshold:
                 is_short = True
             video.is_short = is_short
 

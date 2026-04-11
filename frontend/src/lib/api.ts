@@ -58,6 +58,14 @@ export const api = {
     request<{ deleted: number }>(`/channels/${channelId}/shorts/delete`, { method: "POST" }),
   detectChannelShorts: (channelId: number) =>
     request<{ detected: number }>(`/channels/${channelId}/shorts/detect`, { method: "POST" }),
+  detectCleanShortsPreview: (channelId: number) =>
+    request<any>(`/channels/${channelId}/shorts/detect-clean/preview`, { method: "POST" }),
+  detectCleanShortsConfirm: (channelId: number) =>
+    request<any>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
+
+  // Channel recovery
+  forceRescan: (channelId: number) =>
+    request<any>(`/channels/${channelId}/force-rescan`, { method: "POST" }),
 
   // Bulk video actions
   bulkQueueVideos: (channelId: number, videoIds: number[]) =>
@@ -97,8 +105,12 @@ export const api = {
     request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
   // File management
+  moveFilesPreview: (channelId: number, newDownloadDir: string) =>
+    request<any>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveChannelFiles: (channelId: number, newDownloadDir: string) =>
     request<any>(`/channels/${channelId}/move-files`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+  moveAllPreview: (newDownloadDir: string) =>
+    request<any>("/channels/move-all/preview", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveAllChannels: (newDownloadDir: string) =>
     request<any>("/channels/move-all", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
 

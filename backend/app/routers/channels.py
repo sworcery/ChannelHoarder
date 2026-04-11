@@ -303,10 +303,6 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/{channel_id}/renumber/confirm", status_code=200)
 async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
     """Apply episode renumbering and rename files on disk."""
-    import os
-    import shutil
-    from app.services.naming_service import build_output_path
-
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
@@ -319,46 +315,17 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
-    season_counts: dict[int, int] = {}
-    renamed = 0
+    # Count how many need updating before renumber
+    season_counts_pre: dict[int, int] = {}
     updated = 0
-
     for video in videos:
         season = video.upload_date.year
-        season_counts.setdefault(season, 0)
-        season_counts[season] += 1
-        new_episode = season_counts[season]
-
-        if video.season != season or video.episode != new_episode:
-            old_path = video.file_path
-            video.season = season
-            video.episode = new_episode
+        season_counts_pre.setdefault(season, 0)
+        season_counts_pre[season] += 1
+        if video.season != season or video.episode != season_counts_pre[season]:
             updated += 1
 
-            if old_path and os.path.exists(old_path):
-                new_path = build_output_path(
-                    channel_name=channel.channel_name,
-                    video_title=video.title,
-                    video_id=video.video_id,
-                    upload_date=video.upload_date,
-                    season=season,
-                    episode=new_episode,
-                    naming_template=channel.naming_template,
-                    base_dir=channel.download_dir,
-                ) + ".mp4"
-
-                if old_path != new_path:
-                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                    shutil.move(old_path, new_path)
-                    video.file_path = new_path
-
-                    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
-                        old_extra = old_path.rsplit(".mp4", 1)[0] + ext
-                        new_extra = new_path.rsplit(".mp4", 1)[0] + ext
-                        if os.path.exists(old_extra):
-                            shutil.move(old_extra, new_extra)
-
-                    renamed += 1
+    renamed = _renumber_channel_episodes(videos, channel)
 
     await db.commit()
     return {
@@ -831,8 +798,97 @@ class MoveFilesRequest(BaseModel):
     new_download_dir: str = Field(..., min_length=1)
 
 
-async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str | None = None):
-    """Background task to move a channel's files."""
+async def _get_move_preview(db: AsyncSession, channel_id: int, new_dir: str) -> dict:
+    """Compute move preview for a single channel."""
+    import os
+    from app.utils.file_utils import sanitize_filename
+
+    channel = await db.get(Channel, channel_id)
+    if not channel:
+        return {"error": "Channel not found"}
+
+    old_dir = channel.download_dir or settings.DOWNLOAD_DIR
+    safe_name = sanitize_filename(channel.channel_name)
+    old_channel_dir = os.path.join(old_dir, safe_name)
+    new_channel_dir = os.path.join(new_dir, safe_name)
+    same_path = os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir)
+
+    result = await db.execute(
+        select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
+    )
+    videos = result.scalars().all()
+
+    file_count = 0
+    total_size = 0
+    missing_count = 0
+    for video in videos:
+        if video.file_path:
+            if os.path.exists(video.file_path):
+                file_count += 1
+                total_size += video.file_size or 0
+            else:
+                missing_count += 1
+
+    return {
+        "channel_id": channel_id,
+        "channel_name": channel.channel_name,
+        "source_dir": old_channel_dir,
+        "dest_dir": new_channel_dir,
+        "same_path": same_path,
+        "file_count": file_count,
+        "missing_count": missing_count,
+        "total_size": total_size,
+        "db_records": len(videos),
+    }
+
+
+@router.post("/{channel_id}/move-files/preview")
+async def move_files_preview(
+    channel_id: int,
+    body: MoveFilesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Preview what a file move would do before executing."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    preview = await _get_move_preview(db, channel_id, body.new_download_dir)
+    return preview
+
+
+@router.post("/move-all/preview")
+async def move_all_preview(
+    body: MoveFilesRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Preview what moving all channels would do."""
+    result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
+    channels = result.scalars().all()
+
+    previews = []
+    total_files = 0
+    total_size = 0
+    channels_to_move = 0
+
+    for channel in channels:
+        preview = await _get_move_preview(db, channel.id, body.new_download_dir)
+        if not preview.get("same_path"):
+            previews.append(preview)
+            total_files += preview["file_count"]
+            total_size += preview["total_size"]
+            channels_to_move += 1
+
+    return {
+        "channels": previews,
+        "channels_to_move": channels_to_move,
+        "total_files": total_files,
+        "total_size": total_size,
+    }
+
+
+async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
+    """Background task to move a channel's files using DB file_path as source of truth."""
     import asyncio
     import os
     import shutil
@@ -845,76 +901,73 @@ async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str | None 
         if not channel:
             return
 
-        # Use passed old_dir (captured before DB update), fall back to channel's current dir
-        if not old_dir:
-            old_dir = channel.download_dir or settings.DOWNLOAD_DIR
         safe_name = sanitize_filename(channel.channel_name)
-
-        # Find the actual channel folder
-        old_channel_dir = os.path.join(old_dir, safe_name)
-        if not os.path.isdir(old_channel_dir):
-            old_channel_dir = os.path.join(old_dir, channel.channel_name)
-        if not os.path.isdir(old_channel_dir):
-            vid_result = await db.execute(
-                select(Video.file_path).where(Video.channel_id == channel_id, Video.file_path.isnot(None)).limit(1)
-            )
-            sample_path = vid_result.scalar_one_or_none()
-            if sample_path:
-                parts = sample_path.replace(old_dir, "").strip("/").split("/")
-                if parts:
-                    old_channel_dir = os.path.join(old_dir, parts[0])
-
         new_channel_dir = os.path.join(new_dir, safe_name)
         moved_files = 0
+        errors = 0
 
-        logger.info("Moving channel '%s': %s -> %s", channel.channel_name, old_channel_dir, new_channel_dir)
+        logger.info("Moving channel '%s' files to %s", channel.channel_name, new_channel_dir)
 
-        # Skip if source and destination are the same
-        if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
-            logger.info("Source and destination are the same, skipping move for '%s'", channel.channel_name)
-        elif os.path.isdir(old_channel_dir):
-            # Move files individually to handle existing destination
-            for root, dirs, files in os.walk(old_channel_dir):
-                rel_path = os.path.relpath(root, old_channel_dir)
-                dest_dir = os.path.join(new_channel_dir, rel_path)
-                os.makedirs(dest_dir, exist_ok=True)
-                for f in files:
-                    src = os.path.join(root, f)
-                    dst = os.path.join(dest_dir, f)
-                    if src == dst:
-                        continue
-                    if os.path.exists(dst):
-                        os.remove(dst)
-                    try:
-                        await asyncio.to_thread(shutil.move, src, dst)
-                        moved_files += 1
-                    except FileNotFoundError:
-                        logger.warning("File not found during move: %s", src)
-            # Clean up empty source directory
+        # Move files based on DB records (source of truth)
+        result = await db.execute(
+            select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
+        )
+        for video in result.scalars().all():
+            if not video.file_path:
+                continue
+
+            # Compute new path by replacing the old root with new root
+            new_path = video.file_path.replace(old_dir, new_dir, 1)
+
+            if new_path == video.file_path:
+                continue
+
+            # Move the video file and associated files
+            if os.path.exists(video.file_path):
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                try:
+                    # Overwrite if destination exists
+                    if os.path.exists(new_path):
+                        os.remove(new_path)
+                    await asyncio.to_thread(shutil.move, video.file_path, new_path)
+                    moved_files += 1
+
+                    # Move associated files (.nfo, -thumb.jpg, .info.json)
+                    if video.file_path.endswith(".mp4"):
+                        base_old = video.file_path.rsplit(".mp4", 1)[0]
+                        base_new = new_path.rsplit(".mp4", 1)[0]
+                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                            old_extra = base_old + ext
+                            new_extra = base_new + ext
+                            if os.path.exists(old_extra):
+                                if os.path.exists(new_extra):
+                                    os.remove(new_extra)
+                                await asyncio.to_thread(shutil.move, old_extra, new_extra)
+                except Exception as e:
+                    logger.warning("Failed to move %s: %s", video.file_path, e)
+                    errors += 1
+                    continue
+
+            # Update DB path regardless (file may have already been moved manually)
+            video.file_path = new_path
+
+        # Clean up empty source directories
+        old_channel_dir = os.path.join(old_dir, safe_name)
+        if os.path.isdir(old_channel_dir):
             try:
                 shutil.rmtree(old_channel_dir)
             except OSError:
                 pass
 
-        result = await db.execute(
-            select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
-        )
-        for video in result.scalars().all():
-            if video.file_path:
-                old_base = os.path.dirname(os.path.dirname(video.file_path))
-                new_path = video.file_path.replace(old_base, os.path.join(new_dir, safe_name), 1)
-                if new_path != video.file_path:
-                    video.file_path = new_path
-                    moved_files += 1
-
+        # Update channel download_dir after all files are moved
         channel.download_dir = new_dir if new_dir != settings.DOWNLOAD_DIR else None
         await db.commit()
 
         await NotificationService.broadcast("move_complete", {
             "channel_name": channel.channel_name,
-            "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files updated)",
+            "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files, {errors} errors)",
         })
-        logger.info("Move complete for '%s': %d files updated", channel.channel_name, moved_files)
+        logger.info("Move complete for '%s': %d files moved, %d errors", channel.channel_name, moved_files, errors)
 
 
 @router.post("/{channel_id}/move-files", status_code=202)
@@ -923,7 +976,7 @@ async def move_channel_files(
     body: MoveFilesRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Start moving channel files to a new directory (runs in background)."""
+    """Start moving channel files to a new directory."""
     import asyncio
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -931,19 +984,30 @@ async def move_channel_files(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Capture the old directory before updating
+    # Capture old directory BEFORE any changes
     old_dir = channel.download_dir or settings.DOWNLOAD_DIR
 
-    # Update the directory immediately so the UI reflects the change
-    channel.download_dir = body.new_download_dir if body.new_download_dir != settings.DOWNLOAD_DIR else None
-    await db.commit()
+    # Check for same-path move
+    from app.utils.file_utils import sanitize_filename
+    import os
+    safe_name = sanitize_filename(channel.channel_name)
+    old_channel_dir = os.path.join(old_dir, safe_name)
+    new_channel_dir = os.path.join(body.new_download_dir, safe_name)
+    if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
+        return {"message": f"'{channel.channel_name}' is already in {body.new_download_dir}"}
 
+    # Count files to decide sync vs async
+    file_count = await db.scalar(
+        select(func.count(Video.id)).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
+    ) or 0
+
+    # Do NOT update channel.download_dir here - the background task handles it after move completes
     asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir, old_dir))
 
-    return {"message": f"Moving '{channel.channel_name}' to {body.new_download_dir} - this may take a while"}
+    return {"message": f"Moving '{channel.channel_name}' to {body.new_download_dir} ({file_count} files)"}
 
 
-async def _move_all_task(new_dir: str):
+async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
     """Background task to move all channels."""
     import asyncio
     import os
@@ -957,66 +1021,74 @@ async def _move_all_task(new_dir: str):
         channels = result.scalars().all()
 
         total_moved = 0
+        total_errors = 0
         channels_moved = 0
 
         for channel in channels:
-            old_dir = channel.download_dir or settings.DOWNLOAD_DIR
+            old_dir = old_dirs.get(channel.id, channel.download_dir or settings.DOWNLOAD_DIR)
             if old_dir == new_dir:
                 continue
 
             safe_name = sanitize_filename(channel.channel_name)
-            old_channel_dir = os.path.join(old_dir, safe_name)
-            if not os.path.isdir(old_channel_dir):
-                old_channel_dir = os.path.join(old_dir, channel.channel_name)
-            if not os.path.isdir(old_channel_dir):
-                vid_sample = await db.execute(
-                    select(Video.file_path).where(Video.channel_id == channel.id, Video.file_path.isnot(None)).limit(1)
-                )
-                sample = vid_sample.scalar_one_or_none()
-                if sample:
-                    parts = sample.replace(old_dir, "").strip("/").split("/")
-                    if parts:
-                        old_channel_dir = os.path.join(old_dir, parts[0])
-
             new_channel_dir = os.path.join(new_dir, safe_name)
 
+            vid_result = await db.execute(
+                select(Video).where(Video.channel_id == channel.id, Video.file_path.isnot(None))
+            )
+            channel_moved = 0
+            for video in vid_result.scalars().all():
+                if not video.file_path:
+                    continue
+
+                new_path = video.file_path.replace(old_dir, new_dir, 1)
+                if new_path == video.file_path:
+                    continue
+
+                if os.path.exists(video.file_path):
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    try:
+                        if os.path.exists(new_path):
+                            os.remove(new_path)
+                        await asyncio.to_thread(shutil.move, video.file_path, new_path)
+                        channel_moved += 1
+
+                        if video.file_path.endswith(".mp4"):
+                            base_old = video.file_path.rsplit(".mp4", 1)[0]
+                            base_new = new_path.rsplit(".mp4", 1)[0]
+                            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                                old_extra = base_old + ext
+                                new_extra = base_new + ext
+                                if os.path.exists(old_extra):
+                                    if os.path.exists(new_extra):
+                                        os.remove(new_extra)
+                                    await asyncio.to_thread(shutil.move, old_extra, new_extra)
+                    except Exception as e:
+                        logger.warning("Failed to move %s: %s", video.file_path, e)
+                        total_errors += 1
+                        continue
+
+                video.file_path = new_path
+
+            # Clean up empty source directories
+            old_channel_dir = os.path.join(old_dir, safe_name)
             if os.path.isdir(old_channel_dir):
-                for root, dirs, files in os.walk(old_channel_dir):
-                    rel_path = os.path.relpath(root, old_channel_dir)
-                    dest_dir = os.path.join(new_channel_dir, rel_path)
-                    os.makedirs(dest_dir, exist_ok=True)
-                    for f in files:
-                        src = os.path.join(root, f)
-                        dst = os.path.join(dest_dir, f)
-                        if os.path.exists(dst):
-                            os.remove(dst)
-                        await asyncio.to_thread(shutil.move, src, dst)
                 try:
                     shutil.rmtree(old_channel_dir)
                 except OSError:
                     pass
 
-                vid_result = await db.execute(
-                    select(Video).where(Video.channel_id == channel.id, Video.file_path.isnot(None))
-                )
-                for video in vid_result.scalars().all():
-                    if video.file_path:
-                        old_base = os.path.dirname(os.path.dirname(video.file_path))
-                        new_path = video.file_path.replace(old_base, os.path.join(new_dir, safe_name), 1)
-                        if new_path != video.file_path:
-                            video.file_path = new_path
-                            total_moved += 1
-
+            if channel_moved > 0:
                 channels_moved += 1
+                total_moved += channel_moved
 
-            channel.download_dir = new_dir
+            channel.download_dir = new_dir if new_dir != settings.DOWNLOAD_DIR else None
 
         await db.commit()
 
         await NotificationService.broadcast("move_complete", {
-            "message": f"Moved {channels_moved} channels to {new_dir} ({total_moved} files updated)",
+            "message": f"Moved {channels_moved} channels to {new_dir} ({total_moved} files, {total_errors} errors)",
         })
-        logger.info("Move all complete: %d channels, %d files updated", channels_moved, total_moved)
+        logger.info("Move all complete: %d channels, %d files moved, %d errors", channels_moved, total_moved, total_errors)
 
 
 @router.post("/move-all", status_code=202)
@@ -1024,12 +1096,17 @@ async def move_all_channels(
     body: MoveFilesRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Start moving all channel files to a new directory (runs in background)."""
+    """Start moving all channel files to a new directory."""
     import asyncio
 
-    asyncio.create_task(_move_all_task(body.new_download_dir))
+    # Capture all old directories BEFORE any changes
+    result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
+    channels = result.scalars().all()
+    old_dirs = {ch.id: (ch.download_dir or settings.DOWNLOAD_DIR) for ch in channels}
 
-    return {"message": f"Moving all channels to {body.new_download_dir} - this may take a while"}
+    asyncio.create_task(_move_all_task(body.new_download_dir, old_dirs))
+
+    return {"message": f"Moving all channels to {body.new_download_dir}"}
 
 
 @router.post("/{channel_id}/import/scan")
@@ -1125,7 +1202,15 @@ async def detect_channel_shorts(
     channel_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Scan existing videos and mark any with duration <= 60s as shorts."""
+    """Scan existing videos and mark any below the shorts threshold as shorts."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Use channel-specific threshold if set, otherwise default 30s
+    threshold = channel.min_video_duration if channel.min_video_duration else 30
+
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -1135,12 +1220,248 @@ async def detect_channel_shorts(
 
     detected = 0
     for video in videos:
-        if video.duration and video.duration <= 60:
+        if video.duration and video.duration <= threshold:
             video.is_short = True
             detected += 1
 
     await db.commit()
-    return {"message": f"Detected {detected} shorts", "detected": detected}
+    return {"message": f"Detected {detected} shorts (threshold: {threshold}s)", "detected": detected, "threshold": threshold}
+
+
+@router.post("/{channel_id}/shorts/detect-clean/preview")
+async def detect_clean_shorts_preview(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Preview what detect & clean would do: reclassify shorts, list files to delete, count renumbers."""
+    import os
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    threshold = channel.min_video_duration if channel.min_video_duration else 30
+
+    # Find videos that would be newly classified as shorts
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == False)
+    )
+    all_non_shorts = result.scalars().all()
+
+    new_shorts = []
+    files_to_delete = 0
+    disk_space_freed = 0
+    for video in all_non_shorts:
+        if video.duration and video.duration <= threshold:
+            new_shorts.append({
+                "video_id": video.id,
+                "title": video.title,
+                "duration": video.duration,
+                "status": video.status,
+                "has_file": bool(video.file_path and os.path.exists(video.file_path)),
+                "file_size": video.file_size or 0,
+            })
+            if video.file_path and video.status == "completed" and os.path.exists(video.file_path):
+                files_to_delete += 1
+                disk_space_freed += video.file_size or 0
+
+    # Count existing shorts with completed files
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == True)
+        .where(Video.status == "completed")
+    )
+    existing_shorts_with_files = len(result.scalars().all())
+
+    return {
+        "threshold": threshold,
+        "new_shorts_count": len(new_shorts),
+        "new_shorts": new_shorts[:50],  # Limit preview to 50
+        "existing_shorts_with_files": existing_shorts_with_files,
+        "files_to_delete": files_to_delete + existing_shorts_with_files,
+        "disk_space_freed": disk_space_freed,
+        "will_renumber": len(new_shorts) > 0,
+    }
+
+
+@router.post("/{channel_id}/shorts/detect-clean/confirm")
+async def detect_clean_shorts_confirm(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Detect shorts, delete their files, mark as skipped, and renumber remaining episodes."""
+    import os
+    from app.services.naming_service import build_output_path
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    threshold = channel.min_video_duration if channel.min_video_duration else 30
+
+    # Step 1: Detect new shorts
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == False)
+    )
+    detected = 0
+    for video in result.scalars().all():
+        if video.duration and video.duration <= threshold:
+            video.is_short = True
+            detected += 1
+
+    # Step 2: Delete files for all shorts (including previously detected)
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_short == True)
+        .where(Video.status == "completed")
+    )
+    deleted = 0
+    for video in result.scalars().all():
+        if video.file_path:
+            try:
+                if os.path.exists(video.file_path):
+                    os.remove(video.file_path)
+                    # Remove associated files
+                    if video.file_path.endswith(".mp4"):
+                        base = video.file_path.rsplit(".mp4", 1)[0]
+                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                            extra = base + ext
+                            if os.path.exists(extra):
+                                os.remove(extra)
+                    deleted += 1
+            except Exception as e:
+                logger.warning("Failed to delete short file %s: %s", video.file_path, e)
+        video.status = "skipped"
+        video.monitored = False
+        video.file_path = None
+        video.file_size = None
+
+    # Step 3: Renumber remaining episodes
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .order_by(Video.upload_date.asc(), Video.id.asc())
+    )
+    all_videos = result.scalars().all()
+    renamed = _renumber_channel_episodes(all_videos, channel)
+
+    await db.commit()
+    return {
+        "message": f"Detected {detected} shorts, deleted {deleted} files, renumbered {renamed} episodes",
+        "detected": detected,
+        "deleted": deleted,
+        "renamed": renamed,
+        "threshold": threshold,
+    }
+
+
+def _renumber_channel_episodes(videos: list, channel) -> int:
+    """Renumber episodes in chronological order. Returns count of renamed files."""
+    import os
+    import shutil
+    from app.services.naming_service import build_output_path
+
+    season_counts: dict[int, int] = {}
+    renamed = 0
+
+    for video in videos:
+        season = video.upload_date.year
+        season_counts.setdefault(season, 0)
+        season_counts[season] += 1
+        new_episode = season_counts[season]
+
+        if video.season != season or video.episode != new_episode:
+            old_path = video.file_path
+            video.season = season
+            video.episode = new_episode
+
+            if old_path and os.path.exists(old_path):
+                new_path = build_output_path(
+                    channel_name=channel.channel_name,
+                    video_title=video.title,
+                    video_id=video.video_id,
+                    upload_date=video.upload_date,
+                    season=season,
+                    episode=new_episode,
+                    naming_template=channel.naming_template,
+                    base_dir=channel.download_dir,
+                ) + ".mp4"
+
+                if old_path != new_path:
+                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                    shutil.move(old_path, new_path)
+                    video.file_path = new_path
+
+                    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                        old_extra = old_path.rsplit(".mp4", 1)[0] + ext
+                        new_extra = new_path.rsplit(".mp4", 1)[0] + ext
+                        if os.path.exists(old_extra):
+                            shutil.move(old_extra, new_extra)
+
+                    renamed += 1
+
+    return renamed
+
+
+@router.post("/{channel_id}/force-rescan", status_code=200)
+async def force_rescan(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all video records for a channel and trigger a fresh scan.
+
+    Use this to recover from stuck channels (e.g. orphan records from before
+    foreign key fixes). Removes all videos, queue entries, and logs, then
+    re-scans the channel from scratch.
+    """
+    from sqlalchemy import delete as sa_delete
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Delete all child records
+    video_ids = select(Video.id).where(Video.channel_id == channel.id)
+    await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
+    await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
+    deleted_count = await db.scalar(
+        select(func.count(Video.id)).where(Video.channel_id == channel.id)
+    ) or 0
+    await db.execute(sa_delete(Video).where(Video.channel_id == channel.id))
+
+    # Reset channel health
+    channel.health_status = "healthy"
+    channel.last_error_code = None
+    channel.total_videos = 0
+    channel.downloaded_count = 0
+
+    await db.commit()
+
+    # Trigger fresh scan
+    service = ChannelService(db)
+    try:
+        new_count = await service.scan_channel(channel)
+    except Exception as e:
+        logger.error("Force rescan failed for %s: %s", channel.channel_name, e, exc_info=True)
+        return {
+            "message": f"Cleared {deleted_count} old records but scan failed: {e}",
+            "deleted": deleted_count,
+            "new_videos": 0,
+        }
+
+    return {
+        "message": f"Cleared {deleted_count} old records, found {new_count} videos on rescan",
+        "deleted": deleted_count,
+        "new_videos": new_count,
+    }
 
 
 @router.post("/{channel_id}/import/confirm")
