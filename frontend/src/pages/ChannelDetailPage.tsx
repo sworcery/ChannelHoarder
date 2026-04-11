@@ -126,6 +126,12 @@ export default function ChannelDetailPage() {
   })
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [movingFiles, setMovingFiles] = useState(false)
+  const [movePreview, setMovePreview] = useState<any>(null)
+  const [movePreviewOpen, setMovePreviewOpen] = useState(false)
+  const [detectCleanPreview, setDetectCleanPreview] = useState<any>(null)
+  const [detectCleanOpen, setDetectCleanOpen] = useState(false)
+  const [detectCleanLoading, setDetectCleanLoading] = useState(false)
+  const [forceRescanOpen, setForceRescanOpen] = useState(false)
 
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
@@ -506,21 +512,28 @@ export default function ChannelDetailPage() {
                     Save
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       const targetDir = editDownloadDir || "/downloads"
                       setMovingFiles(true)
-                      api.moveChannelFiles(channelId, targetDir).then((r) => {
-                          invalidateVideos()
-                          queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
-                          setEditDownloadDir(null)
-                          toast(r.message)
-                        }).catch((e) => toast(e.message, "error")).finally(() => setMovingFiles(false))
+                      try {
+                        const preview = await api.moveFilesPreview(channelId, targetDir)
+                        if (preview.same_path) {
+                          toast("Files are already in that directory")
+                          return
+                        }
+                        setMovePreview(preview)
+                        setMovePreviewOpen(true)
+                      } catch (e: any) {
+                        toast(e.message, "error")
+                      } finally {
+                        setMovingFiles(false)
+                      }
                     }}
                     disabled={movingFiles}
                     className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap disabled:opacity-50"
-                    title="Move existing files to the new directory"
+                    title="Preview and move existing files to the new directory"
                   >
-                    {movingFiles ? <><Loader2 className="h-3 w-3 animate-spin" /> Moving...</> : "Save & Move"}
+                    {movingFiles ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading...</> : "Save & Move"}
                   </button>
                   </>
                 )}
@@ -543,11 +556,11 @@ export default function ChannelDetailPage() {
                         className="rounded"
                       />
                       <span className="text-sm">Include shorts when downloading</span>
-                      <HelpIcon text="Videos under 60 seconds." anchor="episode-management" />
+                      <HelpIcon text={`Videos under ${channel.min_video_duration || 30} seconds.`} anchor="episode-management" />
                     </label>
                     <p className="text-xs text-muted-foreground">
                       {channel.include_shorts
-                        ? "Shorts (videos under 60s) will be included in downloads."
+                        ? `Shorts (videos under ${channel.min_video_duration || 30}s) will be included in downloads.`
                         : "Shorts are excluded from downloads for this channel."}
                     </p>
                   </>
@@ -564,6 +577,25 @@ export default function ChannelDetailPage() {
                   >
                     {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
                     Detect Shorts
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setDetectCleanLoading(true)
+                      try {
+                        const preview = await api.detectCleanShortsPreview(channelId)
+                        setDetectCleanPreview(preview)
+                        setDetectCleanOpen(true)
+                      } catch (e: any) {
+                        toast(e.message, "error")
+                      } finally {
+                        setDetectCleanLoading(false)
+                      }
+                    }}
+                    disabled={detectCleanLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+                  >
+                    {detectCleanLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListX className="h-3 w-3" />}
+                    Detect & Clean
                   </button>
                   <button
                     onClick={async () => {
@@ -616,14 +648,24 @@ export default function ChannelDetailPage() {
             </div>
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Scan for Videos</label>
-              <button
-                onClick={() => scanMutation.mutate()}
-                disabled={scanMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${scanMutation.isPending ? "animate-spin" : ""}`} />
-                Scan Now
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => scanMutation.mutate()}
+                  disabled={scanMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${scanMutation.isPending ? "animate-spin" : ""}`} />
+                  Scan Now
+                </button>
+                <button
+                  onClick={() => setForceRescanOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                  title="Delete all video records and re-scan from scratch"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Force Re-scan
+                </button>
+              </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Last scan: {formatDateTime(channel.last_scanned_at)}
               </p>
@@ -1341,6 +1383,161 @@ export default function ChannelDetailPage() {
                 className="w-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Move Preview Dialog */}
+      {movePreviewOpen && movePreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setMovePreviewOpen(false)}>
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-3">Move Files</h3>
+            <div className="space-y-2 text-sm mb-4">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">From:</span>
+                <span className="font-mono text-xs">{movePreview.source_dir}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">To:</span>
+                <span className="font-mono text-xs">{movePreview.dest_dir}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Files to move:</span>
+                <span className="font-semibold">{movePreview.file_count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Total size:</span>
+                <span>{formatBytes(movePreview.total_size)}</span>
+              </div>
+              {movePreview.missing_count > 0 && (
+                <p className="text-xs text-amber-600">
+                  {movePreview.missing_count} files in database but missing from disk (paths will be updated anyway)
+                </p>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setMovePreviewOpen(false)}
+                className="px-4 py-2 text-sm rounded-md border hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  const targetDir = editDownloadDir || "/downloads"
+                  setMovePreviewOpen(false)
+                  setMovingFiles(true)
+                  api.moveChannelFiles(channelId, targetDir).then((r) => {
+                    invalidateVideos()
+                    queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+                    setEditDownloadDir(null)
+                    toast(r.message)
+                  }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingFiles(false))
+                }}
+                className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              >
+                Move {movePreview.file_count} Files
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detect & Clean Shorts Dialog */}
+      {detectCleanOpen && detectCleanPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDetectCleanOpen(false)}>
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-3">Detect & Clean Shorts</h3>
+            <div className="space-y-2 text-sm mb-4">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Threshold:</span>
+                <span>{detectCleanPreview.threshold}s or shorter</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">New shorts to detect:</span>
+                <span className="font-semibold">{detectCleanPreview.new_shorts_count}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Files to delete:</span>
+                <span className="font-semibold text-red-600">{detectCleanPreview.files_to_delete}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Disk space freed:</span>
+                <span>{formatBytes(detectCleanPreview.disk_space_freed)}</span>
+              </div>
+              {detectCleanPreview.will_renumber && (
+                <p className="text-xs text-muted-foreground">
+                  Episodes will be renumbered after removing shorts.
+                </p>
+              )}
+              {detectCleanPreview.new_shorts_count > 0 && (
+                <div className="mt-2 max-h-32 overflow-y-auto text-xs border rounded p-2">
+                  {detectCleanPreview.new_shorts.map((s: any) => (
+                    <div key={s.video_id} className="flex justify-between py-0.5">
+                      <span className="truncate mr-2">{s.title}</span>
+                      <span className="text-muted-foreground whitespace-nowrap">{s.duration}s</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setDetectCleanOpen(false)}
+                className="px-4 py-2 text-sm rounded-md border hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setDetectCleanOpen(false)
+                  api.detectCleanShortsConfirm(channelId).then((r) => {
+                    invalidateVideos()
+                    queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+                    toast(r.message)
+                  }).catch((e: any) => toast(e.message, "error"))
+                }}
+                disabled={detectCleanPreview.new_shorts_count === 0 && detectCleanPreview.files_to_delete === 0}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 disabled:opacity-50"
+              >
+                Detect & Clean
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Force Re-scan Dialog */}
+      {forceRescanOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setForceRescanOpen(false)}>
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Force Re-scan</h3>
+            <p className="text-sm text-muted-foreground mb-2">
+              This will <strong>delete all video records</strong> for this channel and re-scan from scratch.
+            </p>
+            <p className="text-sm text-amber-600 mb-4">
+              Downloaded files on disk are NOT deleted, but database records for existing downloads will be lost. Use this to recover from stuck channels.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setForceRescanOpen(false)}
+                className="px-4 py-2 text-sm rounded-md border hover:bg-accent"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setForceRescanOpen(false)
+                  api.forceRescan(channelId).then((r) => {
+                    invalidateVideos()
+                    queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
+                    toast(r.message)
+                  }).catch((e: any) => toast(e.message, "error"))
+                }}
+                className="px-4 py-2 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700"
+              >
+                Force Re-scan
               </button>
             </div>
           </div>

@@ -18,11 +18,22 @@ class YtdlpService:
 
     def get_channel_info(self, url: str) -> dict | None:
         """Fetch channel metadata without downloading."""
+        from app.utils.platform_utils import is_playlist_url
+
         opts = self._base_opts()
-        opts.update({
-            "extract_flat": True,
-            "playlist_items": "0",
-        })
+
+        if is_playlist_url(url):
+            # Playlists fail with playlist_items: "0" (triggers tab extraction/404)
+            # Use extract_flat: "in_playlist" and grab metadata from results
+            opts.update({
+                "extract_flat": "in_playlist",
+                "playlistend": 1,
+            })
+        else:
+            opts.update({
+                "extract_flat": True,
+                "playlist_items": "0",
+            })
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:

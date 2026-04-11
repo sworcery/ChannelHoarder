@@ -903,6 +903,9 @@ function AntiDetectTab() {
           />
           <span className="text-sm">Download subtitles and auto-generated captions</span>
         </label>
+        <p className="text-xs text-muted-foreground">
+          Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
+        </p>
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">

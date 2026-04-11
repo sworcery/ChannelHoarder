@@ -5,6 +5,24 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.13] - 2026-04-11
+
+### Added
+- **File move preview** - Save & Move and Move All now show a preview with file count, total size, and per-channel breakdown before moving anything
+- **Detect & Clean shorts** - Combined button that detects shorts below threshold, deletes their files, and renumbers remaining episodes in one action
+- **Force Re-scan** - Button to delete all video records for a stuck channel and re-scan from scratch, recovering from orphan record issues
+- **Playlist support fix** - Playlist URLs no longer return "could not find channel" error (uses different extraction method for playlists)
+
+### Changed
+- **Shorts threshold lowered** - Default shorts detection threshold changed from 60s to 30s; per-channel minimum duration setting is used when configured
+- **Cookie preservation on auth failure** - Cookie file is no longer auto-deleted when auth expires; instead it's flagged and the queue is paused, preventing the Tampermonkey cookie de-auth loop
+- **File move reliability** - Move tasks now use DB file_path records as source of truth instead of guessing directory names; channel download_dir is updated after move completes (not before), eliminating race conditions
+- **Subtitle limitation note** - Settings page now notes that PO token authentication has limited subtitle/caption support
+
+### Fixed
+- **File move race condition** - Channel download_dir was being updated before the background move task ran, causing path mismatches
+- **Move All captures old directories** - All channel directories are now captured before any changes, preventing incorrect path replacements during bulk moves
+
 ## [1.5.7] - 2026-04-08
 
 ### Fixed

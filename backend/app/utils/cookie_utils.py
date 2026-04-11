@@ -12,8 +12,10 @@ logger = logging.getLogger(__name__)
 async def flag_cookies_expired(db: AsyncSession) -> None:
     """Flag cookies as expired and auto-pause the download queue.
 
-    Sets both 'cookies_expired' and 'queue_paused' AppSettings to 'true',
-    and deletes the local cookies file so the watcher can re-import.
+    Sets both 'cookies_expired' and 'queue_paused' AppSettings to 'true'.
+    Does NOT delete the cookie file - the user can re-upload or let
+    Tampermonkey/watcher push fresh ones. Deleting the file causes a loop
+    where freshly pushed cookies get invalidated by in-flight failures.
     """
     for key, value in [("cookies_expired", "true"), ("queue_paused", "true")]:
         result = await db.execute(
@@ -25,5 +27,4 @@ async def flag_cookies_expired(db: AsyncSession) -> None:
         else:
             db.add(AppSetting(key=key, value=value))
 
-    settings.cookies_path.unlink(missing_ok=True)
-    logger.warning("Cookies expired  - queue auto-paused, cookies deleted")
+    logger.warning("Cookies flagged as expired - queue auto-paused (cookie file preserved)")

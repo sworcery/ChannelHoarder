@@ -2,7 +2,7 @@ import { useState, useMemo } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
-import { formatDateTime } from "@/lib/utils"
+import { formatDateTime, formatBytes } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
@@ -54,6 +54,8 @@ export default function ChannelsPage() {
   const [moveAllDir, setMoveAllDir] = useState("")
   const [showMoveAll, setShowMoveAll] = useState(false)
   const [movingAll, setMovingAll] = useState(false)
+  const [moveAllPreview, setMoveAllPreview] = useState<any>(null)
+  const [moveAllPreviewLoading, setMoveAllPreviewLoading] = useState(false)
   const [autoDownload, setAutoDownload] = useState(true)
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>(() => getStored("ch_view", "grid"))
@@ -527,48 +529,109 @@ export default function ChannelsPage() {
       {/* Move All Dialog */}
       {showMoveAll && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card rounded-lg p-6 w-full max-w-md mx-4 border shadow-lg">
+          <div className="bg-card rounded-lg p-6 w-full max-w-lg mx-4 border shadow-lg">
             <h2 className="text-lg font-semibold mb-4">Move All Channels</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              Move all channel files to a new root directory. File paths in the database will be updated automatically.
-            </p>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">New Download Directory</label>
-                <input
-                  type="text"
-                  placeholder="/downloads/youtube"
-                  value={moveAllDir}
-                  onChange={(e) => setMoveAllDir(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => { setShowMoveAll(false); setMoveAllDir("") }}
-                  className="px-4 py-2 rounded-md border hover:bg-accent"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => {
-                    if (moveAllDir) {
+            {!moveAllPreview ? (
+              <>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Move all channel files to a new root directory. File paths in the database will be updated automatically.
+                </p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">New Download Directory</label>
+                    <input
+                      type="text"
+                      placeholder="/downloads/youtube"
+                      value={moveAllDir}
+                      onChange={(e) => setMoveAllDir(e.target.value)}
+                      className="w-full px-3 py-2 rounded-md border bg-background"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }}
+                      className="px-4 py-2 rounded-md border hover:bg-accent"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (moveAllDir) {
+                          setMoveAllPreviewLoading(true)
+                          try {
+                            const preview = await api.moveAllPreview(moveAllDir)
+                            if (preview.channels_to_move === 0) {
+                              toast("All channels are already in that directory")
+                              return
+                            }
+                            setMoveAllPreview(preview)
+                          } catch (e: any) {
+                            toast(e.message, "error")
+                          } finally {
+                            setMoveAllPreviewLoading(false)
+                          }
+                        }
+                      }}
+                      disabled={!moveAllDir || moveAllPreviewLoading}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {moveAllPreviewLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading...</> : "Preview"}
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 text-sm mb-4">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Channels to move:</span>
+                    <span className="font-semibold">{moveAllPreview.channels_to_move}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total files:</span>
+                    <span className="font-semibold">{moveAllPreview.total_files}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total size:</span>
+                    <span>{formatBytes(moveAllPreview.total_size)}</span>
+                  </div>
+                  {moveAllPreview.channels.length > 0 && (
+                    <div className="mt-2 max-h-48 overflow-y-auto text-xs border rounded p-2">
+                      {moveAllPreview.channels.map((ch: any) => (
+                        <div key={ch.channel_id} className="flex justify-between py-0.5">
+                          <span className="truncate mr-2">{ch.channel_name}</span>
+                          <span className="text-muted-foreground whitespace-nowrap">{ch.file_count} files</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    onClick={() => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }}
+                    className="px-4 py-2 rounded-md border hover:bg-accent"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
                       setMovingAll(true)
                       api.moveAllChannels(moveAllDir).then((r) => {
                         queryClient.invalidateQueries({ queryKey: ["channels"] })
                         setShowMoveAll(false)
                         setMoveAllDir("")
+                        setMoveAllPreview(null)
                         toast(r.message)
-                      }).catch((e) => toast(e.message, "error")).finally(() => setMovingAll(false))
-                    }
-                  }}
-                  disabled={!moveAllDir || movingAll}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-                >
-                  {movingAll ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving...</> : "Move All"}
-                </button>
-              </div>
-            </div>
+                      }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingAll(false))
+                    }}
+                    disabled={movingAll}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {movingAll ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving...</> : `Move ${moveAllPreview.total_files} Files`}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
