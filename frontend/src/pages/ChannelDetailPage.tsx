@@ -50,6 +50,7 @@ export default function ChannelDetailPage() {
   const [searchInput, setSearchInput] = useState("")
   const [page, setPage] = useState(0)
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
+  const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importFolder, setImportFolder] = useState("")
   const [importMatches, setImportMatches] = useState<any[] | null>(null)
@@ -461,14 +462,27 @@ export default function ChannelDetailPage() {
             </div>
             <div>
               <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon text="Skip videos shorter than this (seconds)." anchor="downloads" /></label>
-              <input
-                type="number"
-                value={channel.min_video_duration || ""}
-                placeholder="0 (disabled)"
-                onChange={(e) => updateMutation.mutate({ min_video_duration: Number(e.target.value) || null })}
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                min={0}
-              />
+              <div className="flex gap-1">
+                <input
+                  type="number"
+                  value={editMinDuration ?? (channel.min_video_duration || "")}
+                  placeholder="0 (disabled)"
+                  onChange={(e) => setEditMinDuration(e.target.value)}
+                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                  min={0}
+                />
+                {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
+                  <button
+                    onClick={() => {
+                      updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
+                      setEditMinDuration(null)
+                    }}
+                    className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                  >
+                    Save
+                  </button>
+                )}
+              </div>
             </div>
             <div>
               <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
