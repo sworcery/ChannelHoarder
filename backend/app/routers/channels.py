@@ -867,7 +867,10 @@ async def _move_channel_task(channel_id: int, new_dir: str):
 
         logger.info("Moving channel '%s': %s -> %s", channel.channel_name, old_channel_dir, new_channel_dir)
 
-        if os.path.isdir(old_channel_dir):
+        # Skip if source and destination are the same
+        if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
+            logger.info("Source and destination are the same, skipping move for '%s'", channel.channel_name)
+        elif os.path.isdir(old_channel_dir):
             # Move files individually to handle existing destination
             for root, dirs, files in os.walk(old_channel_dir):
                 rel_path = os.path.relpath(root, old_channel_dir)
@@ -876,10 +879,15 @@ async def _move_channel_task(channel_id: int, new_dir: str):
                 for f in files:
                     src = os.path.join(root, f)
                     dst = os.path.join(dest_dir, f)
+                    if src == dst:
+                        continue
                     if os.path.exists(dst):
                         os.remove(dst)
-                    await asyncio.to_thread(shutil.move, src, dst)
-                    moved_files += 1
+                    try:
+                        await asyncio.to_thread(shutil.move, src, dst)
+                        moved_files += 1
+                    except FileNotFoundError:
+                        logger.warning("File not found during move: %s", src)
             # Clean up empty source directory
             try:
                 shutil.rmtree(old_channel_dir)
