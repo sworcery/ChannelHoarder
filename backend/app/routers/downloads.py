@@ -370,7 +370,7 @@ async def _get_or_create_standalone_channel(db: AsyncSession, download_dir: Opti
             quality="best",
             enabled=False,  # Don't scan this "channel"
             health_status="healthy",
-            download_dir=download_dir or app_settings.DOWNLOAD_DIR,
+            download_dir=download_dir or app_settings.standalone_dir,
         )
         db.add(channel)
         await db.commit()
@@ -488,8 +488,8 @@ async def get_standalone_settings(db: AsyncSession = Depends(get_db)):
     )
     channel = result.scalar_one_or_none()
     return {
-        "download_dir": channel.download_dir if channel else app_settings.DOWNLOAD_DIR,
-        "default_dir": app_settings.DOWNLOAD_DIR,
+        "download_dir": channel.download_dir if channel else app_settings.standalone_dir,
+        "default_dir": app_settings.standalone_dir,
     }
 
 
