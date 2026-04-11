@@ -11,6 +11,7 @@ services:
     volumes:
       - ./config:/config
       - ./downloads:/downloads
+      - ./standalone:/StandaloneDownloads
       - ./cookies:/cookies
     environment:
       - PUID=1000
