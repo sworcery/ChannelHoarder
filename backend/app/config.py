@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     def standalone_dir(self) -> str:
         if self.STANDALONE_DOWNLOAD_DIR:
             return self.STANDALONE_DOWNLOAD_DIR
-        return os.path.join(self.DOWNLOAD_DIR, "StandaloneDownloads")
+        return "/StandaloneDownloads"
 
     @property
     def allowed_download_roots(self) -> list[str]:
