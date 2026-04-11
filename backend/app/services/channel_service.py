@@ -325,12 +325,47 @@ class ChannelService:
             )
 
             # Re-check existence right before insert to handle concurrent scans
+            # and orphan records from previously deleted channels
             existing_check = await self.db.execute(
-                select(Video.id).where(Video.video_id == vid_id).limit(1)
+                select(Video).where(Video.video_id == vid_id).limit(1)
             )
-            if existing_check.scalar_one_or_none() is not None:
-                logger.debug("Skipping video %s (inserted by concurrent scan)", vid_id)
-                continue
+            existing_video = existing_check.scalar_one_or_none()
+            if existing_video is not None:
+                if existing_video.channel_id == channel.id:
+                    # Same channel, concurrent scan already inserted it
+                    logger.debug("Skipping video %s (already exists for this channel)", vid_id)
+                    continue
+                # Orphan record from a deleted channel -- check if old channel still exists
+                old_channel_check = await self.db.execute(
+                    select(Channel.id).where(Channel.id == existing_video.channel_id).limit(1)
+                )
+                if old_channel_check.scalar_one_or_none() is None:
+                    # Orphan: old channel was deleted, claim this video for the new channel
+                    logger.info("Claiming orphan video %s (old channel_id=%d no longer exists)",
+                                vid_id, existing_video.channel_id)
+                    existing_video.channel_id = channel.id
+                    existing_video.title = title
+                    existing_video.description = description
+                    existing_video.upload_date = upload_date
+                    existing_video.duration = duration
+                    existing_video.thumbnail_url = thumbnail
+                    existing_video.season = season
+                    existing_video.episode = episode
+                    existing_video.status = "pending"
+                    existing_video.monitored = True
+                    existing_video.is_short = False
+                    existing_video.file_path = None
+                    existing_video.file_size = None
+                    existing_video.quality_downloaded = None
+                    existing_video.error_code = None
+                    existing_video.error_message = None
+                    existing_video.error_details = None
+                    existing_video.retry_count = 0
+                    video = existing_video  # Use the existing record for shorts/queue logic below
+                else:
+                    # Video belongs to a different, active channel -- skip
+                    logger.debug("Skipping video %s (belongs to channel_id=%d)", vid_id, existing_video.channel_id)
+                    continue
 
             self.db.add(video)
             try:

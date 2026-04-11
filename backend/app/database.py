@@ -1,8 +1,12 @@
+import logging
+
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
     settings.db_url,
@@ -94,6 +98,25 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE download_queue ADD COLUMN estimated_size BIGINT")
             )
+
+        # Clean up orphan records: videos whose channel no longer exists
+        orphan_count = await conn.execute(text(
+            "SELECT COUNT(*) FROM videos WHERE channel_id NOT IN (SELECT id FROM channels)"
+        ))
+        count = orphan_count.scalar() or 0
+        if count > 0:
+            await conn.execute(text(
+                "DELETE FROM download_queue WHERE video_id IN "
+                "(SELECT id FROM videos WHERE channel_id NOT IN (SELECT id FROM channels))"
+            ))
+            await conn.execute(text(
+                "DELETE FROM download_logs WHERE video_id IN "
+                "(SELECT id FROM videos WHERE channel_id NOT IN (SELECT id FROM channels))"
+            ))
+            await conn.execute(text(
+                "DELETE FROM videos WHERE channel_id NOT IN (SELECT id FROM channels)"
+            ))
+            logger.info("Cleaned up %d orphan video records on startup", count)
 
 
 # Note: get_db() dependency is defined in deps.py  - do not duplicate here
