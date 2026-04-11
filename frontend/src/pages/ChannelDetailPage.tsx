@@ -119,10 +119,11 @@ export default function ChannelDetailPage() {
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () => api.deleteChannel(channelId, false),
+    mutationFn: (deleteFiles: boolean) => api.deleteChannel(channelId, deleteFiles),
     onSuccess: () => { navigate("/channels"); toast("Channel deleted") },
     onError: (e: Error) => toast(e.message, "error"),
   })
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
@@ -403,7 +404,7 @@ export default function ChannelDetailPage() {
               Download All
             </button>
             <button
-              onClick={() => { if (confirm("Delete this channel?")) deleteMutation.mutate() }}
+              onClick={() => setDeleteDialogOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
             >
               <Trash2 className="h-4 w-4" />
@@ -1273,6 +1274,39 @@ export default function ChannelDetailPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+      {/* Delete Channel Dialog */}
+      {deleteDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setDeleteDialogOpen(false)}>
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-2">Delete Channel</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Are you sure you want to delete <strong>{channel.channel_name}</strong>?
+            </p>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => { deleteMutation.mutate(false); setDeleteDialogOpen(false) }}
+                disabled={deleteMutation.isPending}
+                className="w-full px-4 py-2 text-sm rounded-md border hover:bg-muted"
+              >
+                Delete channel only (keep files)
+              </button>
+              <button
+                onClick={() => { deleteMutation.mutate(true); setDeleteDialogOpen(false) }}
+                disabled={deleteMutation.isPending}
+                className="w-full px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete channel and all files
+              </button>
+              <button
+                onClick={() => setDeleteDialogOpen(false)}
+                className="w-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

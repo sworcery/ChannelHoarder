@@ -25,6 +25,20 @@ _DEFAULTS = {
 }
 
 
+async def get_all_settings() -> dict:
+    """Read all settings from the DB as a flat dict."""
+    from app.database import async_session
+    async with async_session() as db:
+        result = await db.execute(select(AppSetting))
+        settings_dict = {}
+        for s in result.scalars().all():
+            try:
+                settings_dict[s.key] = json.loads(s.value)
+            except (json.JSONDecodeError, TypeError):
+                settings_dict[s.key] = s.value
+        return settings_dict
+
+
 async def get_setting(db: AsyncSession, key: str, default=None):
     """Read a setting from the DB, falling back to config.py default."""
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))

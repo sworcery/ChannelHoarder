@@ -746,6 +746,10 @@ function AntiDetectTab() {
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
+  const [setPermissions, setSetPermissions] = useState(false)
+  const [chmodFolder, setChmodFolder] = useState("755")
+  const [chmodFile, setChmodFile] = useState("644")
+  const [chownGroup, setChownGroup] = useState("")
 
   const { data: settings } = useQuery({
     queryKey: ["app-settings"],
@@ -761,6 +765,10 @@ function AntiDetectTab() {
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
+      if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
+      if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
+      if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
+      if (settings.chown_group) setChownGroup(String(settings.chown_group))
     }
   }, [settings])
 
@@ -774,6 +782,10 @@ function AntiDetectTab() {
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
         subtitles_enabled: subtitlesEnabled,
+        set_permissions: setPermissions,
+        chmod_folder: chmodFolder,
+        chmod_file: chmodFile,
+        chown_group: chownGroup || null,
       }),
     onSuccess: () => toast("Anti-detection settings saved"),
     onError: (e: Error) => toast(e.message, "error"),
@@ -879,6 +891,56 @@ function AntiDetectTab() {
           />
           <span className="text-sm">Download subtitles and auto-generated captions</span>
         </label>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">File Permissions</h3>
+          <HelpIcon text="Apply chmod/chown after downloading files." anchor="configuration" />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={setPermissions}
+            onChange={(e) => setSetPermissions(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Set permissions on downloaded files</span>
+        </label>
+        {setPermissions && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Folder chmod</label>
+              <input
+                type="text"
+                value={chmodFolder}
+                onChange={(e) => setChmodFolder(e.target.value)}
+                placeholder="755"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">File chmod</label>
+              <input
+                type="text"
+                value={chmodFile}
+                onChange={(e) => setChmodFile(e.target.value)}
+                placeholder="644"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">chown group</label>
+              <input
+                type="text"
+                value={chownGroup}
+                onChange={(e) => setChownGroup(e.target.value)}
+                placeholder="Group name or GID"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">
