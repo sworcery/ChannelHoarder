@@ -16,7 +16,10 @@ import {
 } from "lucide-react"
 
 export default function DiagnosticsPage() {
-  const [tab, setTab] = useState<"overview" | "logs" | "system-logs">("overview")
+  const [tab, setTab] = useState<"overview" | "logs" | "system-logs">(() => {
+    const saved = localStorage.getItem("diagnostics_tab")
+    return (saved as any) || "overview"
+  })
   const [logSearch, setLogSearch] = useState("")
   const [logPage, setLogPage] = useState(0)
   const [expandedLog, setExpandedLog] = useState<number | null>(null)
@@ -106,19 +109,19 @@ export default function DiagnosticsPage() {
 
       <div className="flex gap-1 border-b">
         <button
-          onClick={() => setTab("overview")}
+          onClick={() => { setTab("overview"); localStorage.setItem("diagnostics_tab", "overview") }}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
         >
           System Overview
         </button>
         <button
-          onClick={() => setTab("logs")}
+          onClick={() => { setTab("logs"); localStorage.setItem("diagnostics_tab", "logs") }}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
         >
           Error Logs
         </button>
         <button
-          onClick={() => setTab("system-logs")}
+          onClick={() => { setTab("system-logs"); localStorage.setItem("diagnostics_tab", "system-logs") }}
           className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "system-logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
         >
           System Logs
