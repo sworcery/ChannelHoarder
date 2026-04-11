@@ -504,7 +504,7 @@ export default function ChannelDetailPage() {
                     className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
                     title="Move existing files to the new directory"
                   >
-                    Move Files
+                    Save & Move
                   </button>
                   </>
                 )}
