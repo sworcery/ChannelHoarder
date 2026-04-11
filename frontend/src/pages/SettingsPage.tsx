@@ -24,7 +24,10 @@ import {
 } from "lucide-react"
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"general" | "auth" | "naming" | "ytdlp" | "antidetect" | "notifications">("general")
+  const [tab, setTab] = useState<"general" | "auth" | "naming" | "ytdlp" | "antidetect" | "notifications">(() => {
+    const saved = localStorage.getItem("settings_tab")
+    return (saved as any) || "general"
+  })
 
   const tabs = [
     { key: "general", label: "General" },
@@ -43,7 +46,7 @@ export default function SettingsPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setTab(t.key)}
+            onClick={() => { setTab(t.key); localStorage.setItem("settings_tab", t.key) }}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               tab === t.key
                 ? "border-primary text-primary"
