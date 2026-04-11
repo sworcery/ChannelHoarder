@@ -29,21 +29,32 @@ if not USERSCRIPT_TEMPLATE.exists():
 async def get_all_settings(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(AppSetting))
     settings_list = result.scalars().all()
-    return {s.key: json.loads(s.value) for s in settings_list}
+    settings_dict = {}
+    for s in settings_list:
+        try:
+            settings_dict[s.key] = json.loads(s.value)
+        except (json.JSONDecodeError, TypeError):
+            settings_dict[s.key] = s.value
+    logger.debug("Returning %d settings: %s", len(settings_dict), list(settings_dict.keys()))
+    return settings_dict
 
 
 @router.put("/")
 async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     update_data = body.model_dump(exclude_unset=True)
+    logger.info("Saving settings: %s", list(update_data.keys()))
     for key, value in update_data.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting:
             setting.value = json.dumps(value)
+            logger.debug("Updated setting %s = %s", key, json.dumps(value))
         else:
             db.add(AppSetting(key=key, value=json.dumps(value)))
+            logger.debug("Created setting %s = %s", key, json.dumps(value))
 
     await db.commit()
+    logger.info("Settings committed to database")
 
     # Apply runtime-reactive settings immediately
     if "global_schedule_cron" in update_data:
