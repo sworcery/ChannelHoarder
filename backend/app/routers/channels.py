@@ -831,7 +831,7 @@ class MoveFilesRequest(BaseModel):
     new_download_dir: str = Field(..., min_length=1)
 
 
-async def _move_channel_task(channel_id: int, new_dir: str):
+async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str | None = None):
     """Background task to move a channel's files."""
     import asyncio
     import os
@@ -845,7 +845,9 @@ async def _move_channel_task(channel_id: int, new_dir: str):
         if not channel:
             return
 
-        old_dir = channel.download_dir or settings.DOWNLOAD_DIR
+        # Use passed old_dir (captured before DB update), fall back to channel's current dir
+        if not old_dir:
+            old_dir = channel.download_dir or settings.DOWNLOAD_DIR
         safe_name = sanitize_filename(channel.channel_name)
 
         # Find the actual channel folder
@@ -929,11 +931,14 @@ async def move_channel_files(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    # Capture the old directory before updating
+    old_dir = channel.download_dir or settings.DOWNLOAD_DIR
+
     # Update the directory immediately so the UI reflects the change
     channel.download_dir = body.new_download_dir if body.new_download_dir != settings.DOWNLOAD_DIR else None
     await db.commit()
 
-    asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir))
+    asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir, old_dir))
 
     return {"message": f"Moving '{channel.channel_name}' to {body.new_download_dir} - this may take a while"}
 
