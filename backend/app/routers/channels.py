@@ -794,6 +794,143 @@ async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
     return {"message": f"Queued {queued} videos for quality upgrade", "queued": queued}
 
 
+@router.post("/{channel_id}/download-subtitles", status_code=202)
+async def download_channel_subtitles(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download subtitles for all completed videos in a channel (runs in background)."""
+    import asyncio
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Count eligible videos
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.status == "completed")
+        .where(Video.file_path.isnot(None))
+    )
+    videos = result.scalars().all()
+    eligible = sum(1 for v in videos if v.file_path and not _has_subtitles(v.file_path))
+
+    if eligible == 0:
+        return {"message": "All videos already have subtitles or no completed videos found", "downloaded": 0}
+
+    asyncio.create_task(_download_channel_subtitles_task(channel_id, channel.channel_name))
+
+    return {"message": f"Downloading subtitles for {eligible} videos in '{channel.channel_name}'"}
+
+
+@router.post("/{channel_id}/videos/{video_id}/download-subtitles")
+async def download_video_subtitles(
+    channel_id: int,
+    video_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Download subtitles for a single video."""
+    import asyncio
+
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    if not video.file_path:
+        raise HTTPException(status_code=400, detail="No file on disk for this video")
+
+    if _has_subtitles(video.file_path):
+        return {"message": "Subtitles already exist for this video", "downloaded": False}
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    platform = channel.platform if channel else "youtube"
+
+    from app.utils.platform_utils import build_video_url
+    video_url = build_video_url(platform, video.video_id)
+    output_base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+
+    from app.services.ytdlp_service import YtdlpService
+    ytdlp = YtdlpService()
+    success = await asyncio.to_thread(
+        ytdlp.download_subtitles_only, video_url, output_base, platform
+    )
+
+    if success:
+        return {"message": f"Subtitles downloaded for '{video.title}'", "downloaded": True}
+    return {"message": f"No subtitles available for '{video.title}'", "downloaded": False}
+
+
+def _has_subtitles(file_path: str) -> bool:
+    """Check if subtitle files already exist next to a video file."""
+    import os
+    if not file_path:
+        return False
+    base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
+    for ext in [".en.vtt", ".en.srt", ".en.ass"]:
+        if os.path.exists(base + ext):
+            return True
+    return False
+
+
+async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
+    """Background task to download subtitles for all completed videos in a channel."""
+    import asyncio
+    from app.database import async_session
+    from app.utils.platform_utils import build_video_url
+    from app.services.ytdlp_service import YtdlpService
+    from app.services.notification_service import NotificationService
+
+    async with async_session() as db:
+        result = await db.execute(select(Channel).where(Channel.id == channel_id))
+        channel = result.scalar_one_or_none()
+        if not channel:
+            return
+
+        platform = channel.platform or "youtube"
+
+        result = await db.execute(
+            select(Video)
+            .where(Video.channel_id == channel_id)
+            .where(Video.status == "completed")
+            .where(Video.file_path.isnot(None))
+        )
+        videos = result.scalars().all()
+
+        ytdlp = YtdlpService()
+        downloaded = 0
+        skipped = 0
+        failed = 0
+
+        for video in videos:
+            if not video.file_path or _has_subtitles(video.file_path):
+                skipped += 1
+                continue
+
+            video_url = build_video_url(platform, video.video_id)
+            output_base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+
+            success = await asyncio.to_thread(
+                ytdlp.download_subtitles_only, video_url, output_base, platform
+            )
+            if success:
+                downloaded += 1
+            else:
+                failed += 1
+
+        await NotificationService.broadcast("subtitles_complete", {
+            "channel_name": channel_name,
+            "message": f"Subtitles for '{channel_name}': {downloaded} downloaded, {skipped} skipped, {failed} failed",
+        })
+        logger.info("Subtitle download complete for '%s': %d downloaded, %d skipped, %d failed",
+                     channel_name, downloaded, skipped, failed)
+
+
 class MoveFilesRequest(BaseModel):
     new_download_dir: str = Field(..., min_length=1)
 

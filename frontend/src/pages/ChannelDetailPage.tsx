@@ -624,6 +624,24 @@ export default function ChannelDetailPage() {
           )}
         </div>
 
+        {/* Subtitles */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
+          <button
+            onClick={() => {
+              api.downloadChannelSubtitles(channelId).then((r) => toast(r.message)).catch((e: any) => toast(e.message, "error"))
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
+            title="Download subtitles for all completed videos that don't have them yet"
+          >
+            <Download className="h-3 w-3" />
+            Download Missing Subtitles
+          </button>
+          <p className="text-xs text-muted-foreground mt-1">
+            Fetches English subtitles and auto-generated captions for completed videos without existing subtitle files.
+          </p>
+        </div>
+
         {/* Monitoring */}
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Monitoring</p>
@@ -936,6 +954,9 @@ export default function ChannelDetailPage() {
                                 <>
                                   <DropdownItem onClick={() => api.renameVideoFile(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })}>
                                     <FileEdit className="h-3.5 w-3.5" /> Rename File
+                                  </DropdownItem>
+                                  <DropdownItem onClick={() => api.downloadVideoSubtitles(channelId, video.id).then((r) => toast(r.message)).catch((e: any) => toast(e.message, "error"))}>
+                                    <Download className="h-3.5 w-3.5" /> Download Subtitles
                                   </DropdownItem>
                                   <DropdownItem onClick={() => api.deleteVideoFile(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })} variant="danger">
                                     <FileX className="h-3.5 w-3.5" /> Delete File
