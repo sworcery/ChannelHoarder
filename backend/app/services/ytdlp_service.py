@@ -196,6 +196,43 @@ class YtdlpService:
         finally:
             self._cleanup_cookie_tmp(opts)
 
+    def download_subtitles_only(
+        self,
+        video_url: str,
+        output_path: str,
+        platform: str = "youtube",
+    ) -> bool:
+        """Download only subtitles for a video without re-downloading the video itself.
+
+        Args:
+            video_url: The video URL to fetch subtitles for
+            output_path: Base output path (without extension) -- subtitles land as .en.vtt next to it
+            platform: Platform identifier
+
+        Returns:
+            True if subtitles were downloaded, False otherwise
+        """
+        opts = self._base_opts(platform=platform)
+        opts.update({
+            "skip_download": True,
+            "writesubtitles": True,
+            "writeautomaticsub": True,
+            "subtitleslangs": ["en"],
+            "outtmpl": output_path + ".%(ext)s",
+            "quiet": True,
+            "no_warnings": True,
+        })
+
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.extract_info(video_url, download=True)
+                return True
+        except Exception as e:
+            logger.warning("Subtitle download failed for %s: %s", video_url, e)
+            return False
+        finally:
+            self._cleanup_cookie_tmp(opts)
+
     def get_version(self) -> str:
         """Get current yt-dlp version."""
         try:

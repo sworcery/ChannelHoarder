@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.17] - 2026-04-11
+
+### Added
+- **Download subtitles for existing videos** - New "Download Missing Subtitles" button on channel detail page fetches English subtitles and auto-generated captions for all completed videos without re-downloading the video. Also available per-episode from the dropdown menu. Runs in the background for bulk operations.
+
 ## [1.7.16] - 2026-04-11
 
 ### Fixed

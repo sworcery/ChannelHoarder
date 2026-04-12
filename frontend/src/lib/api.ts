@@ -118,6 +118,12 @@ export const api = {
   upgradeQuality: (channelId: number) =>
     request<any>(`/channels/${channelId}/upgrade-quality`, { method: "POST" }),
 
+  // Subtitle management
+  downloadChannelSubtitles: (channelId: number) =>
+    request<any>(`/channels/${channelId}/download-subtitles`, { method: "POST" }),
+  downloadVideoSubtitles: (channelId: number, videoId: number) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/download-subtitles`, { method: "POST" }),
+
   // Season management
   monitorSeason: (channelId: number, season: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/seasons/${season}/monitor`, { method: "POST", body: JSON.stringify({ monitored }) }),
