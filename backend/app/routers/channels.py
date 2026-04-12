@@ -488,7 +488,7 @@ async def delete_video(
     files_removed = False
     if delete_files and video.file_path:
         base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
             path = base + ext
             if os.path.exists(path):
                 os.remove(path)
@@ -529,7 +529,7 @@ async def redownload_video(
     # Delete existing file if present
     if video.file_path:
         base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
             path = base + ext
             if os.path.exists(path):
                 os.remove(path)
@@ -570,7 +570,7 @@ async def delete_video_file(
     files_removed = False
     if video.file_path:
         base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
             path = base + ext
             if os.path.exists(path):
                 os.remove(path)
@@ -631,7 +631,7 @@ async def rename_video_file(
     video.file_path = new_path
 
     # Move associated files
-    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
         old_extra = old_path.rsplit(".mp4", 1)[0] + ext
         new_extra = new_path.rsplit(".mp4", 1)[0] + ext
         if os.path.exists(old_extra):
@@ -1073,7 +1073,7 @@ async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
                     if video.file_path.endswith(".mp4"):
                         base_old = video.file_path.rsplit(".mp4", 1)[0]
                         base_new = new_path.rsplit(".mp4", 1)[0]
-                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
                             old_extra = base_old + ext
                             new_extra = base_new + ext
                             if os.path.exists(old_extra):
@@ -1192,7 +1192,7 @@ async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
                         if video.file_path.endswith(".mp4"):
                             base_old = video.file_path.rsplit(".mp4", 1)[0]
                             base_new = new_path.rsplit(".mp4", 1)[0]
-                            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
                                 old_extra = base_old + ext
                                 new_extra = base_new + ext
                                 if os.path.exists(old_extra):
@@ -1317,13 +1317,15 @@ async def delete_channel_shorts(
     for video in videos:
         if video.file_path:
             try:
+                base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
                 if os.path.exists(video.file_path):
                     os.remove(video.file_path)
-                    # Also remove .nfo if present
-                    nfo_path = video.file_path.rsplit(".", 1)[0] + ".nfo"
-                    if os.path.exists(nfo_path):
-                        os.remove(nfo_path)
                     deleted += 1
+                # Remove associated files
+                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                    extra = base + ext
+                    if os.path.exists(extra):
+                        os.remove(extra)
             except Exception as e:
                 logger.warning("Failed to delete short file %s: %s", video.file_path, e)
         video.status = "skipped"
@@ -1468,7 +1470,7 @@ async def detect_clean_shorts_confirm(
                     # Remove associated files
                     if video.file_path.endswith(".mp4"):
                         base = video.file_path.rsplit(".mp4", 1)[0]
-                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
                             extra = base + ext
                             if os.path.exists(extra):
                                 os.remove(extra)
@@ -1536,7 +1538,7 @@ def _renumber_channel_episodes(videos: list, channel) -> int:
                     shutil.move(old_path, new_path)
                     video.file_path = new_path
 
-                    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
                         old_extra = old_path.rsplit(".mp4", 1)[0] + ext
                         new_extra = new_path.rsplit(".mp4", 1)[0] + ext
                         if os.path.exists(old_extra):
