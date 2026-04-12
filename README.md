@@ -53,7 +53,7 @@
 - **Bulk Video Management** - Select multiple videos to queue, skip, unskip, monitor, or unmonitor at once
 - **Import Existing Files** - Scan a folder of previously downloaded videos and match them to channel entries by title
 - **Livestream / Long Video Filter** - Auto-skip videos over a configurable duration, with optional notification for manual review
-- **YouTube Shorts Filter** - Shorts (videos under 60 seconds) are excluded by default. Global toggle with per-channel opt-in.
+- **YouTube Shorts Filter** - Shorts (videos under 30 seconds) are excluded by default. Global toggle with per-channel opt-in, configurable threshold via min duration setting.
 
 ### Authentication
 - **Smart Auth** - Uses cookies as primary auth when available, falls back to PO tokens only when needed
@@ -441,7 +441,7 @@ All endpoints are under `/api/v1/`:
 
 ## Known Limitations
 
-- **YouTube Shorts**  - Videos ≤60 seconds are skipped by default (configurable per channel)
+- **YouTube Shorts**  - Videos ≤30 seconds are skipped by default (configurable per channel)
 - **Livestreams / long videos**  - Videos over the max duration setting are skipped by default
 - **Geo-blocked content**  - Cannot download region-restricted videos
 - **Private / deleted videos**  - Automatically skipped if no longer available

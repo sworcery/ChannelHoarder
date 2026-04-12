@@ -525,11 +525,12 @@ class ChannelService:
                 renamed_count += 1
                 logger.info("Renamed: %s -> %s", old_path, expected_path)
 
-                # Also move accompanying .nfo file if present
-                old_nfo = old_path.with_suffix(".nfo")
-                if old_nfo.exists():
-                    new_nfo = expected_path.with_suffix(".nfo")
-                    await asyncio.to_thread(shutil.move, str(old_nfo), str(new_nfo))
+                # Also move accompanying files (.nfo, subtitles) if present
+                for suffix in [".nfo", ".en.vtt", ".en.srt"]:
+                    old_extra = old_path.with_suffix(suffix)
+                    if old_extra.exists():
+                        new_extra = expected_path.with_suffix(suffix)
+                        await asyncio.to_thread(shutil.move, str(old_extra), str(new_extra))
 
                 # Clean up empty parent directories
                 try:
