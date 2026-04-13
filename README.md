@@ -41,11 +41,11 @@
 - **Status Icons** - Distinct colored icons for each state: downloaded (green), missing/monitored (orange), unmonitored (gray), queued (blue), downloading (animated), failed (red), skipped (gray)
 - **Collapsible Seasons** - Videos grouped by year with per-season Monitor and Download Missing buttons
 - **Per-Episode Actions** - Three-dot menu with: Retry, Re-download, Rename File, Delete File, Skip Episode
-- **Subtitle Download** - Toggle in Settings to download subtitles and auto-generated captions with videos
+- **Subtitle Download** - Toggle in Settings to download subtitles and auto-generated captions with videos. Bulk "Download Missing Subtitles" button to fetch subtitles for previously downloaded videos without re-downloading them
 
 ### Downloads
 - **Queue-Based Pipeline** - Downloads are queued and processed sequentially with configurable delays
-- **Standalone Video Download** - Download individual videos by URL without subscribing to a channel, with configurable download directory
+- **Standalone Video Download** - Download individual videos by URL without subscribing to a channel. Videos are automatically organized under the uploader's channel folder with proper season/episode naming
 - **Download All Missing** - One-click button to queue all monitored pending/failed videos across all channels, plus per-channel and per-season download buttons
 - **Pause/Resume Queue** - Pause the entire download queue and resume when ready
 - **Real-Time Progress** - WebSocket-powered live download speed, ETA, and progress bars with quality badges
@@ -381,7 +381,13 @@ All endpoints are under `/api/v1/`:
 - `POST /channels/download-all-missing`  - Queue all pending/failed videos across all channels
 - `GET /channels/{id}/shorts`  - List videos identified as shorts
 - `POST /channels/{id}/shorts/detect`  - Scan existing videos and mark shorts
+- `POST /channels/{id}/shorts/detect-clean/preview`  - Preview detect and clean operation
+- `POST /channels/{id}/shorts/detect-clean/confirm`  - Detect shorts, delete files, renumber episodes
 - `POST /channels/{id}/shorts/delete`  - Delete downloaded shorts from disk
+- `POST /channels/{id}/download-subtitles`  - Download subtitles for all completed videos
+- `POST /channels/{id}/videos/{vid}/download-subtitles`  - Download subtitles for a single video
+- `POST /channels/{id}/move-files/preview`  - Preview file move operation
+- `POST /channels/{id}/force-rescan`  - Clear all video records and re-scan from scratch
 
 ### Downloads
 - `GET /downloads/queue`  - Current download queue with progress
@@ -398,9 +404,8 @@ All endpoints are under `/api/v1/`:
 - `GET /downloads/history`  - Filterable download history
 - `POST /downloads/retry/{id}`  - Retry a failed download
 - `POST /downloads/retry-all-failed`  - Retry all failed downloads
-- `POST /downloads/standalone`  - Download a standalone video by URL
-- `GET /downloads/standalone/settings`  - Get standalone download directory
-- `PUT /downloads/standalone/settings`  - Update standalone download directory
+- `POST /downloads/standalone`  - Download a standalone video by URL (auto-creates uploader channel)
+- `POST /downloads/standalone/reorganize`  - Migrate legacy standalone downloads to per-uploader channels
 
 ### Dashboard
 - `GET /dashboard/stats`  - Aggregate statistics
