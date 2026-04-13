@@ -295,21 +295,33 @@ class ChannelService:
         enriched_entries.sort(key=lambda e: e["upload_date"])
 
         # Third pass: assign episode numbers and insert into DB
+        # Shorts are excluded from episode numbering
         new_count = 0
+        shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
         for entry in enriched_entries:
             vid_id = entry["vid_id"]
             upload_date = entry["upload_date"]
             season = upload_date.year
 
-            # Calculate episode number from pre-fetched counts, increment locally
-            season_episode_counts.setdefault(season, 0)
-            season_episode_counts[season] += 1
-            episode = season_episode_counts[season]
-
             title = entry["title"]
             description = entry["description"]
             duration = entry["duration"]
             thumbnail = entry["thumbnail"]
+
+            # Pre-detect shorts before assigning episode numbers
+            is_short_entry = False
+            if duration and duration <= shorts_threshold:
+                is_short_entry = True
+            elif title and ("#shorts" in title.lower() or "#short" in title.lower()):
+                is_short_entry = True
+
+            # Only assign episode numbers to non-shorts
+            if is_short_entry:
+                episode = 0  # Shorts get episode 0 (excluded from numbering)
+            else:
+                season_episode_counts.setdefault(season, 0)
+                season_episode_counts[season] += 1
+                episode = season_episode_counts[season]
 
             video = Video(
                 video_id=vid_id,
@@ -383,15 +395,11 @@ class ChannelService:
                 season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
                 continue
 
-            # Detect YouTube Shorts (duration <= channel threshold or 30s default)
-            shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
-            is_short = False
-            if duration and duration <= shorts_threshold:
-                is_short = True
-            video.is_short = is_short
+            # Set the short flag (already detected before episode numbering)
+            video.is_short = is_short_entry
 
             # Filter shorts based on global + channel settings
-            if is_short:
+            if is_short_entry:
                 shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
                 if not shorts_globally_enabled or not channel.include_shorts:
                     video.status = "skipped"
