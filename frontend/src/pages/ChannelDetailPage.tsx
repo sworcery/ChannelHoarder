@@ -257,6 +257,13 @@ export default function ChannelDetailPage() {
     setSelectedVideoIds(new Set())
   }
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: ({ ids, deleteFiles }: { ids: number[]; deleteFiles: boolean }) =>
+      api.bulkDeleteVideos(channelId, ids, deleteFiles),
+    onSuccess: (data: any) => { invalidateVideos(); setSelectedVideoIds(new Set()); toast(data.message) },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   if (!channel) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -266,12 +273,6 @@ export default function ChannelDetailPage() {
   }
 
   const selectedCount = selectedVideoIds.size
-  const bulkDeleteMutation = useMutation({
-    mutationFn: ({ ids, deleteFiles }: { ids: number[]; deleteFiles: boolean }) =>
-      api.bulkDeleteVideos(channelId, ids, deleteFiles),
-    onSuccess: (data: any) => { invalidateVideos(); setSelectedVideoIds(new Set()); toast(data.message) },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
   const isBulkLoading = bulkQueueMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending || bulkMonitorMutation.isPending || bulkDeleteMutation.isPending
 
   return (
