@@ -83,6 +83,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ video_ids: videoIds }),
     }),
+  bulkDeleteVideos: (channelId: number, videoIds: number[], deleteFiles = false) =>
+    request<{ deleted: number }>(`/channels/${channelId}/videos/bulk-delete`, {
+      method: "POST",
+      body: JSON.stringify({ video_ids: videoIds, delete_files: deleteFiles }),
+    }),
 
   // Video management
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
@@ -99,6 +104,8 @@ export const api = {
   // Monitoring
   toggleVideoMonitored: (channelId: number, videoId: number, monitored: boolean) =>
     request<any>(`/channels/${channelId}/videos/${videoId}/monitored`, { method: "PATCH", body: JSON.stringify({ monitored }) }),
+  toggleVideoShort: (channelId: number, videoId: number, isShort: boolean) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/short`, { method: "PATCH", body: JSON.stringify({ is_short: isShort }) }),
   bulkMonitorVideos: (channelId: number, videoIds: number[], monitored: boolean) =>
     request<any>(`/channels/${channelId}/videos/bulk-monitor`, { method: "POST", body: JSON.stringify({ video_ids: videoIds, monitored }) }),
   monitorAllVideos: (channelId: number, monitored: boolean) =>

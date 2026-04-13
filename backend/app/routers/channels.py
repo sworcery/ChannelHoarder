@@ -256,6 +256,21 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
     changes = []
 
     for video in videos:
+        # Shorts are excluded from episode numbering
+        if video.is_short:
+            if video.episode != 0:
+                changes.append({
+                    "video_id": video.id,
+                    "title": video.title,
+                    "upload_date": str(video.upload_date),
+                    "old_episode": f"S{video.season}E{video.episode:03d}",
+                    "new_episode": "(short - excluded)",
+                    "has_file": False,
+                    "old_path": None,
+                    "new_path": None,
+                })
+            continue
+
         season = video.upload_date.year
         season_counts.setdefault(season, 0)
         season_counts[season] += 1
@@ -315,10 +330,14 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
-    # Count how many need updating before renumber
+    # Count how many need updating before renumber (excluding shorts)
     season_counts_pre: dict[int, int] = {}
     updated = 0
     for video in videos:
+        if video.is_short:
+            if video.episode != 0:
+                updated += 1
+            continue
         season = video.upload_date.year
         season_counts_pre.setdefault(season, 0)
         season_counts_pre[season] += 1
@@ -466,6 +485,55 @@ async def bulk_unskip_videos(
 
     await db.commit()
     return {"message": f"Unskipped {unskipped} videos", "unskipped": unskipped}
+
+
+class BulkDeleteRequest(BaseModel):
+    video_ids: list[int] = Field(..., min_length=1, max_length=1000)
+    delete_files: bool = False
+
+
+@router.post("/{channel_id}/videos/bulk-delete")
+async def bulk_delete_videos(
+    channel_id: int,
+    body: BulkDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete selected videos. Optionally removes files from disk."""
+    import os
+
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.id.in_(body.video_ids))
+    )
+    videos = result.scalars().all()
+
+    # Remove queue entries
+    video_ids = [v.id for v in videos]
+    queue_result = await db.execute(
+        select(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids))
+    )
+    for q in queue_result.scalars().all():
+        await db.delete(q)
+
+    deleted = 0
+    files_removed = 0
+    for video in videos:
+        if body.delete_files and video.file_path:
+            base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+            for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                path = base + ext
+                if os.path.exists(path):
+                    os.remove(path)
+                    files_removed += 1
+
+        video.status = "skipped"
+        video.file_path = None
+        video.file_size = None
+        deleted += 1
+
+    await db.commit()
+    return {"message": f"Deleted {deleted} videos ({files_removed} files removed)", "deleted": deleted, "files_removed": files_removed}
 
 
 @router.delete("/{channel_id}/videos/{video_id}")
@@ -639,6 +707,32 @@ async def rename_video_file(
 
     await db.commit()
     return {"message": f"Renamed '{video.title}'", "renamed": True, "new_path": new_path}
+
+
+class ShortRequest(BaseModel):
+    is_short: bool
+
+
+@router.patch("/{channel_id}/videos/{video_id}/short")
+async def toggle_video_short(
+    channel_id: int,
+    video_id: int,
+    body: ShortRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually mark or unmark a video as a short."""
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video.is_short = body.is_short
+    if body.is_short:
+        video.episode = 0  # Shorts are excluded from episode numbering
+    await db.commit()
+    return {"message": f"{'Marked' if body.is_short else 'Unmarked'} '{video.title}' as short", "is_short": body.is_short}
 
 
 class MonitorRequest(BaseModel):
@@ -1341,7 +1435,7 @@ async def detect_channel_shorts(
     channel_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Scan existing videos and mark any below the shorts threshold as shorts."""
+    """Scan existing videos and mark shorts using duration, title, and URL patterns."""
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
@@ -1359,12 +1453,33 @@ async def detect_channel_shorts(
 
     detected = 0
     for video in videos:
-        if video.duration and video.duration <= threshold:
+        if _is_likely_short(video, threshold):
             video.is_short = True
             detected += 1
 
     await db.commit()
     return {"message": f"Detected {detected} shorts (threshold: {threshold}s)", "detected": detected, "threshold": threshold}
+
+
+def _is_likely_short(video, threshold: int) -> bool:
+    """Check if a video is likely a YouTube Short using multiple signals."""
+    # Duration check (if we have it)
+    if video.duration and video.duration <= threshold:
+        return True
+
+    # Title contains #shorts or (Short) pattern
+    if video.title:
+        title_lower = video.title.lower()
+        if "#shorts" in title_lower or "#short" in title_lower:
+            return True
+
+    # Very small file size (< 20MB) combined with very short duration or no duration
+    # Shorts are typically under 20MB
+    if video.file_size and video.file_size < 20 * 1024 * 1024:
+        if not video.duration or video.duration <= threshold:
+            return True
+
+    return False
 
 
 @router.post("/{channel_id}/shorts/detect-clean/preview")
@@ -1393,7 +1508,7 @@ async def detect_clean_shorts_preview(
     files_to_delete = 0
     disk_space_freed = 0
     for video in all_non_shorts:
-        if video.duration and video.duration <= threshold:
+        if _is_likely_short(video, threshold):
             new_shorts.append({
                 "video_id": video.id,
                 "title": video.title,
@@ -1450,7 +1565,7 @@ async def detect_clean_shorts_confirm(
     )
     detected = 0
     for video in result.scalars().all():
-        if video.duration and video.duration <= threshold:
+        if _is_likely_short(video, threshold):
             video.is_short = True
             detected += 1
 
@@ -1502,7 +1617,7 @@ async def detect_clean_shorts_confirm(
 
 
 def _renumber_channel_episodes(videos: list, channel) -> int:
-    """Renumber episodes in chronological order. Returns count of renamed files."""
+    """Renumber episodes in chronological order, excluding shorts. Returns count of renamed files."""
     import os
     import shutil
     from app.services.naming_service import build_output_path
@@ -1511,6 +1626,12 @@ def _renumber_channel_episodes(videos: list, channel) -> int:
     renamed = 0
 
     for video in videos:
+        # Shorts are excluded from episode numbering
+        if video.is_short:
+            if video.episode != 0:
+                video.episode = 0
+            continue
+
         season = video.upload_date.year
         season_counts.setdefault(season, 0)
         season_counts[season] += 1
