@@ -181,6 +181,8 @@ export const api = {
   getStandaloneSettings: () => request<any>("/downloads/standalone/settings"),
   updateStandaloneSettings: (download_dir: string) =>
     request<any>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
+  reorganizeStandalone: () =>
+    request<any>("/downloads/standalone/reorganize", { method: "POST" }),
 
   // Dashboard
   getStats: () => request<any>("/dashboard/stats"),
