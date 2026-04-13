@@ -5,6 +5,13 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.18] - 2026-04-12
+
+### Changed
+- **Standalone downloads organized by uploader** - Standalone video downloads now create a proper channel record for the video's uploader and place files in the main download directory using the standard channel/season/episode folder structure, instead of dumping everything into a flat standalone folder.
+- **Reorganize legacy standalone downloads** - New "Reorganize" button on the Standalone Downloads page migrates existing flat standalone downloads into proper per-uploader channel folders. Fetches uploader info for each video and moves files to the correct location.
+- **4K quality option for standalone downloads** - Added 2160p/4K to the standalone download quality selector.
+
 ## [1.7.17] - 2026-04-11
 
 ### Added

@@ -37,6 +37,7 @@ export default function StandaloneDownloadPage() {
   const [useCustomDir, setUseCustomDir] = useState(false)
   const [lastResult, setLastResult] = useState<{ message: string; success: boolean } | null>(null)
   const [defaultDir, setDefaultDir] = useState("")
+  const [reorganizing, setReorganizing] = useState(false)
 
   // Tracked downloads on this page
   const [trackedVideos, setTrackedVideos] = useState<QueuedVideo[]>([])
@@ -423,6 +424,31 @@ export default function StandaloneDownloadPage() {
             Save
           </button>
         </div>
+      </div>
+
+      {/* Reorganize Legacy Downloads */}
+      <div className="rounded-lg border bg-card p-6 space-y-3">
+        <h2 className="text-sm font-semibold flex items-center gap-2">
+          <FolderOpen className="h-4 w-4" />
+          Reorganize Legacy Downloads
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Migrate standalone downloads from the old flat folder structure into the main download directory, organized by uploader channel with proper season/episode naming.
+        </p>
+        <button
+          onClick={() => {
+            setReorganizing(true)
+            api.reorganizeStandalone()
+              .then((r) => toast(r.message))
+              .catch((e: any) => toast(e.message, "error"))
+              .finally(() => setReorganizing(false))
+          }}
+          disabled={reorganizing}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+        >
+          {reorganizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
+          {reorganizing ? "Reorganizing..." : "Reorganize"}
+        </button>
       </div>
     </div>
   )
