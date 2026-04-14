@@ -637,17 +637,18 @@ class ChannelService:
 
     async def _compute_next_scan_at(self) -> datetime:
         """Compute the next scan timestamp for a channel based on configured window."""
+        import json
         from app.utils.scan_window import compute_next_scan_at
 
         start_hour = None
         end_hour = None
+        min_offset_hours = 12
         try:
             result = await self.db.execute(
                 select(AppSetting).where(AppSetting.key == "scan_window_start_hour")
             )
             setting = result.scalar_one_or_none()
             if setting:
-                import json
                 start_hour = int(json.loads(setting.value))
 
             result = await self.db.execute(
@@ -655,12 +656,22 @@ class ChannelService:
             )
             setting = result.scalar_one_or_none()
             if setting:
-                import json
                 end_hour = int(json.loads(setting.value))
+
+            result = await self.db.execute(
+                select(AppSetting).where(AppSetting.key == "scan_min_interval_hours")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                min_offset_hours = int(json.loads(setting.value))
         except Exception:
             pass
 
-        return compute_next_scan_at(start_hour, end_hour)
+        return compute_next_scan_at(
+            start_hour=start_hour,
+            end_hour=end_hour,
+            min_offset_hours=min_offset_hours,
+        )
 
     async def _get_max_duration(self) -> int | None:
         """Read max_video_duration from AppSettings. Returns seconds or None."""
