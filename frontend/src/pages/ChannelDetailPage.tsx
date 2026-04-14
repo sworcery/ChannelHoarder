@@ -450,64 +450,26 @@ export default function ChannelDetailPage() {
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Download Settings</p>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon text="Target quality for new downloads." anchor="channel-management" /></label>
-              <select
-                value={channel.quality}
-                onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-              >
-                <option value="best">Best Available</option>
-                <option value="2160p">4K (2160p)</option>
-                <option value="1080p">1080p</option>
-                <option value="720p">720p</option>
-                <option value="480p">480p</option>
-              </select>
-            </div>
-            <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality Cutoff <HelpIcon text="Minimum quality before flagging for upgrade." anchor="episode-management" /></label>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon text="Target quality for new downloads. Also used as the cutoff for upgrade searches." anchor="channel-management" /></label>
               <div className="flex gap-1">
                 <select
-                  value={channel.quality_cutoff || ""}
-                  onChange={(e) => updateMutation.mutate({ quality_cutoff: e.target.value || null })}
+                  value={channel.quality}
+                  onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
                   className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 >
-                  <option value="">None (disabled)</option>
-                  <option value="480p">480p</option>
-                  <option value="720p">720p</option>
-                  <option value="1080p">1080p</option>
+                  <option value="best">Best Available</option>
                   <option value="2160p">4K (2160p)</option>
+                  <option value="1080p">1080p</option>
+                  <option value="720p">720p</option>
+                  <option value="480p">480p</option>
                 </select>
                 <button
                   onClick={() => api.upgradeQuality(channelId).then((r) => { invalidateVideos(); toast(r.message) })}
                   className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
-                  title="Re-queue completed videos below the quality cutoff"
+                  title="Re-queue completed videos below the target quality"
                 >
                   Search Upgrades
                 </button>
-              </div>
-            </div>
-            <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Min Duration <HelpIcon text="Skip videos shorter than this (seconds)." anchor="downloads" /></label>
-              <div className="flex gap-1">
-                <input
-                  type="number"
-                  value={editMinDuration ?? (channel.min_video_duration || "")}
-                  placeholder="0 (disabled)"
-                  onChange={(e) => setEditMinDuration(e.target.value)}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                  min={0}
-                />
-                {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
-                  <button
-                    onClick={() => {
-                      updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
-                      setEditMinDuration(null)
-                    }}
-                    className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  >
-                    Save
-                  </button>
-                )}
               </div>
             </div>
             <div>
@@ -600,6 +562,33 @@ export default function ChannelDetailPage() {
                     Shorts downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
                   </p>
                 )}
+                <div>
+                  <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                    Shorts Threshold (seconds)
+                    <HelpIcon text="Videos shorter than this are classified as shorts. Defaults to 30." anchor="episode-management" />
+                  </label>
+                  <div className="flex gap-1 max-w-[200px]">
+                    <input
+                      type="number"
+                      value={editMinDuration ?? (channel.min_video_duration || "")}
+                      placeholder="30 (default)"
+                      onChange={(e) => setEditMinDuration(e.target.value)}
+                      className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                      min={0}
+                    />
+                    {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
+                      <button
+                        onClick={() => {
+                          updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
+                          setEditMinDuration(null)
+                        }}
+                        className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                      >
+                        Save
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => detectShortsMutation.mutate()}
