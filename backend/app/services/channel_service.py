@@ -213,6 +213,13 @@ class ChannelService:
         )
         existing_ids = {row[0] for row in result.all()}
 
+        # Phase A: Reclassify existing videos based on current tab data
+        # This catches videos that were misclassified on a previous scan (e.g. shorts
+        # that were scanned before tab-based detection, or videos the creator moved
+        # between tabs). Also auto-cleans up files for newly-identified shorts/
+        # livestreams when the user hasn't enabled those categories.
+        reclassified_count = await self._reclassify_existing_videos(channel, video_list)
+
         # First pass: identify new video IDs
         new_entries = []
         for entry in video_list:
@@ -477,6 +484,20 @@ class ChannelService:
         await self.db.commit()
         logger.info("Found %d new videos for %s", new_count, channel.channel_name)
 
+        # Phase C: Renumber episodes if Phase A reclassified anything
+        if reclassified_count > 0:
+            from app.utils.renumber import renumber_channel_episodes
+            result = await self.db.execute(
+                select(Video)
+                .where(Video.channel_id == channel.id)
+                .order_by(Video.upload_date.asc(), Video.id.asc())
+            )
+            all_videos = result.scalars().all()
+            renamed = renumber_channel_episodes(all_videos, channel)
+            await self.db.commit()
+            if renamed > 0:
+                logger.info("Renumbered %d episodes for %s after reclassification", renamed, channel.channel_name)
+
         # Auto-scan download directory for existing video files that match pending videos
         imported = await self._auto_import_existing(channel)
         if imported > 0:
@@ -488,6 +509,127 @@ class ChannelService:
             logger.info("Renamed %d files for %s to match naming template", renamed, channel.channel_name)
 
         return new_count
+
+    async def _reclassify_existing_videos(self, channel: Channel, video_list: list[dict]) -> int:
+        """Re-check tab classification for existing videos and auto-clean disabled categories.
+
+        For each existing video:
+        1. Determine if it should be flagged as short/livestream using the same signals
+           used for new videos (tab source first, then heuristics).
+        2. If the classification flipped from False -> True and the filter is disabled,
+           delete the downloaded files and reset status to skipped.
+        3. Update the database flags.
+
+        Returns the number of videos whose classification changed.
+        """
+        import os
+
+        # Build tab map from the fetched video list
+        tab_map: dict[str, str] = {}
+        live_status_map: dict[str, str | None] = {}
+        for entry in video_list:
+            vid_id = entry.get("id") or entry.get("video_id", "")
+            if vid_id:
+                tab_map[vid_id] = entry.get("_source_tab", "videos")
+                live_status_map[vid_id] = entry.get("live_status")
+
+        shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
+        shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
+        livestreams_globally_enabled = await self._get_setting_bool("livestreams_enabled", False)
+        shorts_allowed = shorts_globally_enabled and channel.include_shorts
+        livestreams_allowed = livestreams_globally_enabled and channel.include_livestreams
+
+        # Load all existing videos for this channel
+        result = await self.db.execute(
+            select(Video).where(Video.channel_id == channel.id)
+        )
+        videos = result.scalars().all()
+
+        changed = 0
+        for video in videos:
+            # Determine correct classification
+            source_tab = tab_map.get(video.video_id)
+            live_status = live_status_map.get(video.video_id)
+
+            # Primary: tab source
+            should_be_short = source_tab == "shorts"
+            should_be_livestream = source_tab == "streams"
+
+            # Secondary heuristics (only apply if not already classified by tab)
+            if not should_be_short and not should_be_livestream:
+                if video.title and ("#shorts" in video.title.lower() or "#short" in video.title.lower()):
+                    should_be_short = True
+                elif video.duration and video.duration <= shorts_threshold:
+                    should_be_short = True
+                elif live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
+                    should_be_livestream = True
+
+            # Check if classification flipped
+            short_flipped = should_be_short and not video.is_short
+            livestream_flipped = should_be_livestream and not video.is_livestream
+
+            if not short_flipped and not livestream_flipped:
+                continue
+
+            # Apply reclassification
+            if short_flipped:
+                video.is_short = True
+                # Auto-clean if shorts aren't allowed
+                if not shorts_allowed:
+                    await self._auto_delete_video_files(video)
+                    logger.info("Reclassified short and cleaned up: %s (%s)", video.video_id, video.title)
+
+            if livestream_flipped:
+                video.is_livestream = True
+                # Auto-clean if livestreams aren't allowed
+                if not livestreams_allowed:
+                    await self._auto_delete_video_files(video)
+                    logger.info("Reclassified livestream and cleaned up: %s (%s)", video.video_id, video.title)
+
+            # Reset episode to 0 for excluded categories
+            if should_be_short or should_be_livestream:
+                video.episode = 0
+
+            changed += 1
+
+        if changed > 0:
+            await self.db.commit()
+            logger.info("Reclassified %d videos for %s", changed, channel.channel_name)
+
+        return changed
+
+    async def _auto_delete_video_files(self, video: Video):
+        """Delete downloaded files for a video and reset its fields to skipped state."""
+        import os
+
+        if video.file_path and os.path.exists(video.file_path):
+            try:
+                os.remove(video.file_path)
+            except Exception as e:
+                logger.warning("Failed to delete %s: %s", video.file_path, e)
+
+            # Remove associated files
+            base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                extra = base + ext
+                if os.path.exists(extra):
+                    try:
+                        os.remove(extra)
+                    except Exception as e:
+                        logger.warning("Failed to delete %s: %s", extra, e)
+
+        # Remove from queue if present
+        queue_result = await self.db.execute(
+            select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+        )
+        queue_entry = queue_result.scalar_one_or_none()
+        if queue_entry:
+            await self.db.delete(queue_entry)
+
+        video.status = "skipped"
+        video.monitored = False
+        video.file_path = None
+        video.file_size = None
 
     async def _get_max_duration(self) -> int | None:
         """Read max_video_duration from AppSettings. Returns seconds or None."""

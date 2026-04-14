@@ -186,6 +186,8 @@ class SettingsUpdate(BaseModel):
     download_delay_min: Optional[int] = None
     download_delay_max: Optional[int] = None
     jitter_enabled: Optional[bool] = None
+    scan_jitter_enabled: Optional[bool] = None  # Randomize time between channel scans
+    scan_jitter_max_seconds: Optional[int] = None  # Max seconds of jitter between channels
     max_concurrent_downloads: Optional[int] = None
     max_retries: Optional[int] = None
     user_agent_rotation: Optional[bool] = None
