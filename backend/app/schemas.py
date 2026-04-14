@@ -62,6 +62,7 @@ class ChannelResponse(UTCBaseModel):
     quality_cutoff: Optional[str]
     min_video_duration: Optional[int]
     last_scanned_at: Optional[datetime]
+    next_scan_at: Optional[datetime]
     total_videos: int
     downloaded_count: int
     health_status: str
@@ -188,6 +189,8 @@ class SettingsUpdate(BaseModel):
     jitter_enabled: Optional[bool] = None
     scan_jitter_enabled: Optional[bool] = None  # Randomize time between channel scans
     scan_jitter_max_seconds: Optional[int] = None  # Max seconds of jitter between channels
+    scan_window_start_hour: Optional[int] = Field(default=None, ge=0, le=23)
+    scan_window_end_hour: Optional[int] = Field(default=None, ge=0, le=23)
     max_concurrent_downloads: Optional[int] = None
     max_retries: Optional[int] = None
     user_agent_rotation: Optional[bool] = None

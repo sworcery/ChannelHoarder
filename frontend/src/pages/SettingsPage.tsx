@@ -754,6 +754,9 @@ function AntiDetectTab() {
   const [jitter, setJitter] = useState(true)
   const [scanJitterEnabled, setScanJitterEnabled] = useState(true)
   const [scanJitterMaxSeconds, setScanJitterMaxSeconds] = useState(300)
+  const [scanWindowEnabled, setScanWindowEnabled] = useState(false)
+  const [scanWindowStartHour, setScanWindowStartHour] = useState<number>(22)
+  const [scanWindowEndHour, setScanWindowEndHour] = useState<number>(6)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
   const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
@@ -776,6 +779,14 @@ function AntiDetectTab() {
       if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
       if (settings.scan_jitter_enabled != null) setScanJitterEnabled(settings.scan_jitter_enabled === true || settings.scan_jitter_enabled === "true")
       if (settings.scan_jitter_max_seconds != null) setScanJitterMaxSeconds(Number(settings.scan_jitter_max_seconds))
+      if (settings.scan_window_start_hour != null) {
+        setScanWindowStartHour(Number(settings.scan_window_start_hour))
+        setScanWindowEnabled(true)
+      }
+      if (settings.scan_window_end_hour != null) {
+        setScanWindowEndHour(Number(settings.scan_window_end_hour))
+        setScanWindowEnabled(true)
+      }
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
@@ -796,6 +807,8 @@ function AntiDetectTab() {
         jitter_enabled: jitter,
         scan_jitter_enabled: scanJitterEnabled,
         scan_jitter_max_seconds: scanJitterMaxSeconds,
+        scan_window_start_hour: scanWindowEnabled ? scanWindowStartHour : null,
+        scan_window_end_hour: scanWindowEnabled ? scanWindowEndHour : null,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
         livestreams_enabled: livestreamsEnabled,
@@ -877,9 +890,66 @@ function AntiDetectTab() {
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">Scan Schedule</h3>
+        <p className="text-sm text-muted-foreground">
+          Each channel is scanned once per day. By default scans spread across the full 24 hours for the most organic traffic pattern. You can optionally constrain them to a specific local-time window (e.g. 10 PM to 6 AM). Windows must be at least 8 hours wide to avoid clustering.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={scanWindowEnabled}
+            onChange={(e) => setScanWindowEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Limit scans to a time window</span>
+        </label>
+        {scanWindowEnabled && (() => {
+          const width = scanWindowEndHour > scanWindowStartHour
+            ? scanWindowEndHour - scanWindowStartHour
+            : (24 - scanWindowStartHour) + scanWindowEndHour
+          const tooNarrow = scanWindowStartHour !== scanWindowEndHour && width < 8
+          return (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Start (local time)</label>
+                  <select
+                    value={scanWindowStartHour}
+                    onChange={(e) => setScanWindowStartHour(Number(e.target.value))}
+                    className="px-2 py-1.5 rounded-md border bg-background text-sm"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">End (local time)</label>
+                  <select
+                    value={scanWindowEndHour}
+                    onChange={(e) => setScanWindowEndHour(Number(e.target.value))}
+                    className="px-2 py-1.5 rounded-md border bg-background text-sm"
+                  >
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <p className={`text-xs ${tooNarrow ? "text-red-500" : "text-muted-foreground"}`}>
+                {tooNarrow
+                  ? `Window is only ${width} hours. Must be at least 8 hours.`
+                  : `Each channel is scanned once per 24 hours, between ${String(scanWindowStartHour).padStart(2, "0")}:00 and ${String(scanWindowEndHour).padStart(2, "0")}:00 (${width === 0 ? 24 : width} hour window).`}
+              </p>
+            </div>
+          )
+        })()}
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <h3 className="font-semibold">Scan Jitter</h3>
         <p className="text-sm text-muted-foreground">
-          Randomize the time between channel scans during scheduled runs. Every ChannelHoarder install would otherwise hit YouTube at the exact same time, which is an easy bot-detection signal. Jitter spreads scans across a window.
+          When multiple channels become due at the same tick, this adds a random delay between each scan so they don't all fire at once.
         </p>
         <label className="flex items-center gap-2 cursor-pointer">
           <input

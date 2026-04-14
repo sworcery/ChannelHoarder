@@ -78,6 +78,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN include_livestreams BOOLEAN DEFAULT 0 NOT NULL")
             )
+        if "next_scan_at" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN next_scan_at DATETIME")
+            )
 
         # Add is_short column to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))
@@ -125,6 +129,26 @@ async def init_database():
                 "DELETE FROM videos WHERE channel_id NOT IN (SELECT id FROM channels)"
             ))
             logger.info("Cleaned up %d orphan video records on startup", count)
+
+        # Stagger next_scan_at for channels without one set
+        # Use deterministic per-channel offsets based on channel.id so restarts are idempotent
+        null_scan_result = await conn.execute(text(
+            "SELECT id FROM channels WHERE next_scan_at IS NULL AND enabled = 1"
+        ))
+        null_ids = [row[0] for row in null_scan_result.fetchall()]
+        if null_ids:
+            import random as _rand
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            now_utc = _dt.now(_tz.utc).replace(tzinfo=None)
+            for cid in null_ids:
+                rng = _rand.Random(cid)
+                offset_seconds = rng.randint(60, 24 * 3600)  # 1 min to 24h out
+                scan_time = now_utc + _td(seconds=offset_seconds)
+                await conn.execute(
+                    text("UPDATE channels SET next_scan_at = :t WHERE id = :id"),
+                    {"t": scan_time.strftime("%Y-%m-%d %H:%M:%S"), "id": cid},
+                )
+            logger.info("Staggered initial next_scan_at for %d existing channels", len(null_ids))
 
 
 # Note: get_db() dependency is defined in deps.py  - do not duplicate here
