@@ -572,10 +572,8 @@ export default function ChannelDetailPage() {
             </button>
           </div>
 
-          {showAdvanced && (
-          <>
           {/* Shorts Management */}
-          {channel.platform === "youtube" && (
+          {showAdvanced && channel.platform === "youtube" && (
             <div className="mt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
               <div className="space-y-3">
@@ -658,7 +656,7 @@ export default function ChannelDetailPage() {
         </div>
 
         {/* Livestreams Management */}
-        {channel.platform === "youtube" && (
+        {showAdvanced && channel.platform === "youtube" && (
           <div className="mt-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
             <div className="space-y-3">
@@ -706,6 +704,7 @@ export default function ChannelDetailPage() {
         )}
 
         {/* Subtitles */}
+        {showAdvanced && (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
           <button
@@ -722,7 +721,6 @@ export default function ChannelDetailPage() {
             Fetches English subtitles and auto-generated captions for completed videos without existing subtitle files.
           </p>
         </div>
-        </>
         )}
 
         {/* Monitoring */}
