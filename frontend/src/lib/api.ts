@@ -69,9 +69,9 @@ export const api = {
     return request<{ items: any[]; total: number }>(`/channels/${channelId}/livestreams${qs}`)
   },
   deleteChannelLivestreams: (channelId: number) =>
-    request<{ deleted: number }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
+    request<{ deleted: number; message: string }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
   detectChannelLivestreams: (channelId: number) =>
-    request<{ detected: number }>(`/channels/${channelId}/livestreams/detect`, { method: "POST" }),
+    request<{ detected: number; message: string }>(`/channels/${channelId}/livestreams/detect`, { method: "POST" }),
   detectCleanLivestreamsPreview: (channelId: number) =>
     request<any>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
   detectCleanLivestreamsConfirm: (channelId: number) =>
