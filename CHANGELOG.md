@@ -5,6 +5,18 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.21] - 2026-04-13
+
+### Added
+- **Tab-based shorts and livestream detection** - YouTube channels are now scanned via their separate `/videos`, `/shorts`, and `/streams` tabs. This is far more reliable than previous heuristic detection, since YouTube itself tells us which category each video belongs to.
+- **Livestream filter** - Livestreams are now excluded from downloads by default. Global toggle in Settings mirrors the shorts toggle, with per-channel opt-in. Scheduled livestreams that fail with "will begin in a few moments" are automatically flagged and unmonitored to stop retry loops.
+- **LIVESTREAM_SCHEDULED error code** - Scheduled livestream errors now have their own error code instead of UNKNOWN, with a clearer message and no retries.
+- **Manual Mark as Livestream** - Per-episode dropdown option to mark or unmark a video as a livestream.
+- **Detect Livestreams / Delete Downloaded Livestreams** - Channel detail page buttons mirroring the shorts management UI.
+
+### Changed
+- **Livestreams excluded from episode numbering** - Livestreams now get episode 0 and are skipped during renumbering, matching the existing shorts behavior.
+
 ## [1.7.20] - 2026-04-13
 
 ### Fixed

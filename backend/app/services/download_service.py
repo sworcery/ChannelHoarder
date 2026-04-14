@@ -365,6 +365,15 @@ class DownloadService:
                 if queue_entry:
                     await db.delete(queue_entry)
 
+            elif code == ErrorCode.LIVESTREAM_SCHEDULED:
+                # Auto-mark as livestream so it stops retrying
+                video.status = "skipped"
+                video.is_livestream = True
+                video.monitored = False
+                video.episode = 0  # Exclude from episode numbering
+                if queue_entry:
+                    await db.delete(queue_entry)
+
             elif code == ErrorCode.DISK_FULL:
                 video.status = "failed"
                 if queue_entry:

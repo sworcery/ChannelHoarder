@@ -754,6 +754,7 @@ function AntiDetectTab() {
   const [jitter, setJitter] = useState(true)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
+  const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [setPermissions, setSetPermissions] = useState(false)
   const [chmodFolder, setChmodFolder] = useState("755")
@@ -773,6 +774,7 @@ function AntiDetectTab() {
       if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
+      if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
       if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
       if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
       if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
@@ -790,6 +792,7 @@ function AntiDetectTab() {
         jitter_enabled: jitter,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
+        livestreams_enabled: livestreamsEnabled,
         subtitles_enabled: subtitlesEnabled,
         set_permissions: setPermissions,
         chmod_folder: chmodFolder,
@@ -886,6 +889,27 @@ function AntiDetectTab() {
           {shortsEnabled
             ? "Channels can individually enable shorts downloading in their settings."
             : "Shorts are excluded from all channel downloads."}
+        </p>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">Livestreams</h3>
+        <p className="text-sm text-muted-foreground">
+          By default, YouTube livestreams and premieres are excluded from downloads. Enable this to allow channels to opt-in to downloading livestreams. Scheduled livestreams that haven't started will be automatically skipped.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={livestreamsEnabled}
+            onChange={(e) => setLivestreamsEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Allow livestream downloading (per-channel opt-in)</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {livestreamsEnabled
+            ? "Channels can individually enable livestream downloading in their settings."
+            : "Livestreams are excluded from all channel downloads."}
         </p>
       </div>
 

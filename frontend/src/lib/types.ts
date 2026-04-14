@@ -13,6 +13,7 @@ export interface Channel {
   check_schedule: string | null
   enabled: boolean
   include_shorts: boolean
+  include_livestreams: boolean
   auto_download: boolean
   quality_cutoff: string | null
   min_video_duration: number | null
@@ -39,6 +40,7 @@ export interface Video {
   episode: number
   status: string
   is_short: boolean
+  is_livestream: boolean
   monitored: boolean
   file_path: string | null
   file_size: number | null

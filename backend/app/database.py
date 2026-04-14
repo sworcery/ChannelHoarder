@@ -74,6 +74,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN auto_download BOOLEAN DEFAULT 1 NOT NULL")
             )
+        if "include_livestreams" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN include_livestreams BOOLEAN DEFAULT 0 NOT NULL")
+            )
 
         # Add is_short column to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))
@@ -85,6 +89,10 @@ async def init_database():
         if "monitored" not in video_columns:
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN monitored BOOLEAN DEFAULT 1 NOT NULL")
+            )
+        if "is_livestream" not in video_columns:
+            await conn.execute(
+                text("ALTER TABLE videos ADD COLUMN is_livestream BOOLEAN DEFAULT 0 NOT NULL")
             )
 
         # Add target_quality and estimated_size to download_queue

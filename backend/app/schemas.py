@@ -36,6 +36,7 @@ class ChannelUpdate(BaseModel):
     check_schedule: Optional[str] = None
     enabled: Optional[bool] = None
     include_shorts: Optional[bool] = None
+    include_livestreams: Optional[bool] = None
     auto_download: Optional[bool] = None
     quality_cutoff: Optional[str] = None
     min_video_duration: Optional[int] = None
@@ -56,6 +57,7 @@ class ChannelResponse(UTCBaseModel):
     check_schedule: Optional[str]
     enabled: bool
     include_shorts: bool
+    include_livestreams: bool
     auto_download: bool
     quality_cutoff: Optional[str]
     min_video_duration: Optional[int]
@@ -83,6 +85,7 @@ class VideoResponse(UTCBaseModel):
     episode: int
     status: str
     is_short: bool
+    is_livestream: bool
     monitored: bool
     file_path: Optional[str]
     file_size: Optional[int]
@@ -196,6 +199,7 @@ class SettingsUpdate(BaseModel):
     pushover_user_key: Optional[str] = None
     webhook_events: Optional[list[str]] = None
     shorts_enabled: Optional[bool] = None  # Global toggle to allow shorts downloading
+    livestreams_enabled: Optional[bool] = None  # Global toggle to allow livestream downloading
     subtitles_enabled: Optional[bool] = None  # Download subtitles/captions with videos
     # File permissions
     set_permissions: Optional[bool] = None  # Apply chmod after download
