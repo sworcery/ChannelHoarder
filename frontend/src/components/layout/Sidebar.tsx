@@ -7,7 +7,6 @@ import {
   Download,
   Video,
   Settings,
-  Stethoscope,
   X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -18,7 +17,6 @@ const navItems = [
   { to: "/downloads", icon: Download, label: "Downloads" },
   { to: "/download-video", icon: Video, label: "Download Video" },
   { to: "/settings", icon: Settings, label: "Settings" },
-  { to: "/diagnostics", icon: Stethoscope, label: "Diagnostics" },
 ]
 
 export default function Sidebar({ onClose }: { onClose: () => void }) {

@@ -7,7 +7,6 @@ import ChannelDetailPage from "@/pages/ChannelDetailPage"
 import DownloadsPage from "@/pages/DownloadsPage"
 import StandaloneDownloadPage from "@/pages/StandaloneDownloadPage"
 import SettingsPage from "@/pages/SettingsPage"
-import DiagnosticsPage from "@/pages/DiagnosticsPage"
 
 export default function App() {
   return (
@@ -20,7 +19,6 @@ export default function App() {
           <Route path="/downloads" element={<DownloadsPage />} />
           <Route path="/download-video" element={<StandaloneDownloadPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/diagnostics" element={<DiagnosticsPage />} />
         </Routes>
       </AppShell>
     </ErrorBoundary>
