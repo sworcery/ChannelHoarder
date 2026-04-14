@@ -752,6 +752,8 @@ function AntiDetectTab() {
   const [maxDelay, setMaxDelay] = useState(30)
   const [uaRotation, setUaRotation] = useState(true)
   const [jitter, setJitter] = useState(true)
+  const [scanJitterEnabled, setScanJitterEnabled] = useState(true)
+  const [scanJitterMaxSeconds, setScanJitterMaxSeconds] = useState(300)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
   const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
@@ -772,6 +774,8 @@ function AntiDetectTab() {
       if (settings.download_delay_max != null) setMaxDelay(Number(settings.download_delay_max))
       if (settings.user_agent_rotation != null) setUaRotation(settings.user_agent_rotation === true || settings.user_agent_rotation === "true")
       if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
+      if (settings.scan_jitter_enabled != null) setScanJitterEnabled(settings.scan_jitter_enabled === true || settings.scan_jitter_enabled === "true")
+      if (settings.scan_jitter_max_seconds != null) setScanJitterMaxSeconds(Number(settings.scan_jitter_max_seconds))
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
@@ -790,6 +794,8 @@ function AntiDetectTab() {
         download_delay_max: maxDelay,
         user_agent_rotation: uaRotation,
         jitter_enabled: jitter,
+        scan_jitter_enabled: scanJitterEnabled,
+        scan_jitter_max_seconds: scanJitterMaxSeconds,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
         livestreams_enabled: livestreamsEnabled,
@@ -868,6 +874,38 @@ function AntiDetectTab() {
           />
           <span className="text-sm">Enable jitter</span>
         </label>
+      </div>
+
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">Scan Jitter</h3>
+        <p className="text-sm text-muted-foreground">
+          Randomize the time between channel scans during scheduled runs. Every ChannelHoarder install would otherwise hit YouTube at the exact same time, which is an easy bot-detection signal. Jitter spreads scans across a window.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={scanJitterEnabled}
+            onChange={(e) => setScanJitterEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Enable scan jitter</span>
+        </label>
+        {scanJitterEnabled && (
+          <div>
+            <label className="block text-sm mb-1">Max jitter between channels (seconds)</label>
+            <input
+              type="number"
+              value={scanJitterMaxSeconds}
+              onChange={(e) => setScanJitterMaxSeconds(Math.max(0, Number(e.target.value) || 0))}
+              min={0}
+              max={3600}
+              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Each channel waits a random 0 to {scanJitterMaxSeconds}s before its scan begins. Channel scan order is also randomized.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">

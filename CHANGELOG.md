@@ -5,6 +5,16 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.26] - 2026-04-13
+
+### Added
+- **Auto-reclassify existing videos on every scan** - The scan now re-checks each existing video against the current `/shorts` and `/streams` tab data. Videos that were misclassified (scanned before tab detection, moved between tabs by the creator, etc.) get their flags corrected automatically. If shorts/livestreams are not allowed for the channel, the files are automatically deleted and episodes renumbered.
+- **Scan jitter** - Added randomized delays between channel scans during scheduled runs to avoid predictable traffic patterns that YouTube bot detection can correlate. Channel scan order is also randomized. Configurable in Settings > Anti-Detection (default: 5 minute max jitter).
+
+### Changed
+- **Zero-touch shorts/livestream cleanup** - Users no longer need to click "Detect Shorts" or "Detect & Clean" manually. Every scheduled scan (or manual scan) now handles reclassification and cleanup automatically. Heuristics (title, duration, live_status) remain as fallback signals for videos that slip through the tab detection.
+- **`_renumber_channel_episodes` moved** to `app/utils/renumber.py` so both the scan service and router endpoints can use it.
+
 ## [1.7.25] - 2026-04-13
 
 ### Changed
