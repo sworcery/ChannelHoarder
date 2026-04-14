@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
+import DiagnosticsTab from "@/components/settings/DiagnosticsTab"
 import {
   Upload,
   Key,
@@ -23,19 +24,27 @@ import {
   Settings,
 } from "lucide-react"
 
+type SettingsTab = "general" | "media" | "auth" | "antidetect" | "connect" | "diagnostics"
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<"general" | "auth" | "naming" | "ytdlp" | "antidetect" | "notifications">(() => {
+  const [tab, setTab] = useState<SettingsTab>(() => {
     const saved = localStorage.getItem("settings_tab")
-    return (saved as any) || "general"
+    // Migrate old tab keys to new ones
+    const migrations: Record<string, SettingsTab> = {
+      naming: "media",
+      ytdlp: "general",
+      notifications: "connect",
+    }
+    return (migrations[saved || ""] || saved || "general") as SettingsTab
   })
 
   const tabs = [
     { key: "general", label: "General" },
+    { key: "media", label: "Media Management" },
     { key: "auth", label: "Authentication" },
-    { key: "naming", label: "Naming" },
-    { key: "ytdlp", label: "yt-dlp" },
     { key: "antidetect", label: "Anti-Detection" },
-    { key: "notifications", label: "Notifications" },
+    { key: "connect", label: "Connect" },
+    { key: "diagnostics", label: "Diagnostics" },
   ] as const
 
   return (
@@ -59,11 +68,11 @@ export default function SettingsPage() {
       </div>
 
       {tab === "general" && <GeneralTab />}
+      {tab === "media" && <MediaManagementTab />}
       {tab === "auth" && <AuthTab />}
-      {tab === "naming" && <NamingTab />}
-      {tab === "ytdlp" && <YtdlpTab />}
       {tab === "antidetect" && <AntiDetectTab />}
-      {tab === "notifications" && <NotificationsTab />}
+      {tab === "connect" && <NotificationsTab />}
+      {tab === "diagnostics" && <DiagnosticsTab />}
     </div>
   )
 }
@@ -81,6 +90,18 @@ function GeneralTab() {
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: api.getStats })
+  const { data: ytdlpVersion, refetch: refetchYtdlp } = useQuery({
+    queryKey: ["ytdlp-version"],
+    queryFn: api.getYtdlpVersion,
+  })
+  const ytdlpUpdateMutation = useMutation({
+    mutationFn: api.updateYtdlp,
+    onSuccess: (data: any) => {
+      refetchYtdlp()
+      toast(data.success ? `Updated to ${data.version}` : data.message, data.success ? "success" : "warning")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
 
   // Settings state
   const [scanCron, setScanCron] = useState("0 3 * * *")
@@ -305,10 +326,30 @@ function GeneralTab() {
             <span className="text-muted-foreground">Storage Used</span>
             <span>{stats?.storage_used_formatted || "0 B"}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">yt-dlp Version</span>
-            <span>{stats?.ytdlp_version || "unknown"}</span>
+        </div>
+      </div>
+
+      {/* yt-dlp */}
+      <div className="rounded-lg border bg-card p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">yt-dlp</h3>
+          <HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm">Current version: <span className="font-mono">{ytdlpVersion?.version || "unknown"}</span></p>
+            <p className="text-xs text-muted-foreground">
+              yt-dlp is checked for updates daily at 4 AM
+            </p>
           </div>
+          <button
+            onClick={() => ytdlpUpdateMutation.mutate()}
+            disabled={ytdlpUpdateMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {ytdlpUpdateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            Update Now
+          </button>
         </div>
       </div>
 
@@ -628,12 +669,21 @@ function AuthTab() {
   )
 }
 
-function NamingTab() {
+function MediaManagementTab() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
+
   const [template, setTemplate] = useState(
     "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
   )
+  const [shortsEnabled, setShortsEnabled] = useState(false)
+  const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
+  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
+  const [setPermissions, setSetPermissions] = useState(false)
+  const [chmodFolder, setChmodFolder] = useState("755")
+  const [chmodFile, setChmodFile] = useState("644")
+  const [chownGroup, setChownGroup] = useState("")
+  const [maxDuration, setMaxDuration] = useState(0)
 
   const { data: settings } = useQuery({
     queryKey: ["app-settings"],
@@ -641,16 +691,35 @@ function NamingTab() {
   })
 
   useEffect(() => {
-    if (settings?.naming_template) {
-      setTemplate(settings.naming_template)
+    if (settings) {
+      if (settings.naming_template) setTemplate(settings.naming_template)
+      if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
+      if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
+      if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
+      if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
+      if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
+      if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
+      if (settings.chown_group) setChownGroup(String(settings.chown_group))
+      if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
     }
   }, [settings])
 
   const saveMutation = useMutation({
-    mutationFn: () => api.updateSettings({ naming_template: template }),
+    mutationFn: () =>
+      api.updateSettings({
+        naming_template: template,
+        shorts_enabled: shortsEnabled,
+        livestreams_enabled: livestreamsEnabled,
+        subtitles_enabled: subtitlesEnabled,
+        set_permissions: setPermissions,
+        chmod_folder: chmodFolder,
+        chmod_file: chmodFile,
+        chown_group: chownGroup || null,
+        max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Naming template saved")
+      toast("Media settings saved")
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -661,6 +730,7 @@ function NamingTab() {
 
   return (
     <div className="space-y-6">
+      {/* Naming Template */}
       <div className="rounded-lg border bg-card p-4 space-y-4">
         <div className="flex items-center gap-2">
           <h3 className="font-semibold">Default Naming Template</h3>
@@ -682,14 +752,6 @@ function NamingTab() {
           >
             Preview
           </button>
-          <button
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
-          >
-            <Save className="h-4 w-4" />
-            Save
-          </button>
         </div>
         {previewMutation.data && (
           <div className="rounded-md bg-muted p-3">
@@ -697,50 +759,155 @@ function NamingTab() {
           </div>
         )}
       </div>
-    </div>
-  )
-}
 
-function YtdlpTab() {
-  const { toast } = useToast()
-  const { data: version, refetch } = useQuery({
-    queryKey: ["ytdlp-version"],
-    queryFn: api.getYtdlpVersion,
-  })
+      {/* YouTube Shorts */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">YouTube Shorts</h3>
+        <p className="text-sm text-muted-foreground">
+          By default, YouTube Shorts (videos under 30 seconds) are excluded from downloads. Enable this
+          to allow channels to opt-in to downloading shorts. The threshold is configurable per channel via the min duration setting.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={shortsEnabled}
+            onChange={(e) => setShortsEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Allow shorts downloading (per-channel opt-in)</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {shortsEnabled
+            ? "Channels can individually enable shorts downloading in their settings."
+            : "Shorts are excluded from all channel downloads."}
+        </p>
+      </div>
 
-  const updateMutation = useMutation({
-    mutationFn: api.updateYtdlp,
-    onSuccess: (data: any) => {
-      refetch()
-      toast(data.success ? `Updated to ${data.version}` : data.message, data.success ? "success" : "warning")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
+      {/* Livestreams */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">Livestreams</h3>
+        <p className="text-sm text-muted-foreground">
+          By default, YouTube livestreams and premieres are excluded from downloads. Enable this to allow channels to opt-in to downloading livestreams. Scheduled livestreams that haven't started will be automatically skipped.
+        </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={livestreamsEnabled}
+            onChange={(e) => setLivestreamsEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Allow livestream downloading (per-channel opt-in)</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          {livestreamsEnabled
+            ? "Channels can individually enable livestream downloading in their settings."
+            : "Livestreams are excluded from all channel downloads."}
+        </p>
+      </div>
 
-  return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-card p-4 space-y-4">
+      {/* Subtitles */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
         <div className="flex items-center gap-2">
-          <h3 className="font-semibold">yt-dlp</h3>
-          <HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />
+          <h3 className="font-semibold">Subtitles / Captions</h3>
+          <HelpIcon text="Downloads English subtitles and auto-generated captions alongside videos." anchor="episode-management" />
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm">Current version: <span className="font-mono">{version?.version || "unknown"}</span></p>
-            <p className="text-xs text-muted-foreground">
-              yt-dlp is checked for updates daily at 4 AM
-            </p>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={subtitlesEnabled}
+            onChange={(e) => setSubtitlesEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Download subtitles and auto-generated captions</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
+        </p>
+      </div>
+
+      {/* File Permissions */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">File Permissions</h3>
+          <HelpIcon text="Apply chmod/chown after downloading files." anchor="configuration" />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={setPermissions}
+            onChange={(e) => setSetPermissions(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Set permissions on downloaded files</span>
+        </label>
+        {setPermissions && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Folder chmod</label>
+              <input
+                type="text"
+                value={chmodFolder}
+                onChange={(e) => setChmodFolder(e.target.value)}
+                placeholder="755"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">File chmod</label>
+              <input
+                type="text"
+                value={chmodFile}
+                onChange={(e) => setChmodFile(e.target.value)}
+                placeholder="644"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">chown group</label>
+              <input
+                type="text"
+                value={chownGroup}
+                onChange={(e) => setChownGroup(e.target.value)}
+                placeholder="Group name or GID"
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+            </div>
           </div>
-          <button
-            onClick={() => updateMutation.mutate()}
-            disabled={updateMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Update Now
-          </button>
+        )}
+      </div>
+
+      {/* Max Duration Filter */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <h3 className="font-semibold">Max Video Duration Filter</h3>
+        <p className="text-sm text-muted-foreground">
+          Skip auto-downloading videos longer than this duration. They'll be flagged for manual review
+          and you'll get a push notification (if configured). Set to 0 to disable.
+        </p>
+        <div className="max-w-xs">
+          <label className="block text-sm mb-1">Max Duration (hours)</label>
+          <input
+            type="number"
+            min={0}
+            value={maxDuration}
+            onChange={(e) => setMaxDuration(Number(e.target.value))}
+            className="w-full px-3 py-2 rounded-md border bg-background"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            {maxDuration > 0
+              ? `Videos over ${maxDuration}h will need manual approval`
+              : "Disabled  - all videos auto-queue"}
+          </p>
         </div>
       </div>
+
+      <button
+        onClick={() => saveMutation.mutate()}
+        disabled={saveMutation.isPending}
+        className="flex items-center gap-1.5 px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm hover:bg-primary/90 disabled:opacity-50"
+      >
+        {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        Save Settings
+      </button>
     </div>
   )
 }
@@ -759,14 +926,6 @@ function AntiDetectTab() {
   const [scanWindowEndHour, setScanWindowEndHour] = useState<number>(6)
   const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
   const [manualScanCooldownMinutes, setManualScanCooldownMinutes] = useState<number>(5)
-  const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
-  const [shortsEnabled, setShortsEnabled] = useState(false)
-  const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
-  const [setPermissions, setSetPermissions] = useState(false)
-  const [chmodFolder, setChmodFolder] = useState("755")
-  const [chmodFile, setChmodFile] = useState("644")
-  const [chownGroup, setChownGroup] = useState("")
 
   const { data: settings } = useQuery({
     queryKey: ["app-settings"],
@@ -791,14 +950,6 @@ function AntiDetectTab() {
       }
       if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
       if (settings.manual_scan_cooldown_minutes != null) setManualScanCooldownMinutes(Number(settings.manual_scan_cooldown_minutes))
-      if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
-      if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
-      if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
-      if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
-      if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
-      if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
-      if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
-      if (settings.chown_group) setChownGroup(String(settings.chown_group))
     }
   }, [settings])
 
@@ -815,14 +966,6 @@ function AntiDetectTab() {
         scan_window_end_hour: scanWindowEnabled ? scanWindowEndHour : null,
         scan_min_interval_hours: scanMinIntervalHours,
         manual_scan_cooldown_minutes: manualScanCooldownMinutes,
-        max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
-        shorts_enabled: shortsEnabled,
-        livestreams_enabled: livestreamsEnabled,
-        subtitles_enabled: subtitlesEnabled,
-        set_permissions: setPermissions,
-        chmod_folder: chmodFolder,
-        chmod_file: chmodFile,
-        chown_group: chownGroup || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["app-settings"] })
@@ -1018,141 +1161,6 @@ function AntiDetectTab() {
             </p>
           </div>
         )}
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <h3 className="font-semibold">YouTube Shorts</h3>
-        <p className="text-sm text-muted-foreground">
-          By default, YouTube Shorts (videos under 30 seconds) are excluded from downloads. Enable this
-          to allow channels to opt-in to downloading shorts. The threshold is configurable per channel via the min duration setting.
-        </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={shortsEnabled}
-            onChange={(e) => setShortsEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Allow shorts downloading (per-channel opt-in)</span>
-        </label>
-        <p className="text-xs text-muted-foreground">
-          {shortsEnabled
-            ? "Channels can individually enable shorts downloading in their settings."
-            : "Shorts are excluded from all channel downloads."}
-        </p>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <h3 className="font-semibold">Livestreams</h3>
-        <p className="text-sm text-muted-foreground">
-          By default, YouTube livestreams and premieres are excluded from downloads. Enable this to allow channels to opt-in to downloading livestreams. Scheduled livestreams that haven't started will be automatically skipped.
-        </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={livestreamsEnabled}
-            onChange={(e) => setLivestreamsEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Allow livestream downloading (per-channel opt-in)</span>
-        </label>
-        <p className="text-xs text-muted-foreground">
-          {livestreamsEnabled
-            ? "Channels can individually enable livestream downloading in their settings."
-            : "Livestreams are excluded from all channel downloads."}
-        </p>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold">Subtitles / Captions</h3>
-          <HelpIcon text="Downloads English subtitles and auto-generated captions alongside videos." anchor="episode-management" />
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={subtitlesEnabled}
-            onChange={(e) => setSubtitlesEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Download subtitles and auto-generated captions</span>
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
-        </p>
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="font-semibold">File Permissions</h3>
-          <HelpIcon text="Apply chmod/chown after downloading files." anchor="configuration" />
-        </div>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={setPermissions}
-            onChange={(e) => setSetPermissions(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Set permissions on downloaded files</span>
-        </label>
-        {setPermissions && (
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Folder chmod</label>
-              <input
-                type="text"
-                value={chmodFolder}
-                onChange={(e) => setChmodFolder(e.target.value)}
-                placeholder="755"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">File chmod</label>
-              <input
-                type="text"
-                value={chmodFile}
-                onChange={(e) => setChmodFile(e.target.value)}
-                placeholder="644"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">chown group</label>
-              <input
-                type="text"
-                value={chownGroup}
-                onChange={(e) => setChownGroup(e.target.value)}
-                placeholder="Group name or GID"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-lg border bg-card p-4 space-y-3">
-        <h3 className="font-semibold">Livestream / Long Video Filter</h3>
-        <p className="text-sm text-muted-foreground">
-          Skip auto-downloading videos longer than this duration. They'll be flagged for manual review
-          and you'll get a push notification (if configured). Set to 0 to disable.
-        </p>
-        <div className="max-w-xs">
-          <label className="block text-sm mb-1">Max Duration (hours)</label>
-          <input
-            type="number"
-            min={0}
-            value={maxDuration}
-            onChange={(e) => setMaxDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded-md border bg-background"
-          />
-          <p className="text-xs text-muted-foreground mt-1">
-            {maxDuration > 0
-              ? `Videos over ${maxDuration}h will need manual approval`
-              : "Disabled  - all videos auto-queue"}
-          </p>
-        </div>
       </div>
 
       <button

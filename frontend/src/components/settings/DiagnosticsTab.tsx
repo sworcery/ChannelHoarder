@@ -2,7 +2,6 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/utils"
-import { HelpIcon } from "@/components/ui/HelpIcon"
 import {
   Stethoscope,
   ClipboardCopy,
@@ -15,10 +14,12 @@ import {
   ChevronUp,
 } from "lucide-react"
 
-export default function DiagnosticsPage() {
-  const [tab, setTab] = useState<"overview" | "logs" | "system-logs">(() => {
+type SubTab = "overview" | "logs" | "system-logs"
+
+export default function DiagnosticsTab() {
+  const [subTab, setSubTab] = useState<SubTab>(() => {
     const saved = localStorage.getItem("diagnostics_tab")
-    return (saved as any) || "overview"
+    return (saved as SubTab) || "overview"
   })
   const [logSearch, setLogSearch] = useState("")
   const [logPage, setLogPage] = useState(0)
@@ -29,19 +30,19 @@ export default function DiagnosticsPage() {
   const { data: diagnostics, isLoading } = useQuery({
     queryKey: ["diagnostics"],
     queryFn: api.getDiagnostics,
-    enabled: tab === "overview",
+    enabled: subTab === "overview",
   })
 
   const { data: logs } = useQuery({
     queryKey: ["system-logs", logPage, logSearch],
     queryFn: () => api.getLogs({ skip: logPage * 50, limit: 50, search: logSearch || undefined }),
-    enabled: tab === "logs",
+    enabled: subTab === "logs",
   })
 
   const { data: liveLogs } = useQuery({
     queryKey: ["live-logs", logLevel],
     queryFn: () => api.getLiveLogs({ level: logLevel || undefined, limit: 300 }),
-    enabled: tab === "system-logs",
+    enabled: subTab === "system-logs",
     refetchInterval: 5000,
   })
 
@@ -75,7 +76,6 @@ export default function DiagnosticsPage() {
     try {
       await navigator.clipboard.writeText(report)
     } catch {
-      // Fallback for non-HTTPS contexts (e.g. local network IP)
       const textarea = document.createElement("textarea")
       textarea.value = report
       textarea.style.position = "fixed"
@@ -89,17 +89,38 @@ export default function DiagnosticsPage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const selectSub = (t: SubTab) => {
+    setSubTab(t)
+    localStorage.setItem("diagnostics_tab", t)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">Diagnostics</h1>
-          <HelpIcon text="System health, error history, and troubleshooting." anchor="troubleshooting" />
+        <div className="flex gap-1 border-b flex-1">
+          <button
+            onClick={() => selectSub("overview")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            System Overview
+          </button>
+          <button
+            onClick={() => selectSub("logs")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            Error Logs
+          </button>
+          <button
+            onClick={() => selectSub("system-logs")}
+            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "system-logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+          >
+            System Logs
+          </button>
         </div>
-        {tab === "overview" && diagnostics && (
+        {subTab === "overview" && diagnostics && (
           <button
             onClick={copyReport}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
+            className="ml-4 flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent whitespace-nowrap"
           >
             <ClipboardCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Diagnostic Report"}
@@ -107,62 +128,24 @@ export default function DiagnosticsPage() {
         )}
       </div>
 
-      <div className="flex gap-1 border-b">
-        <button
-          onClick={() => { setTab("overview"); localStorage.setItem("diagnostics_tab", "overview") }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-        >
-          System Overview
-        </button>
-        <button
-          onClick={() => { setTab("logs"); localStorage.setItem("diagnostics_tab", "logs") }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-        >
-          Error Logs
-        </button>
-        <button
-          onClick={() => { setTab("system-logs"); localStorage.setItem("diagnostics_tab", "system-logs") }}
-          className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === "system-logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-        >
-          System Logs
-        </button>
-      </div>
-
-      {/* Overview Tab */}
-      {tab === "overview" && (
+      {subTab === "overview" && (
         isLoading ? (
           <div className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : diagnostics ? (
           <div className="space-y-6">
-            {/* System Status */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatusCard
-                label="PO Tokens"
-                status={diagnostics.pot_status === "healthy" ? "ok" : "error"}
-                value={diagnostics.pot_status}
-              />
-              <StatusCard
-                label="Cookies"
-                status={diagnostics.cookies_status === "present" ? "ok" : "info"}
-                value={diagnostics.cookies_status}
-              />
-              <StatusCard
-                label="yt-dlp"
-                status="ok"
-                value={diagnostics.ytdlp_version}
-              />
+              <StatusCard label="PO Tokens" status={diagnostics.pot_status === "healthy" ? "ok" : "error"} value={diagnostics.pot_status} />
+              <StatusCard label="Cookies" status={diagnostics.cookies_status === "present" ? "ok" : "info"} value={diagnostics.cookies_status} />
+              <StatusCard label="yt-dlp" status="ok" value={diagnostics.ytdlp_version} />
               <StatusCard
                 label="Disk Space"
-                status={
-                  parseInt(diagnostics.disk_free_formatted) < 5 ? "warning" : "ok"
-                }
+                status={parseInt(diagnostics.disk_free_formatted) < 5 ? "warning" : "ok"}
                 value={diagnostics.disk_free_formatted + " free"}
               />
             </div>
 
-            {/* Stats */}
             <div className="rounded-lg border bg-card p-4">
               <h3 className="font-semibold mb-3">Statistics</h3>
               <div className="grid gap-2 text-sm sm:grid-cols-3">
@@ -183,7 +166,6 @@ export default function DiagnosticsPage() {
               </div>
             </div>
 
-            {/* Recent Errors */}
             {diagnostics.recent_errors.length > 0 && (
               <div className="rounded-lg border bg-card p-4">
                 <h3 className="font-semibold mb-3">Recent Errors</h3>
@@ -208,8 +190,7 @@ export default function DiagnosticsPage() {
         ) : null
       )}
 
-      {/* Logs Tab */}
-      {tab === "logs" && (
+      {subTab === "logs" && (
         <div className="space-y-4">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -246,11 +227,7 @@ export default function DiagnosticsPage() {
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <span className="text-xs text-muted-foreground">{formatDateTime(log.created_at)}</span>
-                        {expandedLog === log.id ? (
-                          <ChevronUp className="h-4 w-4" />
-                        ) : (
-                          <ChevronDown className="h-4 w-4" />
-                        )}
+                        {expandedLog === log.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </div>
                     </div>
                     {expandedLog === log.id && (
@@ -302,8 +279,7 @@ export default function DiagnosticsPage() {
         </div>
       )}
 
-      {/* System Logs Tab */}
-      {tab === "system-logs" && (
+      {subTab === "system-logs" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
