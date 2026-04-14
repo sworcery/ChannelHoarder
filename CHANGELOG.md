@@ -5,6 +5,17 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.27] - 2026-04-14
+
+### Changed
+- **Per-channel randomized scan scheduling** - Replaced the fixed daily cron with a per-channel scheduling model. Each channel now has its own `next_scan_at` timestamp, and a background tick every 10 minutes scans any channel whose time has arrived. Scans spread across the 24 hour cycle instead of firing in a burst at 3 AM local time.
+- **Configurable scan window** - New setting in Anti-Detection to constrain scans to a specific daily window (e.g. 10 PM to 6 AM). Minimum window width of 8 hours is enforced to avoid clustering. Channels scan once per day, with a random slot picked inside the window.
+- **Next scan display** - Channel detail page now shows the next scheduled scan time alongside the last scan.
+
+### Migrated
+- Existing channels without a `next_scan_at` value are staggered across the next 24 hours on first startup (deterministic per-channel offset based on channel id).
+- `global_schedule_cron` setting is retained for backwards compatibility but is no longer read by the scheduler.
+
 ## [1.7.26] - 2026-04-13
 
 ### Added

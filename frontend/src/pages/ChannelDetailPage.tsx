@@ -369,6 +369,12 @@ export default function ChannelDetailPage() {
             <span>Quality: {channel.quality}</span>
             <span className="text-border">|</span>
             <span>Last scan: {formatDateTime(channel.last_scanned_at)}</span>
+            {channel.next_scan_at && (
+              <>
+                <span className="text-border">|</span>
+                <span>Next scan: {formatDateTime(channel.next_scan_at)}</span>
+              </>
+            )}
           </div>
 
           {channel.last_error_code && (
@@ -756,6 +762,9 @@ export default function ChannelDetailPage() {
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Last scan: {formatDateTime(channel.last_scanned_at)}
+                {channel.next_scan_at && (
+                  <> · Next scan: {formatDateTime(channel.next_scan_at)}</>
+                )}
               </p>
             </div>
           </div>

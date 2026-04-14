@@ -14,18 +14,19 @@ class SchedulerService:
         self.scheduler = AsyncIOScheduler()
 
     async def start(self):
-        from app.tasks.scan_channels import scan_all_channels
+        from app.tasks.scan_channels import scan_due_channels
         from app.tasks.process_queue import process_download_queue
         from app.tasks.health_check import check_system_health
         from app.tasks.ytdlp_update import check_ytdlp_update
 
-        # Channel scan (default: daily at 3 AM)
+        # Channel scan tick (every 10 minutes; each channel scans on its own
+        # random schedule within the configured daily window)
         self.scheduler.add_job(
-            scan_all_channels,
-            CronTrigger.from_crontab(settings.DEFAULT_SCAN_CRON),
-            id="scan_channels",
+            scan_due_channels,
+            IntervalTrigger(minutes=10),
+            id="scan_due_channels",
             replace_existing=True,
-            name="Scan all channels for new videos",
+            name="Scan channels whose next_scan_at has arrived",
         )
 
         # Queue processor (every 30 seconds)
@@ -93,9 +94,5 @@ class SchedulerService:
         logger.info("Scheduler shut down")
 
     def reschedule_scan(self, new_cron: str):
-        """Update the channel scan schedule."""
-        self.scheduler.reschedule_job(
-            "scan_channels",
-            trigger=CronTrigger.from_crontab(new_cron),
-        )
-        logger.info("Scan schedule updated to: %s", new_cron)
+        """No-op retained for backwards compat. Scan timing is now per-channel."""
+        logger.info("Scan cron update ignored (window-based scheduling): %s", new_cron)

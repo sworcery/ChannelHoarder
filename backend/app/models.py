@@ -41,6 +41,7 @@ class Channel(Base):
     include_livestreams: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     auto_download: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    next_scan_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     total_videos: Mapped[int] = mapped_column(Integer, default=0)
     downloaded_count: Mapped[int] = mapped_column(Integer, default=0)
     health_status: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")

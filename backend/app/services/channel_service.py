@@ -104,6 +104,8 @@ class ChannelService:
             enabled=data.enabled,
             auto_download=data.auto_download,
             health_status="healthy",
+            # Scan immediately on first tick so the user sees videos appear quickly
+            next_scan_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
         self.db.add(channel)
@@ -204,6 +206,7 @@ class ChannelService:
         if not video_list:
             logger.warning("No videos found for channel: %s", channel.channel_name)
             channel.last_scanned_at = datetime.now(timezone.utc)
+            channel.next_scan_at = await self._compute_next_scan_at()
             await self.db.commit()
             return 0
 
@@ -477,6 +480,7 @@ class ChannelService:
             new_count += 1
 
         channel.last_scanned_at = datetime.now(timezone.utc)
+        channel.next_scan_at = await self._compute_next_scan_at()
         channel.total_videos = len(existing_ids) + new_count
         if new_count > 0:
             channel.health_status = "healthy"
@@ -630,6 +634,33 @@ class ChannelService:
         video.monitored = False
         video.file_path = None
         video.file_size = None
+
+    async def _compute_next_scan_at(self) -> datetime:
+        """Compute the next scan timestamp for a channel based on configured window."""
+        from app.utils.scan_window import compute_next_scan_at
+
+        start_hour = None
+        end_hour = None
+        try:
+            result = await self.db.execute(
+                select(AppSetting).where(AppSetting.key == "scan_window_start_hour")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                import json
+                start_hour = int(json.loads(setting.value))
+
+            result = await self.db.execute(
+                select(AppSetting).where(AppSetting.key == "scan_window_end_hour")
+            )
+            setting = result.scalar_one_or_none()
+            if setting:
+                import json
+                end_hour = int(json.loads(setting.value))
+        except Exception:
+            pass
+
+        return compute_next_scan_at(start_hour, end_hour)
 
     async def _get_max_duration(self) -> int | None:
         """Read max_video_duration from AppSettings. Returns seconds or None."""

@@ -42,6 +42,30 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
 @router.put("/")
 async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
     update_data = body.model_dump(exclude_unset=True)
+
+    # Validate scan window if either hour field is being updated
+    if "scan_window_start_hour" in update_data or "scan_window_end_hour" in update_data:
+        from app.utils.scan_window import validate_scan_window
+        # Pull current values to combine with incoming updates
+        async def _get_hour(key: str):
+            if key in update_data:
+                return update_data[key]
+            result = await db.execute(select(AppSetting).where(AppSetting.key == key))
+            setting = result.scalar_one_or_none()
+            if setting:
+                try:
+                    return int(json.loads(setting.value))
+                except Exception:
+                    return None
+            return None
+
+        start_h = await _get_hour("scan_window_start_hour")
+        end_h = await _get_hour("scan_window_end_hour")
+        try:
+            validate_scan_window(start_h, end_h)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
     logger.info("Saving settings: %s", list(update_data.keys()))
     for key, value in update_data.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
