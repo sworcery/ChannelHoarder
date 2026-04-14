@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.22] - 2026-04-13
+
+### Fixed
+- **TypeScript build error in v1.7.21** - Livestream API client types were missing the `message` field that the UI code accessed.
+
 ## [1.7.21] - 2026-04-13
 
 ### Added
