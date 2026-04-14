@@ -17,6 +17,7 @@ class ErrorCode(str, Enum):
     FORMAT_UNAVAILABLE = "FORMAT_UNAVAILABLE"
     AGE_RESTRICTED = "AGE_RESTRICTED"
     SCAN_FAILED = "SCAN_FAILED"
+    LIVESTREAM_SCHEDULED = "LIVESTREAM_SCHEDULED"
     UNKNOWN = "UNKNOWN"
 
 
@@ -135,6 +136,14 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         retry_strategy="none",
         severity="warning",
     ),
+    ErrorCode.LIVESTREAM_SCHEDULED: ErrorInfo(
+        code=ErrorCode.LIVESTREAM_SCHEDULED,
+        summary="Scheduled livestream or premiere",
+        explanation="This video is a scheduled livestream or premiere that hasn't started yet.",
+        suggested_fix="The video has been marked as a livestream and unmonitored. Wait until the stream ends, then manually unmark it or enable livestream downloading in channel settings.",
+        retry_strategy="none",
+        severity="info",
+    ),
     ErrorCode.UNKNOWN: ErrorInfo(
         code=ErrorCode.UNKNOWN,
         summary="Unknown error",
@@ -151,7 +160,7 @@ def classify_error(error_str: str) -> ErrorCode:
     error_lower = error_str.lower()
 
     if "live event" in error_lower or "premieres in" in error_lower or "will begin in" in error_lower:
-        return ErrorCode.VIDEO_UNAVAILABLE
+        return ErrorCode.LIVESTREAM_SCHEDULED
 
     if "sign in" in error_lower or "confirm you're not a bot" in error_lower or "login required" in error_lower:
         return ErrorCode.AUTH_EXPIRED

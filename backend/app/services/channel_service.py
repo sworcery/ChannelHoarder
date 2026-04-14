@@ -183,18 +183,19 @@ class ChannelService:
         is_playlist = is_playlist_url(channel.channel_url)
 
         # Try YouTube Data API first (only for channels that support it, not playlists), fall back to yt-dlp
+        # yt-dlp path fetches all tabs (videos/shorts/streams) separately for better classification
         if self.yt_api and supports_api(platform) and not is_playlist:
             try:
                 video_list = await self.yt_api.get_channel_videos(channel.channel_id)
             except Exception as e:
                 logger.warning("YouTube API failed for %s, falling back to yt-dlp: %s", channel.channel_name, e)
                 video_list = await asyncio.to_thread(
-                    self.ytdlp.get_channel_video_list, channel.channel_url, platform
+                    self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
                 )
         else:
             # Playlists and non-API platforms always use yt-dlp
             video_list = await asyncio.to_thread(
-                self.ytdlp.get_channel_video_list, channel.channel_url, platform
+                self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
             )
 
         logger.info("Video list returned %d entries for %s (url: %s)",
@@ -249,6 +250,8 @@ class ChannelService:
             description = entry.get("description")
             duration = entry.get("duration")
             thumbnail = entry.get("thumbnail")
+            source_tab = entry.get("_source_tab", "videos")
+            live_status = entry.get("live_status")
 
             if not upload_date and vid_id in rss_dates:
                 upload_date = self._parse_upload_date(rss_dates[vid_id])
@@ -270,6 +273,7 @@ class ChannelService:
                     description = full_info.get("description") or description
                     duration = full_info.get("duration") or duration
                     thumbnail = full_info.get("thumbnail") or thumbnail
+                    live_status = full_info.get("live_status") or live_status
                 else:
                     consecutive_metadata_failures += 1
 
@@ -289,6 +293,7 @@ class ChannelService:
             enriched_entries.append({
                 "vid_id": vid_id, "title": title, "description": description,
                 "upload_date": upload_date, "duration": duration, "thumbnail": thumbnail,
+                "source_tab": source_tab, "live_status": live_status,
             })
 
         # Sort by upload date (oldest first) so episode numbers are chronological
@@ -307,17 +312,26 @@ class ChannelService:
             description = entry["description"]
             duration = entry["duration"]
             thumbnail = entry["thumbnail"]
+            source_tab = entry.get("source_tab", "videos")
+            live_status = entry.get("live_status")
 
-            # Pre-detect shorts before assigning episode numbers
-            is_short_entry = False
-            if duration and duration <= shorts_threshold:
-                is_short_entry = True
-            elif title and ("#shorts" in title.lower() or "#short" in title.lower()):
-                is_short_entry = True
+            # Pre-detect shorts and livestreams before assigning episode numbers
+            # Primary signal: YouTube channel tab (definitive)
+            is_short_entry = (source_tab == "shorts")
+            is_livestream_entry = (source_tab == "streams")
 
-            # Only assign episode numbers to non-shorts
-            if is_short_entry:
-                episode = 0  # Shorts get episode 0 (excluded from numbering)
+            # Fallback heuristics for API-based or single-tab scans
+            if not is_short_entry and not is_livestream_entry:
+                if duration and duration <= shorts_threshold:
+                    is_short_entry = True
+                elif title and ("#shorts" in title.lower() or "#short" in title.lower()):
+                    is_short_entry = True
+                elif live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
+                    is_livestream_entry = True
+
+            # Only assign episode numbers to regular videos (shorts/livestreams get 0)
+            if is_short_entry or is_livestream_entry:
+                episode = 0
             else:
                 season_episode_counts.setdefault(season, 0)
                 season_episode_counts[season] += 1
@@ -395,8 +409,9 @@ class ChannelService:
                 season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
                 continue
 
-            # Set the short flag (already detected before episode numbering)
+            # Set the short/livestream flags (already detected before episode numbering)
             video.is_short = is_short_entry
+            video.is_livestream = is_livestream_entry
 
             # Filter shorts based on global + channel settings
             if is_short_entry:
@@ -405,6 +420,16 @@ class ChannelService:
                     video.status = "skipped"
                     video.monitored = False
                     logger.info("Skipped short: %s (%s)  - %ds", vid_id, title, duration or 0)
+                    new_count += 1
+                    continue
+
+            # Filter livestreams based on global + channel settings
+            if is_livestream_entry:
+                livestreams_globally_enabled = await self._get_setting_bool("livestreams_enabled", False)
+                if not livestreams_globally_enabled or not channel.include_livestreams:
+                    video.status = "skipped"
+                    video.monitored = False
+                    logger.info("Skipped livestream: %s (%s)", vid_id, title)
                     new_count += 1
                     continue
 

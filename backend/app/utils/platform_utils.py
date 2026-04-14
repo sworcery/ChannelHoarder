@@ -129,6 +129,36 @@ def get_channel_videos_url(platform: str, channel_url: str) -> str:
     return channel_url
 
 
+def get_channel_tab_url(platform: str, channel_url: str, tab: str) -> str | None:
+    """Append a specific tab suffix to a channel URL.
+
+    tab must be one of: "videos", "shorts", "streams".
+    Returns None if the platform doesn't support the requested tab.
+    """
+    if is_playlist_url(channel_url):
+        return None
+    if platform != "youtube":
+        # Only YouTube has distinct shorts/streams tabs
+        return get_channel_videos_url(platform, channel_url) if tab == "videos" else None
+
+    tab_suffix_map = {
+        "videos": "/videos",
+        "shorts": "/shorts",
+        "streams": "/streams",
+    }
+    suffix = tab_suffix_map.get(tab)
+    if not suffix:
+        return None
+
+    base = channel_url.rstrip("/")
+    # Strip any existing tab suffix
+    for existing in tab_suffix_map.values():
+        if base.endswith(existing):
+            base = base[: -len(existing)]
+            break
+    return base + suffix
+
+
 def get_cookie_domains(platform: str) -> list[str]:
     """Return the cookie domains relevant to a platform."""
     config = get_platform_config(platform)

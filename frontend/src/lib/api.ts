@@ -63,6 +63,22 @@ export const api = {
   detectCleanShortsConfirm: (channelId: number) =>
     request<any>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
 
+  // Livestream management
+  getChannelLivestreams: (channelId: number, status?: string) => {
+    const qs = status ? `?status=${status}` : ""
+    return request<{ items: any[]; total: number }>(`/channels/${channelId}/livestreams${qs}`)
+  },
+  deleteChannelLivestreams: (channelId: number) =>
+    request<{ deleted: number }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
+  detectChannelLivestreams: (channelId: number) =>
+    request<{ detected: number }>(`/channels/${channelId}/livestreams/detect`, { method: "POST" }),
+  detectCleanLivestreamsPreview: (channelId: number) =>
+    request<any>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
+  detectCleanLivestreamsConfirm: (channelId: number) =>
+    request<any>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
+  toggleVideoLivestream: (channelId: number, videoId: number, isLivestream: boolean) =>
+    request<any>(`/channels/${channelId}/videos/${videoId}/livestream`, { method: "PATCH", body: JSON.stringify({ is_livestream: isLivestream }) }),
+
   // Channel recovery
   forceRescan: (channelId: number) =>
     request<any>(`/channels/${channelId}/force-rescan`, { method: "POST" }),

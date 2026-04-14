@@ -256,8 +256,8 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
     changes = []
 
     for video in videos:
-        # Shorts are excluded from episode numbering
-        if video.is_short:
+        # Shorts and livestreams are excluded from episode numbering
+        if video.is_short or video.is_livestream:
             if video.episode != 0:
                 changes.append({
                     "video_id": video.id,
@@ -334,7 +334,7 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
     season_counts_pre: dict[int, int] = {}
     updated = 0
     for video in videos:
-        if video.is_short:
+        if video.is_short or video.is_livestream:
             if video.episode != 0:
                 updated += 1
             continue
@@ -733,6 +733,32 @@ async def toggle_video_short(
         video.episode = 0  # Shorts are excluded from episode numbering
     await db.commit()
     return {"message": f"{'Marked' if body.is_short else 'Unmarked'} '{video.title}' as short", "is_short": body.is_short}
+
+
+class LivestreamRequest(BaseModel):
+    is_livestream: bool
+
+
+@router.patch("/{channel_id}/videos/{video_id}/livestream")
+async def toggle_video_livestream(
+    channel_id: int,
+    video_id: int,
+    body: LivestreamRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually mark or unmark a video as a livestream."""
+    result = await db.execute(
+        select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
+    )
+    video = result.scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+
+    video.is_livestream = body.is_livestream
+    if body.is_livestream:
+        video.episode = 0  # Livestreams are excluded from episode numbering
+    await db.commit()
+    return {"message": f"{'Marked' if body.is_livestream else 'Unmarked'} '{video.title}' as livestream", "is_livestream": body.is_livestream}
 
 
 class MonitorRequest(BaseModel):
@@ -1616,8 +1642,235 @@ async def detect_clean_shorts_confirm(
     }
 
 
+# --- Livestream endpoints ---
+
+def _is_likely_livestream(video) -> bool:
+    """Check if a video is likely a livestream using multiple signals."""
+    # Title contains common livestream indicators
+    if video.title:
+        title_lower = video.title.lower()
+        if any(kw in title_lower for kw in ["[live]", "🔴 live", "livestream", "live stream"]):
+            return True
+    # Very long duration (over 4 hours) is often a livestream
+    if video.duration and video.duration > 4 * 3600:
+        return True
+    return False
+
+
+@router.get("/{channel_id}/livestreams")
+async def list_channel_livestreams(
+    channel_id: int,
+    status: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """List all videos identified as livestreams for a channel."""
+    query = (
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == True)
+        .order_by(Video.upload_date.desc())
+    )
+    if status:
+        query = query.where(Video.status == status)
+    result = await db.execute(query)
+    videos = result.scalars().all()
+    return {
+        "items": [VideoResponse.model_validate(v) for v in videos],
+        "total": len(videos),
+    }
+
+
+@router.post("/{channel_id}/livestreams/delete")
+async def delete_channel_livestreams(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all downloaded livestreams for a channel."""
+    import os
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == True)
+        .where(Video.status == "completed")
+    )
+    videos = result.scalars().all()
+
+    deleted = 0
+    for video in videos:
+        if video.file_path:
+            try:
+                base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+                if os.path.exists(video.file_path):
+                    os.remove(video.file_path)
+                    deleted += 1
+                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                    extra = base + ext
+                    if os.path.exists(extra):
+                        os.remove(extra)
+            except Exception as e:
+                logger.warning("Failed to delete livestream file %s: %s", video.file_path, e)
+        video.status = "skipped"
+        video.file_path = None
+        video.file_size = None
+
+    await db.commit()
+    return {"message": f"Deleted {deleted} livestreams", "deleted": deleted}
+
+
+@router.post("/{channel_id}/livestreams/detect")
+async def detect_channel_livestreams(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Scan existing videos and mark livestreams using title and duration heuristics."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == False)
+    )
+    videos = result.scalars().all()
+
+    detected = 0
+    for video in videos:
+        if _is_likely_livestream(video):
+            video.is_livestream = True
+            detected += 1
+
+    await db.commit()
+    return {"message": f"Detected {detected} livestreams", "detected": detected}
+
+
+@router.post("/{channel_id}/livestreams/detect-clean/preview")
+async def detect_clean_livestreams_preview(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Preview what detect & clean would do for livestreams."""
+    import os
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == False)
+    )
+    all_non_livestreams = result.scalars().all()
+
+    new_livestreams = []
+    files_to_delete = 0
+    disk_space_freed = 0
+    for video in all_non_livestreams:
+        if _is_likely_livestream(video):
+            new_livestreams.append({
+                "video_id": video.id,
+                "title": video.title,
+                "duration": video.duration,
+                "status": video.status,
+                "has_file": bool(video.file_path and os.path.exists(video.file_path)),
+                "file_size": video.file_size or 0,
+            })
+            if video.file_path and video.status == "completed" and os.path.exists(video.file_path):
+                files_to_delete += 1
+                disk_space_freed += video.file_size or 0
+
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == True)
+        .where(Video.status == "completed")
+    )
+    existing_livestreams_with_files = len(result.scalars().all())
+
+    return {
+        "new_livestreams_count": len(new_livestreams),
+        "new_livestreams": new_livestreams[:50],
+        "existing_livestreams_with_files": existing_livestreams_with_files,
+        "files_to_delete": files_to_delete + existing_livestreams_with_files,
+        "disk_space_freed": disk_space_freed,
+        "will_renumber": len(new_livestreams) > 0,
+    }
+
+
+@router.post("/{channel_id}/livestreams/detect-clean/confirm")
+async def detect_clean_livestreams_confirm(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Detect livestreams, delete their files, mark as skipped, and renumber remaining episodes."""
+    import os
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Step 1: Detect new livestreams
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == False)
+    )
+    detected = 0
+    for video in result.scalars().all():
+        if _is_likely_livestream(video):
+            video.is_livestream = True
+            detected += 1
+
+    # Step 2: Delete files for all livestreams
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.is_livestream == True)
+        .where(Video.status == "completed")
+    )
+    deleted = 0
+    for video in result.scalars().all():
+        if video.file_path:
+            try:
+                if os.path.exists(video.file_path):
+                    os.remove(video.file_path)
+                    if video.file_path.endswith(".mp4"):
+                        base = video.file_path.rsplit(".mp4", 1)[0]
+                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                            extra = base + ext
+                            if os.path.exists(extra):
+                                os.remove(extra)
+                    deleted += 1
+            except Exception as e:
+                logger.warning("Failed to delete livestream file %s: %s", video.file_path, e)
+        video.status = "skipped"
+        video.monitored = False
+        video.file_path = None
+        video.file_size = None
+
+    # Step 3: Renumber remaining episodes
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .order_by(Video.upload_date.asc(), Video.id.asc())
+    )
+    all_videos = result.scalars().all()
+    renamed = _renumber_channel_episodes(all_videos, channel)
+
+    await db.commit()
+    return {
+        "message": f"Detected {detected} livestreams, deleted {deleted} files, renumbered {renamed} episodes",
+        "detected": detected,
+        "deleted": deleted,
+        "renamed": renamed,
+    }
+
+
 def _renumber_channel_episodes(videos: list, channel) -> int:
-    """Renumber episodes in chronological order, excluding shorts. Returns count of renamed files."""
+    """Renumber episodes in chronological order, excluding shorts and livestreams. Returns count of renamed files."""
     import os
     import shutil
     from app.services.naming_service import build_output_path
@@ -1626,8 +1879,8 @@ def _renumber_channel_episodes(videos: list, channel) -> int:
     renamed = 0
 
     for video in videos:
-        # Shorts are excluded from episode numbering
-        if video.is_short:
+        # Shorts and livestreams are excluded from episode numbering
+        if video.is_short or video.is_livestream:
             if video.episode != 0:
                 video.episode = 0
             continue

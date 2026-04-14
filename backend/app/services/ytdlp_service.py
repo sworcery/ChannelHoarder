@@ -45,9 +45,14 @@ class YtdlpService:
         finally:
             self._cleanup_cookie_tmp(opts)
 
-    def get_channel_video_list(self, channel_url: str, platform: str = "youtube") -> list[dict]:
-        """Get flat list of all videos in a channel."""
-        from app.utils.platform_utils import get_channel_videos_url
+    def get_channel_video_list(self, channel_url: str, platform: str = "youtube", tab: str = "videos") -> list[dict]:
+        """Get flat list of videos from a specific channel tab.
+
+        tab: "videos" (default), "shorts", or "streams". Non-YouTube platforms
+        only support "videos".
+        """
+        from app.utils.platform_utils import get_channel_tab_url, get_channel_videos_url
+
         opts = self._base_opts(platform=platform)
         opts.update({
             "extract_flat": "in_playlist",
@@ -55,35 +60,71 @@ class YtdlpService:
             "quiet": False,
         })
 
-        # Append platform-appropriate suffix (e.g. /videos for YouTube)
-        channel_url = get_channel_videos_url(platform, channel_url)
+        # Resolve URL for the requested tab
+        if platform == "youtube" and tab != "videos":
+            target_url = get_channel_tab_url(platform, channel_url, tab)
+            if not target_url:
+                return []
+        else:
+            target_url = get_channel_videos_url(platform, channel_url)
 
-        logger.info("Fetching video list from: %s", channel_url)
+        logger.info("Fetching %s list from: %s", tab, target_url)
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(channel_url, download=False)
+                info = ydl.extract_info(target_url, download=False)
                 if not info:
-                    logger.warning("yt-dlp returned None for %s", channel_url)
+                    logger.warning("yt-dlp returned None for %s", target_url)
                     return []
                 entries = list(info.get("entries", []))
-                # Filter out None entries (failed extractions)
+                # Filter out None entries (failed extractions) and tag each with source tab
                 entries = [e for e in entries if e is not None]
-                logger.info("Found %d entries for %s", len(entries), channel_url)
-                if entries:
-                    sample = entries[0]
-                    logger.info(
-                        "Sample entry fields  - upload_date=%s, timestamp=%s, keys=%s",
-                        sample.get("upload_date"),
-                        sample.get("timestamp"),
-                        [k for k in sample.keys() if "date" in k.lower() or "time" in k.lower() or "publish" in k.lower()],
-                    )
+                for entry in entries:
+                    entry["_source_tab"] = tab
+                logger.info("Found %d entries in %s tab for %s", len(entries), tab, target_url)
                 return entries
         except Exception as e:
-            logger.error("Failed to list videos for %s: %s", channel_url, e)
+            # /shorts and /streams tabs can 404 on channels that don't have them
+            logger.info("Failed to fetch %s tab (may not exist): %s", tab, e)
             return []
         finally:
             self._cleanup_cookie_tmp(opts)
+
+    def get_channel_video_list_all_tabs(self, channel_url: str, platform: str = "youtube") -> list[dict]:
+        """Fetch videos from /videos, /shorts, and /streams tabs (YouTube) and merge.
+
+        Deduplicates by video ID, preferring the more specific tab when a video
+        appears in multiple (shorts/streams > videos).
+        """
+        from app.utils.platform_utils import is_playlist_url
+
+        # Playlists have no tab structure
+        if is_playlist_url(channel_url):
+            return self.get_channel_video_list(channel_url, platform, tab="videos")
+
+        if platform != "youtube":
+            return self.get_channel_video_list(channel_url, platform, tab="videos")
+
+        videos = self.get_channel_video_list(channel_url, platform, tab="videos")
+        shorts = self.get_channel_video_list(channel_url, platform, tab="shorts")
+        streams = self.get_channel_video_list(channel_url, platform, tab="streams")
+
+        # Deduplicate: shorts/streams override videos for the same video_id
+        merged: dict[str, dict] = {}
+        for entry in videos:
+            vid_id = entry.get("id") or entry.get("video_id", "")
+            if vid_id:
+                merged[vid_id] = entry
+        for entry in shorts:
+            vid_id = entry.get("id") or entry.get("video_id", "")
+            if vid_id:
+                merged[vid_id] = entry  # shorts tab wins
+        for entry in streams:
+            vid_id = entry.get("id") or entry.get("video_id", "")
+            if vid_id:
+                merged[vid_id] = entry  # streams tab wins
+
+        return list(merged.values())
 
     @staticmethod
     def get_rss_upload_dates(channel_id: str, platform: str = "youtube") -> dict[str, str]:

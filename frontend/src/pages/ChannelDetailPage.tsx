@@ -99,6 +99,7 @@ export default function ChannelDetailPage() {
     staleTime: 60000,
   })
   const shortsGloballyEnabled = appSettings?.shorts_enabled === true || appSettings?.shorts_enabled === "true"
+  const livestreamsGloballyEnabled = appSettings?.livestreams_enabled === true || appSettings?.livestreams_enabled === "true"
 
   const videos = videosData?.items || []
   const totalVideos = videosData?.total || 0
@@ -633,6 +634,54 @@ export default function ChannelDetailPage() {
           )}
         </div>
 
+        {/* Livestreams Management */}
+        {channel.platform === "youtube" && (
+          <div className="mt-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
+            <div className="space-y-3">
+              {livestreamsGloballyEnabled ? (
+                <>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={channel.include_livestreams}
+                      onChange={(e) => updateMutation.mutate({ include_livestreams: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span className="text-sm">Include livestreams when downloading</span>
+                    <HelpIcon text="Live streams and premieres from this channel." anchor="episode-management" />
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {channel.include_livestreams
+                      ? "Livestreams will be included in downloads."
+                      : "Livestreams are excluded from downloads for this channel."}
+                  </p>
+                </>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Livestream downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
+                </p>
+              )}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => api.detectChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
+                >
+                  <Search className="h-3 w-3" />
+                  Detect Livestreams
+                </button>
+                <button
+                  onClick={() => api.deleteChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Delete Downloaded Livestreams
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Subtitles */}
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
@@ -983,6 +1032,9 @@ export default function ChannelDetailPage() {
                               <DropdownSeparator />
                               <DropdownItem onClick={() => api.toggleVideoShort(channelId, video.id, !video.is_short).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}>
                                 <Circle className="h-3.5 w-3.5" /> {video.is_short ? "Unmark as Short" : "Mark as Short"}
+                              </DropdownItem>
+                              <DropdownItem onClick={() => api.toggleVideoLivestream(channelId, video.id, !video.is_livestream).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}>
+                                <Circle className="h-3.5 w-3.5" /> {video.is_livestream ? "Unmark as Livestream" : "Mark as Livestream"}
                               </DropdownItem>
                               {video.status !== "downloading" && (
                                 <DropdownItem onClick={() => deleteVideoMutation.mutate({ videoId: video.id, deleteFiles: !!video.file_path })} variant="danger">
