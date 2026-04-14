@@ -48,6 +48,10 @@ jobs:
         with:
           driver-opts: |
             network=host
+          buildkitd-config-inline: |
+            [registry."192.168.1.10:5000"]
+              http = true
+              insecure = true
 
       - name: Build and push dev image to local registry
         uses: docker/build-push-action@v5
