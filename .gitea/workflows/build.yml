@@ -57,8 +57,8 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          # Note: registry cache disabled because Buildx requires HTTPS for it.
+          # Docker layer cache from the local daemon is still used automatically.
 
       - name: Image tag summary
         run: |
