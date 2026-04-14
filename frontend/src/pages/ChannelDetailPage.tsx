@@ -135,6 +135,16 @@ export default function ChannelDetailPage() {
   const [detectCleanOpen, setDetectCleanOpen] = useState(false)
   const [detectCleanLoading, setDetectCleanLoading] = useState(false)
   const [forceRescanOpen, setForceRescanOpen] = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(() => {
+    try { return localStorage.getItem("ch_show_advanced") === "true" } catch { return false }
+  })
+  const toggleAdvanced = useCallback(() => {
+    setShowAdvanced(prev => {
+      const next = !prev
+      try { localStorage.setItem("ch_show_advanced", String(next)) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   const retryMutation = useMutation({
     mutationFn: (videoId: number) => api.retryDownload(videoId),
@@ -551,6 +561,19 @@ export default function ChannelDetailPage() {
             </div>
           </div>
 
+          {/* Advanced toggle */}
+          <div className="mt-4 pt-3 border-t">
+            <button
+              onClick={toggleAdvanced}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Advanced Options
+            </button>
+          </div>
+
+          {showAdvanced && (
+          <>
           {/* Shorts Management */}
           {channel.platform === "youtube" && (
             <div className="mt-4">
@@ -699,6 +722,8 @@ export default function ChannelDetailPage() {
             Fetches English subtitles and auto-generated captions for completed videos without existing subtitle files.
           </p>
         </div>
+        </>
+        )}
 
         {/* Monitoring */}
         <div>
