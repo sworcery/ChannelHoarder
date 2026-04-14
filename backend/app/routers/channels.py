@@ -357,10 +357,39 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
 
 @router.post("/{channel_id}/scan", status_code=202)
 async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
+    import json
+    from datetime import datetime, timedelta, timezone
+    from app.models import AppSetting
+
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+
+    # Rate limit: prevent spam clicking "Scan Now"
+    cooldown_minutes = 5
+    try:
+        cd_result = await db.execute(
+            select(AppSetting).where(AppSetting.key == "manual_scan_cooldown_minutes")
+        )
+        cd_setting = cd_result.scalar_one_or_none()
+        if cd_setting:
+            cooldown_minutes = int(json.loads(cd_setting.value))
+    except Exception:
+        pass
+
+    if channel.last_scanned_at and cooldown_minutes > 0:
+        last_ts = channel.last_scanned_at
+        if last_ts.tzinfo is None:
+            last_ts = last_ts.replace(tzinfo=timezone.utc)
+        elapsed = datetime.now(timezone.utc) - last_ts
+        cooldown = timedelta(minutes=cooldown_minutes)
+        if elapsed < cooldown:
+            remaining_sec = int((cooldown - elapsed).total_seconds())
+            raise HTTPException(
+                status_code=429,
+                detail=f"This channel was scanned recently. Try again in {remaining_sec} seconds.",
+            )
 
     service = ChannelService(db)
     try:

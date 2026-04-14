@@ -757,6 +757,8 @@ function AntiDetectTab() {
   const [scanWindowEnabled, setScanWindowEnabled] = useState(false)
   const [scanWindowStartHour, setScanWindowStartHour] = useState<number>(22)
   const [scanWindowEndHour, setScanWindowEndHour] = useState<number>(6)
+  const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
+  const [manualScanCooldownMinutes, setManualScanCooldownMinutes] = useState<number>(5)
   const [maxDuration, setMaxDuration] = useState(0) // 0 = disabled, value in hours
   const [shortsEnabled, setShortsEnabled] = useState(false)
   const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
@@ -787,6 +789,8 @@ function AntiDetectTab() {
         setScanWindowEndHour(Number(settings.scan_window_end_hour))
         setScanWindowEnabled(true)
       }
+      if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
+      if (settings.manual_scan_cooldown_minutes != null) setManualScanCooldownMinutes(Number(settings.manual_scan_cooldown_minutes))
       if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
@@ -809,6 +813,8 @@ function AntiDetectTab() {
         scan_jitter_max_seconds: scanJitterMaxSeconds,
         scan_window_start_hour: scanWindowEnabled ? scanWindowStartHour : null,
         scan_window_end_hour: scanWindowEnabled ? scanWindowEndHour : null,
+        scan_min_interval_hours: scanMinIntervalHours,
+        manual_scan_cooldown_minutes: manualScanCooldownMinutes,
         max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
         shorts_enabled: shortsEnabled,
         livestreams_enabled: livestreamsEnabled,
@@ -944,6 +950,42 @@ function AntiDetectTab() {
             </div>
           )
         })()}
+        <div className="pt-3 border-t space-y-3">
+          <div>
+            <label className="flex items-center gap-1 text-sm font-medium mb-1">
+              Minimum hours between auto-scans
+              <HelpIcon text="Ensures random scheduling never re-scans a channel within this many hours. Default 12 means each channel is scanned roughly once per day." anchor="channel-management" />
+            </label>
+            <input
+              type="number"
+              value={scanMinIntervalHours}
+              onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
+              min={1}
+              max={168}
+              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Hours. Random auto-scans are guaranteed to be at least this far apart.
+            </p>
+          </div>
+          <div>
+            <label className="flex items-center gap-1 text-sm font-medium mb-1">
+              Manual "Scan Now" cooldown
+              <HelpIcon text="Prevents spam-clicking the Scan Now button. Attempts within this window are rejected with a 429 response." anchor="channel-management" />
+            </label>
+            <input
+              type="number"
+              value={manualScanCooldownMinutes}
+              onChange={(e) => setManualScanCooldownMinutes(Math.max(0, Math.min(1440, Number(e.target.value) || 0)))}
+              min={0}
+              max={1440}
+              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Minutes. Set to 0 to disable the cooldown.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card p-4 space-y-3">

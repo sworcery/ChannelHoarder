@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.28] - 2026-04-14
+
+### Added
+- **Minimum auto-scan interval** - New setting guarantees a minimum number of hours between automatic scans of the same channel (default 12). Randomization can no longer roll a near-future scan time. Configurable in Anti-Detection settings.
+- **Scan Now cooldown** - Manual "Scan Now" button is rate limited by a configurable cooldown (default 5 minutes). Clicking during cooldown returns a 429 response with the remaining wait time. Set to 0 to disable.
+
+### Changed
+- **Scan scheduling always resets clock** - Manual scans via "Scan Now" re-roll the channel's `next_scan_at` just like automatic scans, so a manual trigger doesn't leave a scan pending right behind it.
+
 ## [1.7.27] - 2026-04-14
 
 ### Changed

@@ -191,6 +191,8 @@ class SettingsUpdate(BaseModel):
     scan_jitter_max_seconds: Optional[int] = None  # Max seconds of jitter between channels
     scan_window_start_hour: Optional[int] = Field(default=None, ge=0, le=23)
     scan_window_end_hour: Optional[int] = Field(default=None, ge=0, le=23)
+    scan_min_interval_hours: Optional[int] = Field(default=None, ge=1, le=168)  # Min gap between auto-scans for the same channel
+    manual_scan_cooldown_minutes: Optional[int] = Field(default=None, ge=0, le=1440)  # "Scan Now" cooldown
     max_concurrent_downloads: Optional[int] = None
     max_retries: Optional[int] = None
     user_agent_rotation: Optional[bool] = None
