@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.25] - 2026-04-13
+
+### Changed
+- **Quality target is the cutoff** - Removed the separate "Quality Cutoff" field per channel. The channel's Quality setting now acts as both the download target and the upgrade cutoff. "Search Upgrades" button moved next to the Quality dropdown. Upgrades are skipped when quality is set to "Best Available".
+- **Min Duration field moved to Advanced** - The shorts threshold field is now inside the Shorts Management section (under the Advanced toggle) and labeled "Shorts Threshold" for clarity.
+
 ## [1.7.24] - 2026-04-13
 
 ### Fixed

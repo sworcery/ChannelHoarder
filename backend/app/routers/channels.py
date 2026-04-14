@@ -882,7 +882,7 @@ async def download_missing_season(
 
 @router.post("/{channel_id}/upgrade-quality")
 async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
-    """Re-queue completed videos where quality is below the channel's cutoff."""
+    """Re-queue completed videos where quality is below the channel's target quality."""
     from app.utils.quality_utils import quality_met
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -890,8 +890,11 @@ async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    if not channel.quality_cutoff:
-        return {"message": "No quality cutoff set for this channel", "queued": 0}
+    # Use channel.quality_cutoff if explicitly set, else fall back to channel.quality.
+    # "best" means no cutoff (any quality acceptable).
+    cutoff = channel.quality_cutoff or channel.quality
+    if not cutoff or cutoff == "best":
+        return {"message": "No quality cutoff (channel set to 'best')", "queued": 0}
 
     subquery = select(DownloadQueue.video_id)
     result = await db.execute(
@@ -905,7 +908,7 @@ async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
 
     queued = 0
     for video in videos:
-        if not quality_met(video.quality_downloaded, channel.quality_cutoff):
+        if not quality_met(video.quality_downloaded, cutoff):
             video.status = "queued"
             db.add(DownloadQueue(video_id=video.id))
             queued += 1

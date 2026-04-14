@@ -16,13 +16,11 @@ logger = logging.getLogger(__name__)
 
 
 async def check_quality_upgrades():
-    """Re-queue videos that are below their channel's quality cutoff."""
+    """Re-queue videos that are below their channel's target quality."""
     async with async_session() as db:
+        # Channels with an explicit cutoff, OR channels with a specific quality target (not 'best')
         result = await db.execute(
-            select(Channel).where(
-                Channel.quality_cutoff.isnot(None),
-                Channel.enabled == True,
-            )
+            select(Channel).where(Channel.enabled == True)
         )
         channels = result.scalars().all()
 
@@ -33,6 +31,12 @@ async def check_quality_upgrades():
         channels_checked = 0
 
         for channel in channels:
+            # Use quality_cutoff if explicitly set, else fall back to channel.quality.
+            # 'best' means no cutoff check.
+            cutoff = channel.quality_cutoff or channel.quality
+            if not cutoff or cutoff == "best":
+                continue
+
             subquery = select(DownloadQueue.video_id)
             result = await db.execute(
                 select(Video)
@@ -45,7 +49,7 @@ async def check_quality_upgrades():
 
             queued = 0
             for video in videos:
-                if not quality_met(video.quality_downloaded, channel.quality_cutoff):
+                if not quality_met(video.quality_downloaded, cutoff):
                     video.status = "queued"
                     db.add(DownloadQueue(video_id=video.id, target_quality=channel.quality))
                     queued += 1
