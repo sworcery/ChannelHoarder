@@ -1,7 +1,7 @@
 {
   "name": "channelhoarder",
   "private": true,
-  "version": "1.7.28.4",
+  "version": "1.7.28.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
