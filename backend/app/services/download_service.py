@@ -105,6 +105,19 @@ class DownloadService:
                 naming_template=cdata.naming_template,
                 base_dir=cdata.download_dir,
             )
+
+            # Read subtitle setting while we have a DB session (avoid raw sqlite3 later)
+            import json
+            sub_result = await db.execute(
+                select(AppSetting).where(AppSetting.key == "subtitles_enabled")
+            )
+            sub_setting = sub_result.scalar_one_or_none()
+            subtitles_enabled = False
+            if sub_setting:
+                try:
+                    subtitles_enabled = bool(json.loads(sub_setting.value))
+                except Exception:
+                    pass
         # ← session released
 
         # ── Phase 2: actual download  - no DB session held ────────────────
@@ -161,6 +174,7 @@ class DownloadService:
                         quality=cdata.quality,
                         progress_hook=progress_hook,
                         platform=cdata.platform,
+                        subtitles_enabled=subtitles_enabled,
                     ),
                     timeout=900,
                 )

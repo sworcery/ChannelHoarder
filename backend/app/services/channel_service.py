@@ -146,16 +146,16 @@ class ChannelService:
         if info:
             if not channel.thumbnail_url:
                 channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
-        channel.description = info.get("description") or channel.description
+            channel.description = info.get("description") or channel.description
 
-        # Extract banner URL from thumbnails list (widest image)
-        thumbnails = info.get("thumbnails") or []
-        for thumb in sorted(thumbnails, key=lambda t: t.get("width", 0), reverse=True):
-            w = thumb.get("width", 0)
-            h = thumb.get("height", 0)
-            if w >= 1200 and h > 0 and w / h > 2:
-                channel.banner_url = thumb.get("url")
-                break
+            # Extract banner URL from thumbnails list (widest image)
+            thumbnails = info.get("thumbnails") or []
+            for thumb in sorted(thumbnails, key=lambda t: t.get("width", 0), reverse=True):
+                w = thumb.get("width", 0)
+                h = thumb.get("height", 0)
+                if w >= 1200 and h > 0 and w / h > 2:
+                    channel.banner_url = thumb.get("url")
+                    break
 
         await self.db.commit()
         await self.db.refresh(channel)
@@ -180,6 +180,19 @@ class ChannelService:
         """Internal scan implementation."""
         from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
         logger.info("Scanning channel: %s", channel.channel_name)
+
+        # Batch-read all settings once at scan start (avoids per-video DB queries)
+        import json
+        self._settings_cache: dict = {}
+        try:
+            result = await self.db.execute(select(AppSetting))
+            for s in result.scalars().all():
+                try:
+                    self._settings_cache[s.key] = json.loads(s.value)
+                except (json.JSONDecodeError, TypeError):
+                    self._settings_cache[s.key] = s.value
+        except Exception:
+            pass
 
         platform = getattr(channel, "platform", "youtube")
         is_playlist = is_playlist_url(channel.channel_url)
@@ -425,7 +438,7 @@ class ChannelService:
 
             # Filter shorts based on global + channel settings
             if is_short_entry:
-                shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
+                shorts_globally_enabled = bool(self._settings_cache.get("shorts_enabled", False))
                 if not shorts_globally_enabled or not channel.include_shorts:
                     video.status = "skipped"
                     video.monitored = False
@@ -435,7 +448,7 @@ class ChannelService:
 
             # Filter livestreams based on global + channel settings
             if is_livestream_entry:
-                livestreams_globally_enabled = await self._get_setting_bool("livestreams_enabled", False)
+                livestreams_globally_enabled = bool(self._settings_cache.get("livestreams_enabled", False))
                 if not livestreams_globally_enabled or not channel.include_livestreams:
                     video.status = "skipped"
                     video.monitored = False
@@ -453,7 +466,8 @@ class ChannelService:
                 continue
 
             # Check livestream / long video filter
-            max_dur = await self._get_max_duration()
+            max_dur_val = self._settings_cache.get("max_video_duration")
+            max_dur = int(max_dur_val) if max_dur_val else None
             if max_dur and max_dur > 0 and duration and duration > max_dur:
                 video.status = "pending_review"
                 logger.info(
@@ -538,8 +552,9 @@ class ChannelService:
                 live_status_map[vid_id] = entry.get("live_status")
 
         shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
-        shorts_globally_enabled = await self._get_setting_bool("shorts_enabled", False)
-        livestreams_globally_enabled = await self._get_setting_bool("livestreams_enabled", False)
+        # Read settings from cache if available, otherwise fall back to DB
+        shorts_globally_enabled = bool(self._settings_cache.get("shorts_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("shorts_enabled", False)
+        livestreams_globally_enabled = bool(self._settings_cache.get("livestreams_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("livestreams_enabled", False)
         shorts_allowed = shorts_globally_enabled and channel.include_shorts
         livestreams_allowed = livestreams_globally_enabled and channel.include_livestreams
 
@@ -551,6 +566,10 @@ class ChannelService:
 
         changed = 0
         for video in videos:
+            # Never reclassify a video that's actively downloading
+            if video.status == "downloading":
+                continue
+
             # Determine correct classification
             source_tab = tab_map.get(video.video_id)
             live_status = live_status_map.get(video.video_id)
