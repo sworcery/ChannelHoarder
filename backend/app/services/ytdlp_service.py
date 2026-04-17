@@ -197,6 +197,7 @@ class YtdlpService:
         quality: str = "best",
         progress_hook=None,
         platform: str = "youtube",
+        subtitles_enabled: bool = False,
     ) -> dict:
         """Download a single video. Returns info dict on success, raises on failure."""
         opts = self._base_opts(platform=platform)
@@ -206,9 +207,9 @@ class YtdlpService:
             "outtmpl": output_path + ".%(ext)s",
             "writethumbnail": True,
             "writeinfojson": True,
-            "writesubtitles": self._subtitles_enabled(),
-            "writeautomaticsub": self._subtitles_enabled(),
-            "subtitleslangs": ["en"] if self._subtitles_enabled() else [],
+            "writesubtitles": subtitles_enabled,
+            "writeautomaticsub": subtitles_enabled,
+            "subtitleslangs": ["en"] if subtitles_enabled else [],
             "postprocessors": [
                 {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
                 {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},

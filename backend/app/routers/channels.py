@@ -1268,6 +1268,11 @@ async def move_channel_files(
 ):
     """Start moving channel files to a new directory."""
     import asyncio
+    from app.utils.file_utils import validate_download_path
+    try:
+        validate_download_path(body.new_download_dir, settings.allowed_download_roots)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
@@ -1388,6 +1393,11 @@ async def move_all_channels(
 ):
     """Start moving all channel files to a new directory."""
     import asyncio
+    from app.utils.file_utils import validate_download_path
+    try:
+        validate_download_path(body.new_download_dir, settings.allowed_download_roots)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Capture all old directories BEFORE any changes
     result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
@@ -1532,10 +1542,10 @@ def _is_likely_short(video, threshold: int) -> bool:
         if "#shorts" in title_lower or "#short" in title_lower:
             return True
 
-    # Very small file size (< 20MB) combined with very short duration or no duration
-    # Shorts are typically under 20MB
+    # Very small file size (< 20MB) combined with known short duration
+    # Only apply when duration is actually known to avoid false positives
     if video.file_size and video.file_size < 20 * 1024 * 1024:
-        if not video.duration or video.duration <= threshold:
+        if video.duration and video.duration <= threshold:
             return True
 
     return False

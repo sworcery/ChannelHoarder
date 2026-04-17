@@ -50,54 +50,64 @@ async def scan_due_channels():
     within the configured daily window, so scans spread naturally instead of
     firing in a burst.
     """
+    # Fetch due channels list with a short-lived session
     async with async_session() as db:
         now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
         result = await db.execute(
-            select(Channel)
+            select(Channel.id, Channel.channel_name)
             .where(Channel.enabled == True)
             .where(Channel.channel_id != "__standalone__")
             .where(or_(Channel.next_scan_at.is_(None), Channel.next_scan_at <= now_utc))
         )
-        channels = result.scalars().all()
+        due_channels = [(row[0], row[1]) for row in result.all()]
 
-        if not channels:
+        if not due_channels:
             return
 
-        logger.info("Scan tick: %d channels due", len(channels))
-
+        logger.info("Scan tick: %d channels due", len(due_channels))
         jitter_enabled, jitter_max = await _get_jitter_settings(db)
-        random.shuffle(channels)
 
-        total_new = 0
-        for i, channel in enumerate(channels):
-            if jitter_enabled and i > 0 and jitter_max > 0:
-                delay = random.uniform(0, jitter_max)
-                logger.debug("Scan jitter: sleeping %.1fs before scanning %s", delay, channel.channel_name)
-                await asyncio.sleep(delay)
+    random.shuffle(due_channels)
 
-            try:
+    total_new = 0
+    for i, (channel_id, channel_name) in enumerate(due_channels):
+        if jitter_enabled and i > 0 and jitter_max > 0:
+            delay = random.uniform(0, jitter_max)
+            logger.debug("Scan jitter: sleeping %.1fs before scanning %s", delay, channel_name)
+            await asyncio.sleep(delay)
+
+        # Fresh session per channel -- prevents rollback contamination and
+        # avoids holding a connection during jitter sleeps
+        try:
+            async with async_session() as db:
+                channel = await db.get(Channel, channel_id)
+                if not channel:
+                    continue
                 service = ChannelService(db)
                 new_count = await service.scan_channel(channel)
                 total_new += new_count
                 if new_count > 0:
-                    logger.info("Found %d new videos for %s", new_count, channel.channel_name)
-            except Exception as e:
-                logger.error("Scan failed for %s: %s", channel.channel_name, e)
-                channel.health_status = "warning"
-                channel.last_error_code = "SCAN_FAILED"
-                # Don't leave next_scan_at in the past forever - reschedule even on failure
-                try:
-                    channel.next_scan_at = await service._compute_next_scan_at()
-                except Exception:
-                    pass
-                await db.commit()
+                    logger.info("Found %d new videos for %s", new_count, channel_name)
+        except Exception as e:
+            logger.error("Scan failed for %s: %s", channel_name, e)
+            try:
+                async with async_session() as db:
+                    channel = await db.get(Channel, channel_id)
+                    if channel:
+                        channel.health_status = "warning"
+                        channel.last_error_code = "SCAN_FAILED"
+                        service = ChannelService(db)
+                        channel.next_scan_at = await service._compute_next_scan_at()
+                        await db.commit()
+            except Exception:
+                pass
 
-        logger.info("Scan tick complete: scanned %d channels, found %d new videos", len(channels), total_new)
+    logger.info("Scan tick complete: scanned %d channels, found %d new videos", len(due_channels), total_new)
 
-        await NotificationService.broadcast("scan_complete", {
-            "channels_scanned": len(channels),
-            "new_videos": total_new,
-        })
+    await NotificationService.broadcast("scan_complete", {
+        "channels_scanned": len(due_channels),
+        "new_videos": total_new,
+    })
 
 
 # Keep the old name as an alias so any external references (including the

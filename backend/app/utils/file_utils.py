@@ -14,12 +14,15 @@ def validate_url_scheme(url: str) -> None:
 def validate_download_path(path: str, allowed_roots: list[str] | None = None) -> Path:
     """Validate that a download directory path is safe.
 
-    Rejects paths containing '..' traversal. Docker volume mounts
-    are the primary security boundary for path access.
+    Rejects paths containing '..' traversal and enforces containment
+    within allowed_roots when provided.
     """
     resolved = Path(path).resolve()
     if ".." in Path(path).parts:
         raise ValueError(f"Path traversal not allowed: {path}")
+    if allowed_roots:
+        if not any(str(resolved).startswith(str(Path(root).resolve())) for root in allowed_roots):
+            raise ValueError(f"Path {path} is not under any allowed download directory")
     return resolved
 
 
