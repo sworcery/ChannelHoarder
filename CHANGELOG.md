@@ -5,6 +5,32 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.29] - 2026-04-17
+
+### Added
+- **Per-channel randomized scan scheduling** - Each channel gets its own random scan time instead of all channels scanning at once. Configurable scan window (e.g. 10 PM - 6 AM) with minimum 8-hour width. Channels display their next scheduled scan time.
+- **Scan rate limits** - Minimum hours between auto-scans (default 12) and manual "Scan Now" cooldown (default 5 min) prevent excessive scanning.
+- **Auto-reclassify shorts and livestreams** - Every scan re-checks existing videos against YouTube's /shorts and /streams tabs. Newly identified shorts/livestreams are automatically cleaned up (files deleted, episodes renumbered) when those categories are disabled.
+- **Scan jitter** - Randomized delays between channel scans and randomized scan order to avoid predictable traffic patterns.
+- **Download subtitles for existing videos** - "Download Missing Subtitles" button fetches subtitles for previously downloaded videos without re-downloading them.
+- **Standalone downloads organized by uploader** - Standalone video downloads now create proper per-uploader channels in the main download directory instead of a flat folder.
+
+### Changed
+- **Settings reorganized (Sonarr-style)** - Restructured from 6 tabs to 6 purpose-driven tabs: General (system info, yt-dlp, backup/restore), Media Management (naming, shorts, livestreams, subtitles, permissions), Authentication, Anti-Detection, Connect, Diagnostics.
+- **Diagnostics moved into Settings** - No longer a separate sidebar page; now a tab within Settings with sub-tabs for Overview, Error Logs, and System Logs.
+- **Quality target is the cutoff** - Removed separate "Quality Cutoff" field per channel. The channel's Quality setting now serves as both the download target and upgrade cutoff.
+- **Advanced options collapsible** - Shorts, livestreams, and subtitles management on channel detail page hidden behind an "Advanced Options" toggle.
+
+### Fixed
+- **Null dereference crash** in refresh_channel_metadata when yt-dlp returns None.
+- **Reclassification race condition** - No longer deletes files for videos that are actively downloading.
+- **Settings query performance** - Batch-read all settings once at scan start instead of 2 DB queries per video (eliminates 400+ round-trips for large channel scans).
+- **Raw sqlite3 connection** removed from subtitle check; setting now read asynchronously and passed as parameter.
+- **Path validation enforced** - `validate_download_path` now actually checks `allowed_roots` containment (was accepting the parameter but never using it).
+- **Move file endpoints validated** - Move Files and Move All now validate the target directory against allowed roots.
+- **Per-channel DB sessions** in scheduled scans prevent rollback contamination and connection starvation during long scan runs with jitter.
+- **Shorts false positive** - No longer marks videos as shorts when duration is unknown and file is small.
+
 ## [1.7.28] - 2026-04-14
 
 ### Added
