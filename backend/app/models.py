@@ -59,6 +59,7 @@ class Video(Base):
     __table_args__ = (
         Index("ix_videos_channel_season", "channel_id", "season"),
         Index("ix_videos_status_downloaded_at", "status", "downloaded_at"),
+        Index("ix_videos_channel_status_monitored", "channel_id", "status", "monitored"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

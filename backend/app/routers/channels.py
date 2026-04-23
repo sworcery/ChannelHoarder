@@ -69,6 +69,7 @@ async def download_all_missing(db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Video)
         .where(Video.status.in_(["pending", "failed"]))
+        .where(Video.monitored == True)
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
@@ -1976,9 +1977,17 @@ async def confirm_import(
     db: AsyncSession = Depends(get_db),
 ):
     """Import confirmed file matches: move, rename, write metadata, update DB."""
+    from app.utils.file_utils import validate_download_path
+
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Channel not found")
+
+    for match in body.matches:
+        try:
+            validate_download_path(match.file_path, settings.allowed_download_roots)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid file path: {e}")
 
     try:
         result = await import_matched_files(

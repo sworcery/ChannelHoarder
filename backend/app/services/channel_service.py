@@ -416,20 +416,13 @@ class ChannelService:
                     logger.debug("Skipping video %s (belongs to channel_id=%d)", vid_id, existing_video.channel_id)
                     continue
 
-            self.db.add(video)
             try:
-                await self.db.flush()
+                async with self.db.begin_nested():
+                    self.db.add(video)
+                    await self.db.flush()
             except IntegrityError:
-                # Narrow race window: concurrent insert between our check and flush
-                await self.db.rollback()
+                self.db.expunge(video)
                 logger.debug("Skipping duplicate video %s after IntegrityError", vid_id)
-                # Re-fetch season counts since rollback cleared pending state
-                season_counts_result = await self.db.execute(
-                    select(Video.season, func.count(Video.id))
-                    .where(Video.channel_id == channel.id)
-                    .group_by(Video.season)
-                )
-                season_episode_counts = {row[0]: row[1] for row in season_counts_result.all()}
                 continue
 
             # Set the short/livestream flags (already detected before episode numbering)

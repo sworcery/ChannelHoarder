@@ -97,13 +97,15 @@ async def get_recent_downloads(
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
+    from sqlalchemy.orm import joinedload
     result = await db.execute(
         select(Video)
+        .options(joinedload(Video.channel))
         .where(Video.status == "completed")
         .order_by(Video.downloaded_at.desc())
         .limit(limit)
     )
-    return result.scalars().all()
+    return result.scalars().unique().all()
 
 
 @router.get("/storage")

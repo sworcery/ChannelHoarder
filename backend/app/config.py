@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.7.29"
+    APP_VERSION: str = "1.7.29.1"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     DOWNLOAD_DELAY_MAX: int = 30
     JITTER_ENABLED: bool = True
     USER_AGENT_ROTATION: bool = True
+    CORS_ORIGINS: str = ""
 
     PUID: int = 1000
     PGID: int = 1000

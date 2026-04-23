@@ -21,7 +21,7 @@ def validate_download_path(path: str, allowed_roots: list[str] | None = None) ->
     if ".." in Path(path).parts:
         raise ValueError(f"Path traversal not allowed: {path}")
     if allowed_roots:
-        if not any(str(resolved).startswith(str(Path(root).resolve())) for root in allowed_roots):
+        if not any(resolved.is_relative_to(Path(root).resolve()) for root in allowed_roots):
             raise ValueError(f"Path {path} is not under any allowed download directory")
     return resolved
 

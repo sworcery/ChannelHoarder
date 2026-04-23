@@ -1,7 +1,9 @@
+import atexit
 import logging
 import shutil
 import subprocess
 import tempfile
+import threading
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -11,6 +13,23 @@ import yt_dlp
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+_cookie_cache_path: str | None = None
+_cookie_cache_mtime: float = 0.0
+_cookie_cache_lock = threading.Lock()
+
+
+def _cleanup_cookie_cache():
+    global _cookie_cache_path
+    if _cookie_cache_path:
+        try:
+            Path(_cookie_cache_path).unlink(missing_ok=True)
+        except Exception:
+            pass
+
+
+atexit.register(_cleanup_cookie_cache)
 
 
 class YtdlpService:
@@ -369,13 +388,7 @@ class YtdlpService:
         if settings.has_cookies:
             cookie_size = settings.cookies_path.stat().st_size if settings.cookies_path.exists() else 0
             logger.info("Using cookies file: %s (%d bytes)", settings.cookies_path, cookie_size)
-            tmp = tempfile.NamedTemporaryFile(
-                prefix="ch_cookies_", suffix=".txt", delete=False,
-            )
-            shutil.copy2(str(settings.cookies_path), tmp.name)
-            tmp.close()
-            opts["cookiefile"] = tmp.name
-            opts["_cookie_tmp"] = tmp.name  # marker for cleanup
+            opts["cookiefile"] = self._get_cached_cookie_copy()
         else:
             logger.info("No cookies file found at %s", settings.cookies_path)
 
@@ -407,14 +420,42 @@ class YtdlpService:
         return False
 
     @staticmethod
-    def _cleanup_cookie_tmp(opts: dict) -> None:
-        """Remove the temporary cookie file created by _base_opts."""
-        tmp_path = opts.get("_cookie_tmp")
-        if tmp_path:
+    def _get_cached_cookie_copy() -> str:
+        """Return path to a cached temp copy of the cookies file.
+
+        Re-copies only when the source file's mtime changes, avoiding
+        repeated disk I/O during batch operations like channel scans.
+        """
+        global _cookie_cache_path, _cookie_cache_mtime
+        with _cookie_cache_lock:
+            src = settings.cookies_path
             try:
-                Path(tmp_path).unlink(missing_ok=True)
-            except Exception:
-                pass
+                current_mtime = src.stat().st_mtime
+            except FileNotFoundError:
+                if _cookie_cache_path and Path(_cookie_cache_path).exists():
+                    return _cookie_cache_path
+                raise
+
+            if _cookie_cache_path and _cookie_cache_mtime == current_mtime and Path(_cookie_cache_path).exists():
+                return _cookie_cache_path
+
+            if _cookie_cache_path:
+                try:
+                    Path(_cookie_cache_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+            tmp = tempfile.NamedTemporaryFile(prefix="ch_cookies_", suffix=".txt", delete=False)
+            shutil.copy2(str(src), tmp.name)
+            tmp.close()
+            _cookie_cache_path = tmp.name
+            _cookie_cache_mtime = current_mtime
+            return _cookie_cache_path
+
+    @staticmethod
+    def _cleanup_cookie_tmp(opts: dict) -> None:
+        """No-op: cookie temp files are now managed by the module-level cache."""
+        pass
 
     @staticmethod
     def _quality_to_format(quality: str) -> str:

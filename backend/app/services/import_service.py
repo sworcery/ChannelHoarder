@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Channel, DownloadQueue, Video
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import sanitize_filename
+from app.utils.file_utils import sanitize_filename, validate_download_path
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +132,15 @@ async def import_matched_files(
     imported = 0
     errors = []
 
+    from app.config import settings as app_settings
+
     for match in matches:
         file_path = match["file_path"]
         video_id = match["matched_video_id"]
 
         try:
+            validate_download_path(file_path, app_settings.allowed_download_roots)
+
             video = await db.get(Video, video_id)
             if not video:
                 errors.append(f"Video ID {video_id} not found")
