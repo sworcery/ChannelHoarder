@@ -18,7 +18,7 @@ from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService
-from app.utils.file_utils import ASSOCIATED_EXTENSIONS, sanitize_filename
+from app.utils.file_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -504,7 +504,7 @@ class ChannelService:
                 .order_by(Video.upload_date.asc(), Video.id.asc())
             )
             all_videos = result.scalars().all()
-            renamed = renumber_channel_episodes(all_videos, channel)
+            renamed = await asyncio.to_thread(renumber_channel_episodes, all_videos, channel)
             await self.db.commit()
             if renamed > 0:
                 logger.info("Renumbered %d episodes for %s after reclassification", renamed, channel.channel_name)
@@ -533,7 +533,6 @@ class ChannelService:
 
         Returns the number of videos whose classification changed.
         """
-        import os
 
         # Build tab map from the fetched video list
         tab_map: dict[str, str] = {}
@@ -619,7 +618,7 @@ class ChannelService:
         from app.utils.file_utils import delete_video_files
 
         if video.file_path:
-            delete_video_files(video.file_path)
+            await asyncio.to_thread(delete_video_files, video.file_path)
 
         # Remove from queue if present
         queue_result = await self.db.execute(
@@ -735,21 +734,12 @@ class ChannelService:
                 continue
 
             try:
-                os.makedirs(expected_path.parent, exist_ok=True)
-                await asyncio.to_thread(shutil.move, str(old_path), str(expected_path))
+                from app.utils.file_utils import move_video_files
+                await asyncio.to_thread(move_video_files, str(old_path), str(expected_path))
                 video.file_path = str(expected_path)
                 renamed_count += 1
                 logger.info("Renamed: %s -> %s", old_path, expected_path)
 
-                old_base = os.path.splitext(str(old_path))[0]
-                new_base = os.path.splitext(str(expected_path))[0]
-                for ext in ASSOCIATED_EXTENSIONS:
-                    old_extra = old_base + ext
-                    if os.path.exists(old_extra):
-                        new_extra = new_base + ext
-                        await asyncio.to_thread(shutil.move, old_extra, new_extra)
-
-                # Clean up empty parent directories
                 try:
                     old_parent = old_path.parent
                     while old_parent != Path(channel.download_dir or settings.DOWNLOAD_DIR):

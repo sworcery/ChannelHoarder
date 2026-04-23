@@ -14,7 +14,7 @@ from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
 from app.services.ytdlp_service import YtdlpService
-from app.utils.file_utils import ASSOCIATED_EXTENSIONS, escape_like, validate_download_path
+from app.utils.file_utils import escape_like, move_video_files, validate_download_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -512,7 +512,6 @@ async def reorganize_standalone_downloads(db: AsyncSession = Depends(get_db)):
     creates a proper channel, reassigns the video, and moves the file to the new location.
     """
     import os
-    import shutil
     from app.utils.platform_utils import detect_platform, build_video_url
     from app.utils.file_utils import sanitize_filename
     from app.services.naming_service import build_output_path
@@ -581,19 +580,8 @@ async def reorganize_standalone_downloads(db: AsyncSession = Depends(get_db)):
 
                 # Move file if it exists
                 if os.path.exists(old_path) and old_path != new_path:
-                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                    shutil.move(old_path, new_path)
+                    move_video_files(old_path, new_path)
                     video.file_path = new_path
-
-                    # Move associated files
-                    old_base = os.path.splitext(old_path)[0]
-                    new_base = os.path.splitext(new_path)[0]
-                    for assoc_ext in ASSOCIATED_EXTENSIONS:
-                        old_assoc = old_base + assoc_ext
-                        new_assoc = new_base + assoc_ext
-                        if os.path.exists(old_assoc):
-                            shutil.move(old_assoc, new_assoc)
-
                     logger.info("Moved standalone file: %s -> %s", old_path, new_path)
 
             # Reassign video to new channel

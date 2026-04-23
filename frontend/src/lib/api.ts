@@ -1,3 +1,5 @@
+import type { Channel, Video, QueueEntry, DashboardStats, DownloadLog, MessageResponse } from "./types"
+
 const BASE_URL = "/api/v1"
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -14,15 +16,43 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json()
 }
 
+interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  skip?: number
+  limit?: number
+}
+
+interface StorageInfo {
+  total_bytes: number
+  used_bytes: number
+  free_bytes: number
+  total_formatted: string
+  used_formatted: string
+  free_formatted: string
+  paths: { path: string; free_bytes: number; free_formatted: string }[]
+}
+
+interface SettingsData {
+  [key: string]: string | number | boolean | null
+}
+
+interface DetectCleanPreview {
+  reclassified: number
+  files_to_delete: number
+  renumber_changes: number
+  details: { video_id: string; title: string; has_file: boolean; file_path?: string }[]
+}
+
 export const api = {
   // Channels
   getChannels: (search?: string) =>
-    request<any[]>(`/channels/${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+    request<Channel[]>(`/channels/${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   addChannel: (data: { url: string; quality?: string; download_dir?: string }) =>
-    request<any>("/channels/", { method: "POST", body: JSON.stringify(data) }),
-  getChannel: (id: number) => request<any>(`/channels/${id}`),
-  updateChannel: (id: number, data: any) =>
-    request<any>(`/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    request<Channel>("/channels/", { method: "POST", body: JSON.stringify(data) }),
+  getChannel: (id: number) => request<Channel>(`/channels/${id}`),
+  updateChannel: (id: number, data: Partial<Channel>) =>
+    request<Channel>(`/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteChannel: (id: number, deleteFiles = false) =>
     request<void>(`/channels/${id}?delete_files=${deleteFiles}`, { method: "DELETE" }),
   getChannelVideos: (id: number, params?: { skip?: number; limit?: number; status?: string; monitored?: boolean; search?: string }) => {
@@ -32,14 +62,14 @@ export const api = {
     if (params?.status) qs.set("status", params.status)
     if (params?.monitored !== undefined) qs.set("monitored", String(params.monitored))
     if (params?.search) qs.set("search", params.search)
-    return request<{ items: any[]; total: number; skip: number; limit: number }>(`/channels/${id}/videos?${qs}`)
+    return request<PaginatedResponse<Video> & { skip: number; limit: number }>(`/channels/${id}/videos?${qs}`)
   },
-  scanChannel: (id: number) => request<any>(`/channels/${id}/scan`, { method: "POST" }),
-  refreshChannelMetadata: (id: number) => request<any>(`/channels/${id}/refresh-metadata`, { method: "POST" }),
-  downloadAllChannel: (id: number) => request<any>(`/channels/${id}/download-all`, { method: "POST" }),
-  downloadAllMissing: () => request<any>("/channels/download-all-missing", { method: "POST" }),
+  scanChannel: (id: number) => request<MessageResponse>(`/channels/${id}/scan`, { method: "POST" }),
+  refreshChannelMetadata: (id: number) => request<MessageResponse>(`/channels/${id}/refresh-metadata`, { method: "POST" }),
+  downloadAllChannel: (id: number) => request<MessageResponse>(`/channels/${id}/download-all`, { method: "POST" }),
+  downloadAllMissing: () => request<MessageResponse>("/channels/download-all-missing", { method: "POST" }),
   importScan: (id: number, folderPath: string, threshold = 75) =>
-    request<{ matches: any[]; total: number }>(`/channels/${id}/import/scan`, {
+    request<{ matches: { file_path: string; matched_video_id: number; video_title: string; score: number }[]; total: number }>(`/channels/${id}/import/scan`, {
       method: "POST",
       body: JSON.stringify({ folder_path: folderPath, threshold }),
     }),
@@ -52,36 +82,36 @@ export const api = {
   // Shorts management
   getChannelShorts: (channelId: number, status?: string) => {
     const qs = status ? `?status=${status}` : ""
-    return request<{ items: any[]; total: number }>(`/channels/${channelId}/shorts${qs}`)
+    return request<PaginatedResponse<Video>>(`/channels/${channelId}/shorts${qs}`)
   },
   deleteChannelShorts: (channelId: number) =>
     request<{ deleted: number }>(`/channels/${channelId}/shorts/delete`, { method: "POST" }),
   detectChannelShorts: (channelId: number) =>
     request<{ detected: number }>(`/channels/${channelId}/shorts/detect`, { method: "POST" }),
   detectCleanShortsPreview: (channelId: number) =>
-    request<any>(`/channels/${channelId}/shorts/detect-clean/preview`, { method: "POST" }),
+    request<DetectCleanPreview>(`/channels/${channelId}/shorts/detect-clean/preview`, { method: "POST" }),
   detectCleanShortsConfirm: (channelId: number) =>
-    request<any>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
+    request<{ deleted: number; renumbered: number; reclassified: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
 
   // Livestream management
   getChannelLivestreams: (channelId: number, status?: string) => {
     const qs = status ? `?status=${status}` : ""
-    return request<{ items: any[]; total: number }>(`/channels/${channelId}/livestreams${qs}`)
+    return request<PaginatedResponse<Video>>(`/channels/${channelId}/livestreams${qs}`)
   },
   deleteChannelLivestreams: (channelId: number) =>
     request<{ deleted: number; message: string }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
   detectChannelLivestreams: (channelId: number) =>
     request<{ detected: number; message: string }>(`/channels/${channelId}/livestreams/detect`, { method: "POST" }),
   detectCleanLivestreamsPreview: (channelId: number) =>
-    request<any>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
+    request<DetectCleanPreview>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
   detectCleanLivestreamsConfirm: (channelId: number) =>
-    request<any>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
+    request<{ deleted: number; renumbered: number; reclassified: number }>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
   toggleVideoLivestream: (channelId: number, videoId: number, isLivestream: boolean) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/livestream`, { method: "PATCH", body: JSON.stringify({ is_livestream: isLivestream }) }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/livestream`, { method: "PATCH", body: JSON.stringify({ is_livestream: isLivestream }) }),
 
   // Channel recovery
   forceRescan: (channelId: number) =>
-    request<any>(`/channels/${channelId}/force-rescan`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/force-rescan`, { method: "POST" }),
 
   // Bulk video actions
   bulkQueueVideos: (channelId: number, videoIds: number[]) =>
@@ -107,57 +137,57 @@ export const api = {
 
   // Video management
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}?delete_files=${deleteFiles}`, { method: "DELETE" }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}?delete_files=${deleteFiles}`, { method: "DELETE" }),
 
   // File management
   redownloadVideo: (channelId: number, videoId: number) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/redownload`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/redownload`, { method: "POST" }),
   deleteVideoFile: (channelId: number, videoId: number) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/file`, { method: "DELETE" }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/file`, { method: "DELETE" }),
   renameVideoFile: (channelId: number, videoId: number) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/rename`, { method: "POST" }),
+    request<MessageResponse & { renamed: boolean; new_path?: string }>(`/channels/${channelId}/videos/${videoId}/rename`, { method: "POST" }),
 
   // Monitoring
   toggleVideoMonitored: (channelId: number, videoId: number, monitored: boolean) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/monitored`, { method: "PATCH", body: JSON.stringify({ monitored }) }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/monitored`, { method: "PATCH", body: JSON.stringify({ monitored }) }),
   toggleVideoShort: (channelId: number, videoId: number, isShort: boolean) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/short`, { method: "PATCH", body: JSON.stringify({ is_short: isShort }) }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/short`, { method: "PATCH", body: JSON.stringify({ is_short: isShort }) }),
   bulkMonitorVideos: (channelId: number, videoIds: number[], monitored: boolean) =>
-    request<any>(`/channels/${channelId}/videos/bulk-monitor`, { method: "POST", body: JSON.stringify({ video_ids: videoIds, monitored }) }),
+    request<MessageResponse>(`/channels/${channelId}/videos/bulk-monitor`, { method: "POST", body: JSON.stringify({ video_ids: videoIds, monitored }) }),
   monitorAllVideos: (channelId: number, monitored: boolean) =>
-    request<any>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
+    request<MessageResponse>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
 
   // File management
   moveFilesPreview: (channelId: number, newDownloadDir: string) =>
-    request<any>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<{ current_dir: string; new_dir: string; files_to_move: number }>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveChannelFiles: (channelId: number, newDownloadDir: string) =>
-    request<any>(`/channels/${channelId}/move-files`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<MessageResponse>(`/channels/${channelId}/move-files`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveAllPreview: (newDownloadDir: string) =>
-    request<any>("/channels/move-all/preview", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<{ channels: { channel_name: string; files_to_move: number }[]; total_files: number }>("/channels/move-all/preview", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveAllChannels: (newDownloadDir: string) =>
-    request<any>("/channels/move-all", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<MessageResponse>("/channels/move-all", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
 
   // Quality management
   upgradeQuality: (channelId: number) =>
-    request<any>(`/channels/${channelId}/upgrade-quality`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/upgrade-quality`, { method: "POST" }),
 
   // Subtitle management
   downloadChannelSubtitles: (channelId: number) =>
-    request<any>(`/channels/${channelId}/download-subtitles`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/download-subtitles`, { method: "POST" }),
   downloadVideoSubtitles: (channelId: number, videoId: number) =>
-    request<any>(`/channels/${channelId}/videos/${videoId}/download-subtitles`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/download-subtitles`, { method: "POST" }),
 
   // Season management
   monitorSeason: (channelId: number, season: number, monitored: boolean) =>
-    request<any>(`/channels/${channelId}/seasons/${season}/monitor`, { method: "POST", body: JSON.stringify({ monitored }) }),
+    request<MessageResponse>(`/channels/${channelId}/seasons/${season}/monitor`, { method: "POST", body: JSON.stringify({ monitored }) }),
   downloadMissingSeason: (channelId: number, season: number) =>
-    request<any>(`/channels/${channelId}/seasons/${season}/download-missing`, { method: "POST" }),
+    request<MessageResponse>(`/channels/${channelId}/seasons/${season}/download-missing`, { method: "POST" }),
 
   // Episode renumbering
   renumberPreview: (channelId: number) =>
-    request<any>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),
+    request<{ changes: { video_id: string; title: string; old_label: string; new_label: string; has_file: boolean }[]; total_changes: number }>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),
   renumberConfirm: (channelId: number) =>
-    request<any>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
+    request<{ renumbered: number; renamed: number }>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
 
   // Downloads
   getQueue: (params?: { skip?: number; limit?: number; search?: string }) => {
@@ -165,7 +195,7 @@ export const api = {
     if (params?.skip) qs.set("skip", String(params.skip))
     if (params?.limit) qs.set("limit", String(params.limit))
     if (params?.search) qs.set("search", params.search)
-    return request<{ items: any[]; total: number }>(`/downloads/queue?${qs}`)
+    return request<PaginatedResponse<QueueEntry>>(`/downloads/queue?${qs}`)
   },
   bulkRemoveFromQueue: (queueIds: number[]) =>
     request<{ removed: number }>("/downloads/queue/bulk-remove", {
@@ -173,7 +203,7 @@ export const api = {
       body: JSON.stringify({ queue_ids: queueIds }),
     }),
   addToQueue: (videoId: number, priority = 0) =>
-    request<any>("/downloads/queue", { method: "POST", body: JSON.stringify({ video_id: videoId, priority }) }),
+    request<MessageResponse>("/downloads/queue", { method: "POST", body: JSON.stringify({ video_id: videoId, priority }) }),
   removeFromQueue: (queueId: number) =>
     request<void>(`/downloads/queue/${queueId}`, { method: "DELETE" }),
   getHistory: (params?: { skip?: number; limit?: number; status?: string; search?: string; error_code?: string; channel_id?: number }) => {
@@ -184,33 +214,33 @@ export const api = {
     if (params?.search) qs.set("search", params.search)
     if (params?.error_code) qs.set("error_code", params.error_code)
     if (params?.channel_id) qs.set("channel_id", String(params.channel_id))
-    return request<{ items: any[]; total: number }>(`/downloads/history?${qs}`)
+    return request<PaginatedResponse<Video>>(`/downloads/history?${qs}`)
   },
-  retryDownload: (videoId: number) => request<any>(`/downloads/retry/${videoId}`, { method: "POST" }),
-  retryAllFailed: () => request<any>("/downloads/retry-all-failed", { method: "POST" }),
-  getActiveDownloads: () => request<any[]>("/downloads/active"),
+  retryDownload: (videoId: number) => request<MessageResponse>(`/downloads/retry/${videoId}`, { method: "POST" }),
+  retryAllFailed: () => request<MessageResponse>("/downloads/retry-all-failed", { method: "POST" }),
+  getActiveDownloads: () => request<QueueEntry[]>("/downloads/active"),
   getPauseStatus: () => request<{ paused: boolean }>("/downloads/paused"),
-  pauseQueue: () => request<any>("/downloads/pause", { method: "POST" }),
-  resumeQueue: () => request<any>("/downloads/resume", { method: "POST" }),
-  clearQueue: () => request<any>("/downloads/clear-queue", { method: "POST" }),
+  pauseQueue: () => request<MessageResponse>("/downloads/pause", { method: "POST" }),
+  resumeQueue: () => request<MessageResponse>("/downloads/resume", { method: "POST" }),
+  clearQueue: () => request<MessageResponse>("/downloads/clear-queue", { method: "POST" }),
   setQueuePriority: (queueId: number, priority: number) =>
-    request<any>(`/downloads/queue/${queueId}/priority`, { method: "POST", body: JSON.stringify({ priority }) }),
+    request<MessageResponse>(`/downloads/queue/${queueId}/priority`, { method: "POST", body: JSON.stringify({ priority }) }),
   downloadNow: (queueId: number) =>
-    request<any>(`/downloads/queue/${queueId}/download-now`, { method: "POST" }),
+    request<MessageResponse>(`/downloads/queue/${queueId}/download-now`, { method: "POST" }),
 
   // Standalone downloads
   downloadStandalone: (data: { url: string; quality?: string; download_dir?: string }) =>
-    request<any>("/downloads/standalone", { method: "POST", body: JSON.stringify(data) }),
-  getStandaloneSettings: () => request<any>("/downloads/standalone/settings"),
+    request<MessageResponse>("/downloads/standalone", { method: "POST", body: JSON.stringify(data) }),
+  getStandaloneSettings: () => request<{ download_dir: string }>("/downloads/standalone/settings"),
   updateStandaloneSettings: (download_dir: string) =>
-    request<any>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
+    request<MessageResponse>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
   reorganizeStandalone: () =>
-    request<any>("/downloads/standalone/reorganize", { method: "POST" }),
+    request<MessageResponse>("/downloads/standalone/reorganize", { method: "POST" }),
 
   // Dashboard
-  getStats: () => request<any>("/dashboard/stats"),
-  getRecentDownloads: (limit = 20) => request<any[]>(`/dashboard/recent?limit=${limit}`),
-  getStorage: () => request<any>("/dashboard/storage"),
+  getStats: () => request<DashboardStats>("/dashboard/stats"),
+  getRecentDownloads: (limit = 20) => request<Video[]>(`/dashboard/recent?limit=${limit}`),
+  getStorage: () => request<StorageInfo>("/dashboard/storage"),
 
   // Auth
   uploadCookies: async (file: File) => {
@@ -220,20 +250,20 @@ export const api = {
     if (!res.ok) throw new Error("Upload failed")
     return res.json()
   },
-  getCookieStatus: () => request<any>("/auth/cookies/status"),
-  validateCookies: () => request<any>("/auth/cookies/validate", { method: "POST" }),
+  getCookieStatus: () => request<{ exists: boolean; path: string; size: number | null }>("/auth/cookies/status"),
+  validateCookies: () => request<{ valid: boolean; message: string }>("/auth/cookies/validate", { method: "POST" }),
   deleteCookies: () => request<void>("/auth/cookies", { method: "DELETE" }),
   setApiKey: (apiKey: string) =>
-    request<any>(`/auth/api-key?api_key=${encodeURIComponent(apiKey)}`, { method: "PUT" }),
-  getAuthStatus: () => request<any>("/auth/status"),
+    request<MessageResponse>(`/auth/api-key?api_key=${encodeURIComponent(apiKey)}`, { method: "PUT" }),
+  getAuthStatus: () => request<{ cookies_present: boolean; cookies_valid: boolean | null; api_key_configured: boolean; pot_status: string }>("/auth/status"),
 
   // Settings
-  getSettings: () => request<any>("/settings/"),
-  updateSettings: (data: any) =>
-    request<any>("/settings/", { method: "PUT", body: JSON.stringify(data) }),
-  previewNaming: (data: any) =>
-    request<any>("/settings/naming/preview", { method: "POST", body: JSON.stringify(data) }),
-  exportConfig: () => request<any>("/settings/export"),
+  getSettings: () => request<SettingsData>("/settings/"),
+  updateSettings: (data: SettingsData) =>
+    request<MessageResponse>("/settings/", { method: "PUT", body: JSON.stringify(data) }),
+  previewNaming: (data: { template: string; channel_name?: string }) =>
+    request<{ preview: string }>("/settings/naming/preview", { method: "POST", body: JSON.stringify(data) }),
+  exportConfig: () => request<{ version: string; settings: SettingsData; channels: Partial<Channel>[] }>("/settings/export"),
   importConfig: async (file: File) => {
     const formData = new FormData()
     formData.append("file", file)
@@ -244,15 +274,15 @@ export const api = {
 
   // Webhooks
   testWebhook: (provider: string) =>
-    request<any>(`/settings/webhook/test?provider=${provider}`, { method: "POST" }),
+    request<MessageResponse>(`/settings/webhook/test?provider=${provider}`, { method: "POST" }),
 
   // System
-  getHealth: () => request<any>("/system/health"),
+  getHealth: () => request<{ status: string; version: string }>("/system/health"),
   getLiveLogs: (params?: { level?: string; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.level) qs.set("level", params.level)
     if (params?.limit) qs.set("limit", String(params.limit))
-    return request<{ entries: any[]; total: number }>(`/system/live-logs?${qs}`)
+    return request<{ entries: { timestamp: string; level: string; message: string; logger: string }[]; total: number }>(`/system/live-logs?${qs}`)
   },
   exportLogs: async () => {
     const resp = await fetch("/api/v1/system/live-logs/export")
@@ -264,10 +294,10 @@ export const api = {
     a.click()
     URL.revokeObjectURL(url)
   },
-  getYtdlpVersion: () => request<any>("/system/ytdlp/version"),
-  updateYtdlp: () => request<any>("/system/ytdlp/update", { method: "POST" }),
-  getDiagnostics: () => request<any>("/system/diagnostics"),
-  getVideoDiagnostics: (videoId: number) => request<any>(`/system/diagnostics/${videoId}`),
+  getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
+  updateYtdlp: () => request<MessageResponse>("/system/ytdlp/update", { method: "POST" }),
+  getDiagnostics: () => request<Record<string, unknown>>("/system/diagnostics"),
+  getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),
   getLogs: (params?: { skip?: number; limit?: number; error_code?: string; event?: string; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.skip) qs.set("skip", String(params.skip))
@@ -275,7 +305,7 @@ export const api = {
     if (params?.error_code) qs.set("error_code", params.error_code)
     if (params?.event) qs.set("event", params.event)
     if (params?.search) qs.set("search", params.search)
-    return request<{ items: any[]; total: number }>(`/system/logs?${qs}`)
+    return request<PaginatedResponse<DownloadLog>>(`/system/logs?${qs}`)
   },
-  scanAll: () => request<any>("/system/scan-all", { method: "POST" }),
+  scanAll: () => request<MessageResponse>("/system/scan-all", { method: "POST" }),
 }

@@ -2,10 +2,9 @@
 
 import logging
 import os
-import shutil
 
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import ASSOCIATED_EXTENSIONS
+from app.utils.file_utils import move_video_files
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +48,8 @@ def renumber_channel_episodes(videos: list, channel) -> int:
                 ) + ".mp4"
 
                 if old_path != new_path:
-                    os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                    shutil.move(old_path, new_path)
+                    move_video_files(old_path, new_path)
                     video.file_path = new_path
-
-                    for ext in ASSOCIATED_EXTENSIONS:
-                        old_extra = os.path.splitext(old_path)[0] + ext
-                        new_extra = os.path.splitext(new_path)[0] + ext
-                        if os.path.exists(old_extra):
-                            shutil.move(old_extra, new_extra)
-
                     renamed += 1
 
     return renamed

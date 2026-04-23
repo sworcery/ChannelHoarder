@@ -86,6 +86,19 @@ export interface DashboardStats {
   cookies_expired: boolean
 }
 
+export interface DownloadLog {
+  id: number
+  video_id: number
+  event: string
+  error_code: string | null
+  message: string | null
+  created_at: string
+}
+
+export interface MessageResponse {
+  message: string
+}
+
 export interface WSMessage {
   type: string
   payload: Record<string, any>

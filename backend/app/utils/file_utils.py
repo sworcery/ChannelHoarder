@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import shutil
 import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
@@ -70,6 +71,36 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
         name = name[:max_length].rstrip(". ")
 
     return name or "Untitled"
+
+
+def move_video_files(old_path: str, new_path: str, overwrite: bool = False) -> int:
+    """Move a video file and all associated sidecar files to a new location.
+
+    Returns the number of files moved.
+    """
+    moved = 0
+    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+
+    if overwrite and os.path.exists(new_path):
+        os.remove(new_path)
+    shutil.move(old_path, new_path)
+    moved += 1
+
+    old_base = os.path.splitext(old_path)[0]
+    new_base = os.path.splitext(new_path)[0]
+    for ext in ASSOCIATED_EXTENSIONS:
+        old_extra = old_base + ext
+        if os.path.exists(old_extra):
+            new_extra = new_base + ext
+            try:
+                if overwrite and os.path.exists(new_extra):
+                    os.remove(new_extra)
+                shutil.move(old_extra, new_extra)
+                moved += 1
+            except Exception as e:
+                logger.warning("Failed to move sidecar %s: %s", old_extra, e)
+
+    return moved
 
 
 def delete_video_files(file_path: str) -> int:
