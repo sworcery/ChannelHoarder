@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.utils.file_utils import delete_video_files, escape_like
+from app.utils.file_utils import ASSOCIATED_EXTENSIONS, delete_video_files, escape_like
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
@@ -702,9 +702,11 @@ async def rename_video_file(
     video.file_path = new_path
 
     # Move associated files
-    for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-        old_extra = old_path.rsplit(".mp4", 1)[0] + ext
-        new_extra = new_path.rsplit(".mp4", 1)[0] + ext
+    old_base = os.path.splitext(old_path)[0]
+    new_base = os.path.splitext(new_path)[0]
+    for ext in ASSOCIATED_EXTENSIONS:
+        old_extra = old_base + ext
+        new_extra = new_base + ext
         if os.path.exists(old_extra):
             shutil.move(old_extra, new_extra)
 
@@ -997,7 +999,7 @@ def _has_subtitles(file_path: str) -> bool:
     import os
     if not file_path:
         return False
-    base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
+    base = os.path.splitext(file_path)[0]
     for ext in [".en.vtt", ".en.srt", ".en.ass"]:
         if os.path.exists(base + ext):
             return True
@@ -1007,6 +1009,7 @@ def _has_subtitles(file_path: str) -> bool:
 async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
     """Background task to download subtitles for all completed videos in a channel."""
     import asyncio
+    import os
     from app.database import async_session
     from app.utils.platform_utils import build_video_url
     from app.services.ytdlp_service import YtdlpService
@@ -1034,12 +1037,12 @@ async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
     failed = 0
 
     for vid_id, file_path in video_rows:
-        if not file_path or _has_subtitles(file_path):
+        if not file_path or not os.path.exists(file_path) or _has_subtitles(file_path):
             skipped += 1
             continue
 
         video_url = build_video_url(platform, vid_id)
-        output_base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
+        output_base = os.path.splitext(file_path)[0]
 
         success = await asyncio.to_thread(
             ytdlp.download_subtitles_only, video_url, output_base, platform
@@ -1049,12 +1052,12 @@ async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
         else:
             failed += 1
 
-        await NotificationService.broadcast("subtitles_complete", {
-            "channel_name": channel_name,
-            "message": f"Subtitles for '{channel_name}': {downloaded} downloaded, {skipped} skipped, {failed} failed",
-        })
-        logger.info("Subtitle download complete for '%s': %d downloaded, %d skipped, %d failed",
-                     channel_name, downloaded, skipped, failed)
+    await NotificationService.broadcast("subtitles_complete", {
+        "channel_name": channel_name,
+        "message": f"Subtitles for '{channel_name}': {downloaded} downloaded, {skipped} skipped, {failed} failed",
+    })
+    logger.info("Subtitle download complete for '%s': %d downloaded, %d skipped, %d failed",
+                 channel_name, downloaded, skipped, failed)
 
 
 class MoveFilesRequest(BaseModel):
@@ -1195,17 +1198,16 @@ async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
                     await asyncio.to_thread(shutil.move, video.file_path, new_path)
                     moved_files += 1
 
-                    # Move associated files (.nfo, -thumb.jpg, .info.json)
-                    if video.file_path.endswith(".mp4"):
-                        base_old = video.file_path.rsplit(".mp4", 1)[0]
-                        base_new = new_path.rsplit(".mp4", 1)[0]
-                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                            old_extra = base_old + ext
-                            new_extra = base_new + ext
-                            if os.path.exists(old_extra):
-                                if os.path.exists(new_extra):
-                                    os.remove(new_extra)
-                                await asyncio.to_thread(shutil.move, old_extra, new_extra)
+                    # Move associated files
+                    base_old = os.path.splitext(video.file_path)[0]
+                    base_new = os.path.splitext(new_path)[0]
+                    for ext in ASSOCIATED_EXTENSIONS:
+                        old_extra = base_old + ext
+                        new_extra = base_new + ext
+                        if os.path.exists(old_extra):
+                            if os.path.exists(new_extra):
+                                os.remove(new_extra)
+                            await asyncio.to_thread(shutil.move, old_extra, new_extra)
                 except Exception as e:
                     logger.warning("Failed to move %s: %s", video.file_path, e)
                     errors += 1
@@ -1320,16 +1322,15 @@ async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
                         await asyncio.to_thread(shutil.move, video.file_path, new_path)
                         channel_moved += 1
 
-                        if video.file_path.endswith(".mp4"):
-                            base_old = video.file_path.rsplit(".mp4", 1)[0]
-                            base_new = new_path.rsplit(".mp4", 1)[0]
-                            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                                old_extra = base_old + ext
-                                new_extra = base_new + ext
-                                if os.path.exists(old_extra):
-                                    if os.path.exists(new_extra):
-                                        os.remove(new_extra)
-                                    await asyncio.to_thread(shutil.move, old_extra, new_extra)
+                        base_old = os.path.splitext(video.file_path)[0]
+                        base_new = os.path.splitext(new_path)[0]
+                        for ext in ASSOCIATED_EXTENSIONS:
+                            old_extra = base_old + ext
+                            new_extra = base_new + ext
+                            if os.path.exists(old_extra):
+                                if os.path.exists(new_extra):
+                                    os.remove(new_extra)
+                                await asyncio.to_thread(shutil.move, old_extra, new_extra)
                     except Exception as e:
                         logger.warning("Failed to move %s: %s", video.file_path, e)
                         total_errors += 1
@@ -1440,7 +1441,6 @@ async def delete_channel_shorts(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all downloaded shorts for a channel (removes files and marks as skipped)."""
-    import os
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -1681,7 +1681,6 @@ async def delete_channel_livestreams(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all downloaded livestreams for a channel."""
-    import os
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)

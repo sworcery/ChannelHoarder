@@ -10,7 +10,6 @@ export interface Channel {
   quality: string
   naming_template: string | null
   download_dir: string | null
-  check_schedule: string | null
   enabled: boolean
   include_shorts: boolean
   include_livestreams: boolean

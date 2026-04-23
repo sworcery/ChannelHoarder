@@ -33,7 +33,6 @@ class ChannelUpdate(BaseModel):
     quality: Optional[str] = Field(default=None, pattern="^(best|2160p|1080p|720p|480p)$")
     naming_template: Optional[str] = None
     download_dir: Optional[str] = None
-    check_schedule: Optional[str] = None
     enabled: Optional[bool] = None
     include_shorts: Optional[bool] = None
     include_livestreams: Optional[bool] = None
@@ -54,7 +53,6 @@ class ChannelResponse(UTCBaseModel):
     quality: str
     naming_template: Optional[str]
     download_dir: Optional[str]
-    check_schedule: Optional[str]
     enabled: bool
     include_shorts: bool
     include_livestreams: bool

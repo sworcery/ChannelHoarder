@@ -4,6 +4,8 @@ import grp
 import logging
 import os
 
+from app.utils.file_utils import ASSOCIATED_EXTENSIONS
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,9 +38,8 @@ def apply_permissions(file_path: str, settings_dict: dict) -> None:
             try:
                 mode = int(chmod_file, 8)
                 os.chmod(file_path, mode)
-                # Also chmod associated files
-                base = file_path.rsplit(".mp4", 1)[0] if file_path.endswith(".mp4") else file_path
-                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                base = os.path.splitext(file_path)[0]
+                for ext in ASSOCIATED_EXTENSIONS:
                     extra = base + ext
                     if os.path.exists(extra):
                         os.chmod(extra, mode)
@@ -58,9 +59,8 @@ def apply_permissions(file_path: str, settings_dict: dict) -> None:
                 os.chown(file_path, -1, gid)
                 if parent_dir:
                     os.chown(parent_dir, -1, gid)
-                # Associated files
-                base = file_path.rsplit(".mp4", 1)[0] if file_path.endswith(".mp4") else file_path
-                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json"]:
+                base = os.path.splitext(file_path)[0]
+                for ext in ASSOCIATED_EXTENSIONS:
                     extra = base + ext
                     if os.path.exists(extra):
                         os.chown(extra, -1, gid)

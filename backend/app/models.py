@@ -35,7 +35,6 @@ class Channel(Base):
     min_video_duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Seconds; skip videos shorter than this
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     download_dir: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
-    check_schedule: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_shorts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     include_livestreams: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

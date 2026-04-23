@@ -18,7 +18,7 @@ from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService
-from app.utils.file_utils import sanitize_filename
+from app.utils.file_utils import ASSOCIATED_EXTENSIONS, sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -741,12 +741,13 @@ class ChannelService:
                 renamed_count += 1
                 logger.info("Renamed: %s -> %s", old_path, expected_path)
 
-                # Also move accompanying files (.nfo, subtitles) if present
-                for suffix in [".nfo", ".en.vtt", ".en.srt"]:
-                    old_extra = old_path.with_suffix(suffix)
-                    if old_extra.exists():
-                        new_extra = expected_path.with_suffix(suffix)
-                        await asyncio.to_thread(shutil.move, str(old_extra), str(new_extra))
+                old_base = os.path.splitext(str(old_path))[0]
+                new_base = os.path.splitext(str(expected_path))[0]
+                for ext in ASSOCIATED_EXTENSIONS:
+                    old_extra = old_base + ext
+                    if os.path.exists(old_extra):
+                        new_extra = new_base + ext
+                        await asyncio.to_thread(shutil.move, old_extra, new_extra)
 
                 # Clean up empty parent directories
                 try:

@@ -14,7 +14,7 @@ from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
 from app.services.ytdlp_service import YtdlpService
-from app.utils.file_utils import escape_like, validate_download_path
+from app.utils.file_utils import ASSOCIATED_EXTENSIONS, escape_like, validate_download_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -586,9 +586,9 @@ async def reorganize_standalone_downloads(db: AsyncSession = Depends(get_db)):
                     video.file_path = new_path
 
                     # Move associated files
-                    old_base = old_path.rsplit(".", 1)[0] if "." in old_path else old_path
-                    new_base = new_path.rsplit(".", 1)[0] if "." in new_path else new_path
-                    for assoc_ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
+                    old_base = os.path.splitext(old_path)[0]
+                    new_base = os.path.splitext(new_path)[0]
+                    for assoc_ext in ASSOCIATED_EXTENSIONS:
                         old_assoc = old_base + assoc_ext
                         new_assoc = new_base + assoc_ext
                         if os.path.exists(old_assoc):

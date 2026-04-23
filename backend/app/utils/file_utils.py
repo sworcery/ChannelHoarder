@@ -78,7 +78,7 @@ def delete_video_files(file_path: str) -> int:
     Returns the number of files removed.
     """
     removed = 0
-    base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
+    base = os.path.splitext(file_path)[0]
 
     if os.path.exists(file_path):
         try:

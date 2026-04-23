@@ -159,7 +159,6 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "quality": ch.quality,
             "naming_template": ch.naming_template,
             "download_dir": ch.download_dir,
-            "check_schedule": ch.check_schedule,
             "enabled": ch.enabled,
         }
         for ch in channels
@@ -214,7 +213,6 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             quality=ch_data.get("quality", "best"),
             naming_template=ch_data.get("naming_template"),
             download_dir=ch_data.get("download_dir"),
-            check_schedule=ch_data.get("check_schedule"),
             enabled=ch_data.get("enabled", True),
             health_status="unknown",
         )
