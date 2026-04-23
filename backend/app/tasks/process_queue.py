@@ -50,8 +50,9 @@ async def process_download_queue():
         if pause_setting and pause_setting.value == "true":
             return  # Queue is paused  - don't start new downloads
 
-        # Unstick any downloads that have been "active" for more than 20 minutes
-        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=20)
+        # Unstick any downloads that have been "active" for more than 25 minutes
+        # (download timeout is 15 min; 25 min gives a safe margin for post-download processing)
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(minutes=25)
         stale_result = await db.execute(
             select(DownloadQueue)
             .options(joinedload(DownloadQueue.video))

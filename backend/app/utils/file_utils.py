@@ -1,7 +1,13 @@
+import logging
+import os
 import re
 import unicodedata
 from pathlib import Path
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
+
+ASSOCIATED_EXTENSIONS = [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]
 
 
 def validate_url_scheme(url: str) -> None:
@@ -64,3 +70,30 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
         name = name[:max_length].rstrip(". ")
 
     return name or "Untitled"
+
+
+def delete_video_files(file_path: str) -> int:
+    """Delete a video file and all associated sidecar files.
+
+    Returns the number of files removed.
+    """
+    removed = 0
+    base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
+
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            removed += 1
+        except Exception as e:
+            logger.warning("Failed to delete %s: %s", file_path, e)
+
+    for ext in ASSOCIATED_EXTENSIONS:
+        extra = base + ext
+        if os.path.exists(extra):
+            try:
+                os.remove(extra)
+                removed += 1
+            except Exception as e:
+                logger.warning("Failed to delete %s: %s", extra, e)
+
+    return removed

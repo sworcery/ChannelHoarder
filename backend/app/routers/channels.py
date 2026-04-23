@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.utils.file_utils import escape_like
+from app.utils.file_utils import delete_video_files, escape_like
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
@@ -530,8 +530,6 @@ async def bulk_delete_videos(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete selected videos. Optionally removes files from disk."""
-    import os
-
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -551,12 +549,7 @@ async def bulk_delete_videos(
     files_removed = 0
     for video in videos:
         if body.delete_files and video.file_path:
-            base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
-            for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                path = base + ext
-                if os.path.exists(path):
-                    os.remove(path)
-                    files_removed += 1
+            files_removed += delete_video_files(video.file_path)
 
         video.status = "skipped"
         video.file_path = None
@@ -575,8 +568,6 @@ async def delete_video(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a single video. Optionally removes files from disk."""
-    import os
-
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -586,12 +577,7 @@ async def delete_video(
 
     files_removed = False
     if delete_files and video.file_path:
-        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-            path = base + ext
-            if os.path.exists(path):
-                os.remove(path)
-                files_removed = True
+        files_removed = delete_video_files(video.file_path) > 0
 
     # Remove from queue if present
     queue_result = await db.execute(
@@ -616,8 +602,6 @@ async def redownload_video(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete existing file and re-queue video for download."""
-    import os
-
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -625,13 +609,8 @@ async def redownload_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    # Delete existing file if present
     if video.file_path:
-        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-            path = base + ext
-            if os.path.exists(path):
-                os.remove(path)
+        delete_video_files(video.file_path)
 
     video.file_path = None
     video.file_size = None
@@ -657,8 +636,6 @@ async def delete_video_file(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete file from disk but keep the video record as pending."""
-    import os
-
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -668,12 +645,7 @@ async def delete_video_file(
 
     files_removed = False
     if video.file_path:
-        base = video.file_path.rsplit(".mp4", 1)[0] if video.file_path.endswith(".mp4") else video.file_path
-        for ext in [".mp4", ".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-            path = base + ext
-            if os.path.exists(path):
-                os.remove(path)
-                files_removed = True
+        files_removed = delete_video_files(video.file_path) > 0
 
     video.file_path = None
     video.file_size = None
@@ -1040,42 +1012,42 @@ async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
     from app.services.ytdlp_service import YtdlpService
     from app.services.notification_service import NotificationService
 
+    # Short-lived session: just snapshot the data we need
     async with async_session() as db:
         result = await db.execute(select(Channel).where(Channel.id == channel_id))
         channel = result.scalar_one_or_none()
         if not channel:
             return
-
         platform = channel.platform or "youtube"
 
         result = await db.execute(
-            select(Video)
+            select(Video.video_id, Video.file_path)
             .where(Video.channel_id == channel_id)
             .where(Video.status == "completed")
             .where(Video.file_path.isnot(None))
         )
-        videos = result.scalars().all()
+        video_rows = result.all()
 
-        ytdlp = YtdlpService()
-        downloaded = 0
-        skipped = 0
-        failed = 0
+    ytdlp = YtdlpService()
+    downloaded = 0
+    skipped = 0
+    failed = 0
 
-        for video in videos:
-            if not video.file_path or _has_subtitles(video.file_path):
-                skipped += 1
-                continue
+    for vid_id, file_path in video_rows:
+        if not file_path or _has_subtitles(file_path):
+            skipped += 1
+            continue
 
-            video_url = build_video_url(platform, video.video_id)
-            output_base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+        video_url = build_video_url(platform, vid_id)
+        output_base = file_path.rsplit(".", 1)[0] if "." in file_path else file_path
 
-            success = await asyncio.to_thread(
-                ytdlp.download_subtitles_only, video_url, output_base, platform
-            )
-            if success:
-                downloaded += 1
-            else:
-                failed += 1
+        success = await asyncio.to_thread(
+            ytdlp.download_subtitles_only, video_url, output_base, platform
+        )
+        if success:
+            downloaded += 1
+        else:
+            failed += 1
 
         await NotificationService.broadcast("subtitles_complete", {
             "channel_name": channel_name,
@@ -1480,18 +1452,8 @@ async def delete_channel_shorts(
     deleted = 0
     for video in videos:
         if video.file_path:
-            try:
-                base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
-                if os.path.exists(video.file_path):
-                    os.remove(video.file_path)
-                    deleted += 1
-                # Remove associated files
-                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                    extra = base + ext
-                    if os.path.exists(extra):
-                        os.remove(extra)
-            except Exception as e:
-                logger.warning("Failed to delete short file %s: %s", video.file_path, e)
+            if delete_video_files(video.file_path) > 0:
+                deleted += 1
         video.status = "skipped"
         video.file_path = None
         video.file_size = None
@@ -1649,19 +1611,8 @@ async def detect_clean_shorts_confirm(
     deleted = 0
     for video in result.scalars().all():
         if video.file_path:
-            try:
-                if os.path.exists(video.file_path):
-                    os.remove(video.file_path)
-                    # Remove associated files
-                    if video.file_path.endswith(".mp4"):
-                        base = video.file_path.rsplit(".mp4", 1)[0]
-                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                            extra = base + ext
-                            if os.path.exists(extra):
-                                os.remove(extra)
-                    deleted += 1
-            except Exception as e:
-                logger.warning("Failed to delete short file %s: %s", video.file_path, e)
+            if delete_video_files(video.file_path) > 0:
+                deleted += 1
         video.status = "skipped"
         video.monitored = False
         video.file_path = None
@@ -1742,17 +1693,8 @@ async def delete_channel_livestreams(
     deleted = 0
     for video in videos:
         if video.file_path:
-            try:
-                base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
-                if os.path.exists(video.file_path):
-                    os.remove(video.file_path)
-                    deleted += 1
-                for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                    extra = base + ext
-                    if os.path.exists(extra):
-                        os.remove(extra)
-            except Exception as e:
-                logger.warning("Failed to delete livestream file %s: %s", video.file_path, e)
+            if delete_video_files(video.file_path) > 0:
+                deleted += 1
         video.status = "skipped"
         video.file_path = None
         video.file_size = None
@@ -1878,18 +1820,8 @@ async def detect_clean_livestreams_confirm(
     deleted = 0
     for video in result.scalars().all():
         if video.file_path:
-            try:
-                if os.path.exists(video.file_path):
-                    os.remove(video.file_path)
-                    if video.file_path.endswith(".mp4"):
-                        base = video.file_path.rsplit(".mp4", 1)[0]
-                        for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                            extra = base + ext
-                            if os.path.exists(extra):
-                                os.remove(extra)
-                    deleted += 1
-            except Exception as e:
-                logger.warning("Failed to delete livestream file %s: %s", video.file_path, e)
+            if delete_video_files(video.file_path) > 0:
+                deleted += 1
         video.status = "skipped"
         video.monitored = False
         video.file_path = None

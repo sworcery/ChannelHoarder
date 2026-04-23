@@ -616,23 +616,10 @@ class ChannelService:
 
     async def _auto_delete_video_files(self, video: Video):
         """Delete downloaded files for a video and reset its fields to skipped state."""
-        import os
+        from app.utils.file_utils import delete_video_files
 
-        if video.file_path and os.path.exists(video.file_path):
-            try:
-                os.remove(video.file_path)
-            except Exception as e:
-                logger.warning("Failed to delete %s: %s", video.file_path, e)
-
-            # Remove associated files
-            base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
-            for ext in [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]:
-                extra = base + ext
-                if os.path.exists(extra):
-                    try:
-                        os.remove(extra)
-                    except Exception as e:
-                        logger.warning("Failed to delete %s: %s", extra, e)
+        if video.file_path:
+            delete_video_files(video.file_path)
 
         # Remove from queue if present
         queue_result = await self.db.execute(
