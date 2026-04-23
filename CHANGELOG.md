@@ -5,6 +5,27 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.30] - 2026-04-22
+
+### Changed
+- **Async file I/O throughout** - All blocking file operations (delete, move, rename, renumber, chmod/chown) now run via `asyncio.to_thread` to avoid stalling the event loop, especially on NFS/SMB mounts.
+- **Centralized sidecar file handling** - Single `ASSOCIATED_EXTENSIONS` constant and `move_video_files()`/`delete_video_files()` helpers replace duplicated file+sidecar logic across 13+ call sites. All sidecar types (.nfo, -thumb.jpg, .jpg, .info.json, .en.vtt, .en.srt, .en.ass) are now consistently handled everywhere.
+- **Typed API client** - Replaced all 58 `any` types in the frontend API client with proper TypeScript generics and interfaces.
+- **Settings export/import completeness** - Export now includes all channel fields (platform, quality_cutoff, min_video_duration, include_shorts, include_livestreams, auto_download) so round-trip import no longer loses data.
+
+### Fixed
+- **WebSocket origin validation** - WebSocket endpoint now checks the `Origin` header against `CORS_ORIGINS`, rejecting connections from unauthorized origins.
+- **Move tasks corrupting file paths** - Move Files and Move All were updating the database path even when the source file didn't exist, silently pointing records at non-existent locations.
+- **Subtitle download base path** - `os.path.splitext()` replaces `rsplit(".", 1)` throughout, fixing incorrect base paths when directory names contain dots.
+- **Rename sidecar coverage** - `_rename_existing_files` now moves all 7 sidecar types instead of only 3, and no longer crashes on `-thumb.jpg` suffix.
+- **Subtitle notification spam** - Progress notification now fires once after all videos are processed instead of after every individual video.
+- **chmod/chown sidecar coverage** - Permission setting now applies to all sidecar types including subtitle files (.en.vtt, .en.srt, .en.ass).
+- **Sidecar move error handling** - Failed sidecar moves are logged and skipped instead of aborting the entire operation.
+- **Stale download timeout** - Bumped stuck download cutoff from 20 to 25 minutes to reduce false positives on large files.
+
+### Removed
+- **`check_schedule` field** - Dead column removed from the Channel model, schema, and TypeScript types.
+
 ## [1.7.29] - 2026-04-17
 
 ### Added
