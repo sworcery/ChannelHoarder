@@ -156,10 +156,16 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "channel_id": ch.channel_id,
             "channel_name": ch.channel_name,
             "channel_url": ch.channel_url,
+            "platform": ch.platform,
             "quality": ch.quality,
+            "quality_cutoff": ch.quality_cutoff,
+            "min_video_duration": ch.min_video_duration,
             "naming_template": ch.naming_template,
             "download_dir": ch.download_dir,
             "enabled": ch.enabled,
+            "include_shorts": ch.include_shorts,
+            "include_livestreams": ch.include_livestreams,
+            "auto_download": ch.auto_download,
         }
         for ch in channels
     ]
@@ -210,10 +216,16 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             channel_id=cid,
             channel_name=ch_data.get("channel_name", "Imported"),
             channel_url=ch_data.get("channel_url", ""),
+            platform=ch_data.get("platform", "youtube"),
             quality=ch_data.get("quality", "best"),
+            quality_cutoff=ch_data.get("quality_cutoff"),
+            min_video_duration=ch_data.get("min_video_duration"),
             naming_template=ch_data.get("naming_template"),
             download_dir=ch_data.get("download_dir"),
             enabled=ch_data.get("enabled", True),
+            include_shorts=ch_data.get("include_shorts", False),
+            include_livestreams=ch_data.get("include_livestreams", False),
+            auto_download=ch_data.get("auto_download", True),
             health_status="unknown",
         )
         db.add(channel)

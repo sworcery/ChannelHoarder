@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
-ASSOCIATED_EXTENSIONS = [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt"]
+ASSOCIATED_EXTENSIONS = [".nfo", "-thumb.jpg", ".jpg", ".info.json", ".en.vtt", ".en.srt", ".en.ass"]
 
 
 def validate_url_scheme(url: str) -> None:

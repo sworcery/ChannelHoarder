@@ -961,6 +961,7 @@ async def download_video_subtitles(
 ):
     """Download subtitles for a single video."""
     import asyncio
+    import os
 
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
@@ -981,7 +982,7 @@ async def download_video_subtitles(
 
     from app.utils.platform_utils import build_video_url
     video_url = build_video_url(platform, video.video_id)
-    output_base = video.file_path.rsplit(".", 1)[0] if "." in video.file_path else video.file_path
+    output_base = os.path.splitext(video.file_path)[0]
 
     from app.services.ytdlp_service import YtdlpService
     ytdlp = YtdlpService()
