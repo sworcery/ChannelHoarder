@@ -119,7 +119,7 @@ function GeneralTab() {
 
   useEffect(() => {
     if (settings) {
-      const cron = settings.global_schedule_cron || "0 3 * * *"
+      const cron = String(settings.global_schedule_cron || "0 3 * * *")
       const preset = SCAN_PRESETS.find(p => p.value === cron)
       if (preset) {
         setScanCron(cron)
@@ -202,7 +202,7 @@ function GeneralTab() {
               if (e.target.value === "custom") {
                 setIsCustomCron(true)
                 setScanCron("custom")
-                setCustomCron(settings?.global_schedule_cron || "0 3 * * *")
+                setCustomCron(String(settings?.global_schedule_cron || "0 3 * * *"))
               } else {
                 setIsCustomCron(false)
                 setScanCron(e.target.value)
@@ -692,7 +692,7 @@ function MediaManagementTab() {
 
   useEffect(() => {
     if (settings) {
-      if (settings.naming_template) setTemplate(settings.naming_template)
+      if (settings.naming_template) setTemplate(String(settings.naming_template))
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
       if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")

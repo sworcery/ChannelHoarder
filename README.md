@@ -53,6 +53,7 @@
 - **Bulk Video Management** - Select multiple videos to queue, skip, unskip, monitor, or unmonitor at once
 - **Import Existing Files** - Scan a folder of previously downloaded videos and match them to channel entries by title
 - **Livestream / Long Video Filter** - Auto-skip videos over a configurable duration, with optional notification for manual review
+- **Chapter Embedding** - Optionally embed chapter markers into MP4 files for players like Plex and VLC
 - **YouTube Shorts Filter** - Shorts (videos under 30 seconds) are excluded by default. Global toggle with per-channel opt-in, configurable threshold via min duration setting.
 
 ### Authentication
@@ -76,7 +77,7 @@
 - **System Logs**  - Searchable and filterable log viewer in the web UI
 
 ### Notifications
-- **Telegram & Pushover**  - Push notifications with configurable events:
+- **Telegram, Pushover & Discord**  - Push notifications with configurable events:
   - Download complete
   - Download failed
   - Cookies expired / refreshed
@@ -259,6 +260,7 @@ If you already added channels to an existing TV library, move them to the new li
 | `POT_SERVER_URL` | `http://127.0.0.1:4416` | PO token server address (internal to container) |
 | `CONFIG_DIR` | `/config` | Configuration and database storage path |
 | `DOWNLOAD_DIR` | `/downloads` | Video output directory |
+| `EXTRA_DOWNLOAD_DIRS` | *(empty)* | Comma-separated additional allowed download paths (e.g. `/media,/cartoons`) |
 | `COOKIE_WATCH_DIR` | `/cookies` | Directory watched for cookie file updates |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Maximum simultaneous downloads |
 | `MAX_RETRIES` | `3` | Retry attempts for failed downloads |
@@ -330,7 +332,8 @@ All settings are configurable through the **Settings** page:
 - **Naming**  - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
 - **yt-dlp**  - Version info, manual update trigger
 - **Anti-Detection**  - Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
-- **Notifications**  - Telegram and Pushover configuration with test buttons, per-event toggles
+- **Media Management**  - Subtitle downloads, chapter embedding toggle
+- **Notifications**  - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
 
 ## Supported Platforms
 

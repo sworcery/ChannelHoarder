@@ -34,7 +34,7 @@ interface StorageInfo {
 }
 
 interface SettingsData {
-  [key: string]: string | number | boolean | null
+  [key: string]: string | number | boolean | string[] | null
 }
 
 interface DetectCleanPreview {
@@ -91,7 +91,7 @@ export const api = {
   detectCleanShortsPreview: (channelId: number) =>
     request<DetectCleanPreview>(`/channels/${channelId}/shorts/detect-clean/preview`, { method: "POST" }),
   detectCleanShortsConfirm: (channelId: number) =>
-    request<{ deleted: number; renumbered: number; reclassified: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
+    request<{ message: string; detected: number; deleted: number; renamed: number; threshold: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
 
   // Livestream management
   getChannelLivestreams: (channelId: number, status?: string) => {
@@ -105,7 +105,7 @@ export const api = {
   detectCleanLivestreamsPreview: (channelId: number) =>
     request<DetectCleanPreview>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
   detectCleanLivestreamsConfirm: (channelId: number) =>
-    request<{ deleted: number; renumbered: number; reclassified: number }>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
+    request<{ message: string; detected: number; deleted: number; renamed: number }>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
   toggleVideoLivestream: (channelId: number, videoId: number, isLivestream: boolean) =>
     request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/livestream`, { method: "PATCH", body: JSON.stringify({ is_livestream: isLivestream }) }),
 
@@ -159,11 +159,11 @@ export const api = {
 
   // File management
   moveFilesPreview: (channelId: number, newDownloadDir: string) =>
-    request<{ current_dir: string; new_dir: string; files_to_move: number }>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<{ channel_id: number; channel_name: string; source_dir: string; dest_dir: string; same_path: boolean; file_count: number; missing_count: number; total_size: number; db_records: number }>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveChannelFiles: (channelId: number, newDownloadDir: string) =>
     request<MessageResponse>(`/channels/${channelId}/move-files`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveAllPreview: (newDownloadDir: string) =>
-    request<{ channels: { channel_name: string; files_to_move: number }[]; total_files: number }>("/channels/move-all/preview", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
+    request<{ channels: { channel_name: string; file_count: number; total_size: number }[]; channels_to_move: number; total_files: number; total_size: number }>("/channels/move-all/preview", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
   moveAllChannels: (newDownloadDir: string) =>
     request<MessageResponse>("/channels/move-all", { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
 
@@ -187,7 +187,7 @@ export const api = {
   renumberPreview: (channelId: number) =>
     request<{ changes: { video_id: string; title: string; old_label: string; new_label: string; has_file: boolean }[]; total_changes: number }>(`/channels/${channelId}/renumber/preview`, { method: "POST" }),
   renumberConfirm: (channelId: number) =>
-    request<{ renumbered: number; renamed: number }>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
+    request<{ message: string; updated: number; renamed: number }>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
 
   // Downloads
   getQueue: (params?: { skip?: number; limit?: number; search?: string }) => {
@@ -231,7 +231,7 @@ export const api = {
   // Standalone downloads
   downloadStandalone: (data: { url: string; quality?: string; download_dir?: string }) =>
     request<MessageResponse>("/downloads/standalone", { method: "POST", body: JSON.stringify(data) }),
-  getStandaloneSettings: () => request<{ download_dir: string }>("/downloads/standalone/settings"),
+  getStandaloneSettings: () => request<{ download_dir: string; default_dir: string }>("/downloads/standalone/settings"),
   updateStandaloneSettings: (download_dir: string) =>
     request<MessageResponse>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
   reorganizeStandalone: () =>
@@ -255,14 +255,14 @@ export const api = {
   deleteCookies: () => request<void>("/auth/cookies", { method: "DELETE" }),
   setApiKey: (apiKey: string) =>
     request<MessageResponse>(`/auth/api-key?api_key=${encodeURIComponent(apiKey)}`, { method: "PUT" }),
-  getAuthStatus: () => request<{ cookies_present: boolean; cookies_valid: boolean | null; api_key_configured: boolean; pot_status: string }>("/auth/status"),
+  getAuthStatus: () => request<{ pot_status: string; pot_message: string | null; cookies_status: string; cookies_message: string | null; cookies_age_hours: number | null; api_key_configured: boolean; api_key_valid: boolean | null; last_successful_auth: string | null }>("/auth/status"),
 
   // Settings
   getSettings: () => request<SettingsData>("/settings/"),
   updateSettings: (data: SettingsData) =>
     request<MessageResponse>("/settings/", { method: "PUT", body: JSON.stringify(data) }),
   previewNaming: (data: { template: string; channel_name?: string }) =>
-    request<{ preview: string }>("/settings/naming/preview", { method: "POST", body: JSON.stringify(data) }),
+    request<{ preview_path: string; full_path: string }>("/settings/naming/preview", { method: "POST", body: JSON.stringify(data) }),
   exportConfig: () => request<{ version: string; settings: SettingsData; channels: Partial<Channel>[] }>("/settings/export"),
   importConfig: async (file: File) => {
     const formData = new FormData()
@@ -296,7 +296,7 @@ export const api = {
   },
   getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
   updateYtdlp: () => request<MessageResponse>("/system/ytdlp/update", { method: "POST" }),
-  getDiagnostics: () => request<Record<string, unknown>>("/system/diagnostics"),
+  getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
   getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),
   getLogs: (params?: { skip?: number; limit?: number; error_code?: string; event?: string; search?: string }) => {
     const qs = new URLSearchParams()
