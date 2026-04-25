@@ -27,6 +27,7 @@ class ChannelCreate(BaseModel):
     auto_download: bool = True
     quality_cutoff: Optional[str] = None
     min_video_duration: Optional[int] = None
+    download_from_year: Optional[int] = None
 
 
 class ChannelUpdate(BaseModel):
@@ -39,6 +40,7 @@ class ChannelUpdate(BaseModel):
     auto_download: Optional[bool] = None
     quality_cutoff: Optional[str] = None
     min_video_duration: Optional[int] = None
+    download_from_year: Optional[int] = None
 
 
 class ChannelResponse(UTCBaseModel):
@@ -59,6 +61,7 @@ class ChannelResponse(UTCBaseModel):
     auto_download: bool
     quality_cutoff: Optional[str]
     min_video_duration: Optional[int]
+    download_from_year: Optional[int]
     last_scanned_at: Optional[datetime]
     next_scan_at: Optional[datetime]
     total_videos: int

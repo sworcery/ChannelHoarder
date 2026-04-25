@@ -53,6 +53,7 @@ export default function ChannelDetailPage() {
   const [page, setPage] = useState(0)
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
   const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
+  const [editFromYear, setEditFromYear] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importFolder, setImportFolder] = useState("")
   const [importMatches, setImportMatches] = useState<any[] | null>(null)
@@ -526,6 +527,33 @@ export default function ChannelDetailPage() {
                   </>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Year Filter */}
+          <div className="mt-3">
+            <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans — already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
+            <div className="flex gap-1 max-w-xs">
+              <input
+                type="number"
+                min="2005"
+                max={new Date().getFullYear()}
+                value={editFromYear ?? (channel.download_from_year || "")}
+                placeholder="All years"
+                onChange={(e) => setEditFromYear(e.target.value)}
+                className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+              {editFromYear !== null && editFromYear !== String(channel.download_from_year || "") && (
+                <button
+                  onClick={() => {
+                    updateMutation.mutate({ download_from_year: Number(editFromYear) || null })
+                    setEditFromYear(null)
+                  }}
+                  className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                >
+                  Save
+                </button>
+              )}
             </div>
           </div>
 

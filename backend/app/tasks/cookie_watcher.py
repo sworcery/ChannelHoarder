@@ -62,7 +62,7 @@ async def watch_cookie_file() -> None:
 
     # Clear expired flag and unpause queue
     async with async_session() as db:
-        for key, value in [("cookies_expired", "false"), ("queue_paused", "false")]:
+        for key, value in [("cookies_expired", "false"), ("queue_paused", "false"), ("queue_pause_reason", "")]:
             result = await db.execute(
                 select(AppSetting).where(AppSetting.key == key)
             )

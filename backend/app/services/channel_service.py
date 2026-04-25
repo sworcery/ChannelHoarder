@@ -99,6 +99,9 @@ class ChannelService:
             banner_url=banner_url,
             description=info.get("description"),
             quality=data.quality,
+            quality_cutoff=data.quality_cutoff,
+            min_video_duration=data.min_video_duration,
+            download_from_year=data.download_from_year,
             naming_template=data.naming_template,
             download_dir=data.download_dir,
             enabled=data.enabled,
@@ -448,6 +451,15 @@ class ChannelService:
                     logger.info("Skipped livestream: %s (%s)", vid_id, title)
                     new_count += 1
                     continue
+
+            # Check per-channel year filter
+            if channel.download_from_year and upload_date.year < channel.download_from_year:
+                video.status = "skipped"
+                video.monitored = False
+                logger.info("Skipped old video: %s (%s) - year %d < %d minimum",
+                            vid_id, title, upload_date.year, channel.download_from_year)
+                new_count += 1
+                continue
 
             # Check per-channel minimum duration filter
             if channel.min_video_duration and duration and duration < channel.min_video_duration:

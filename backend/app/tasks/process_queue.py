@@ -71,51 +71,51 @@ async def process_download_queue():
         # Check how many downloads are currently active
         active_count = await db.scalar(
             select(func.count(DownloadQueue.id)).where(DownloadQueue.started_at.isnot(None))
-        )
+        ) or 0
 
         max_concurrent = await get_setting(db, "max_concurrent_downloads")
-        if active_count and active_count >= max_concurrent:
+        slots = max_concurrent - active_count
+        if slots <= 0:
             return  # At capacity
 
-        # Get next queued video
+        # Get next queued videos (fill all available slots)
         result = await db.execute(
             select(DownloadQueue)
             .options(joinedload(DownloadQueue.video))
             .where(DownloadQueue.started_at.is_(None))
             .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
-            .limit(1)
+            .limit(slots)
         )
-        queue_entry = result.scalar_one_or_none()
-        if not queue_entry:
+        queue_entries = result.scalars().unique().all()
+        if not queue_entries:
             return  # Nothing to download
 
-        video = queue_entry.video
-        if not video:
-            await db.delete(queue_entry)
+        for queue_entry in queue_entries:
+            video = queue_entry.video
+            if not video:
+                await db.delete(queue_entry)
+                await db.commit()
+                continue
+
+            # Get channel
+            ch_result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
+            channel = ch_result.scalar_one_or_none()
+            if not channel:
+                logger.error("Channel not found for video %s", video.video_id)
+                await db.delete(queue_entry)
+                await db.commit()
+                continue
+
+            # Mark as started NOW so the next scheduler tick
+            # sees it as active and doesn't double-pick it
+            queue_entry.started_at = datetime.now(timezone.utc)
+            queue_entry.target_quality = channel.quality
+            video.status = "downloading"
             await db.commit()
-            return
 
-        # Get channel
-        result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
-        channel = result.scalar_one_or_none()
-        if not channel:
-            logger.error("Channel not found for video %s", video.video_id)
-            await db.delete(queue_entry)
-            await db.commit()
-            return
-
-        # Mark as started NOW (in this session) so the next scheduler tick
-        # sees it as active and doesn't double-pick it
-        queue_entry.started_at = datetime.now(timezone.utc)
-        queue_entry.target_quality = channel.quality
-        video.status = "downloading"
-        await db.commit()
-
-        # Store IDs and kick off the download as a background task
-        # (the task creates its own DB session)
-        logger.info("Processing queue: launching download for %s", video.title)
-        task = asyncio.create_task(
-            _run_download(video.id, channel.id, queue_entry.id),
-            name=f"download-{video.video_id}",
-        )
-        _active_tasks.add(task)
+            logger.info("Processing queue: launching download for %s", video.title)
+            task = asyncio.create_task(
+                _run_download(video.id, channel.id, queue_entry.id),
+                name=f"download-{video.video_id}",
+            )
+            _active_tasks.add(task)

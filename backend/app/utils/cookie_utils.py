@@ -17,7 +17,7 @@ async def flag_cookies_expired(db: AsyncSession) -> None:
     Tampermonkey/watcher push fresh ones. Deleting the file causes a loop
     where freshly pushed cookies get invalidated by in-flight failures.
     """
-    for key, value in [("cookies_expired", "true"), ("queue_paused", "true")]:
+    for key, value in [("cookies_expired", "true"), ("queue_paused", "true"), ("queue_pause_reason", "cookies_expired")]:
         result = await db.execute(
             select(AppSetting).where(AppSetting.key == key)
         )

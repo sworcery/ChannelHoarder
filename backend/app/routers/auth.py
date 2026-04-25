@@ -31,19 +31,18 @@ async def upload_cookies(file: UploadFile = File(...)):
     # Clear the cookies_expired flag since we have fresh cookies
     async with async_session() as db:
         result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "cookies_expired")
+            select(AppSetting).where(
+                AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
+            )
         )
-        flag = result.scalar_one_or_none()
-        if flag:
-            flag.value = "false"
-        # Also unpause the queue if it was auto-paused
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "queue_paused")
-        )
-        pause_flag = result.scalar_one_or_none()
-        if pause_flag and pause_flag.value == "true":
-            pause_flag.value = "false"
+        flags = {s.key: s for s in result.scalars().all()}
+        if flags.get("cookies_expired"):
+            flags["cookies_expired"].value = "false"
+        if flags.get("queue_paused") and flags["queue_paused"].value == "true":
+            flags["queue_paused"].value = "false"
             logger.info("Queue auto-unpaused after fresh cookie upload")
+        if flags.get("queue_pause_reason"):
+            flags["queue_pause_reason"].value = ""
         await db.commit()
 
     logger.info("Cookies uploaded: %d bytes (expired flag cleared, queue unpaused)", len(content))
@@ -69,18 +68,18 @@ async def push_cookies(body: CookiePushRequest):
     # Clear expired flag and unpause queue (same logic as file upload)
     async with async_session() as db:
         result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "cookies_expired")
+            select(AppSetting).where(
+                AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
+            )
         )
-        flag = result.scalar_one_or_none()
-        if flag:
-            flag.value = "false"
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "queue_paused")
-        )
-        pause_flag = result.scalar_one_or_none()
-        if pause_flag and pause_flag.value == "true":
-            pause_flag.value = "false"
+        flags = {s.key: s for s in result.scalars().all()}
+        if flags.get("cookies_expired"):
+            flags["cookies_expired"].value = "false"
+        if flags.get("queue_paused") and flags["queue_paused"].value == "true":
+            flags["queue_paused"].value = "false"
             logger.info("Queue auto-unpaused after cookie push")
+        if flags.get("queue_pause_reason"):
+            flags["queue_pause_reason"].value = ""
         await db.commit()
 
     logger.info("Cookies pushed via API: %d bytes", len(content))

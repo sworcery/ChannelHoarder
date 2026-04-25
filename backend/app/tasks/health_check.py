@@ -72,7 +72,27 @@ async def check_system_health():
             message=message,
         ))
 
-        if not success:
+        if success:
+            # Auto-recover: if cookies were previously flagged expired but yt-dlp works now, clear the flag
+            result = await db.execute(
+                select(AppSetting).where(
+                    AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
+                )
+            )
+            flags = {s.key: s for s in result.scalars().all()}
+            expired_flag = flags.get("cookies_expired")
+            if expired_flag and expired_flag.value == "true":
+                expired_flag.value = "false"
+                reason_flag = flags.get("queue_pause_reason")
+                pause_flag = flags.get("queue_paused")
+                if pause_flag and pause_flag.value == "true" and reason_flag and reason_flag.value == "cookies_expired":
+                    pause_flag.value = "false"
+                    reason_flag.value = ""
+                logger.info("Auto-recovery: yt-dlp test passed, cookies_expired cleared, queue unpaused")
+                await NotificationService.broadcast("cookies_refreshed", {
+                    "message": "Cookies are working again. Queue resumed automatically.",
+                })
+        else:
             await NotificationService.broadcast("health_alert", {
                 "component": "ytdlp",
                 "status": "unhealthy",

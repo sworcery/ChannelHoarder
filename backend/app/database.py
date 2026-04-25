@@ -82,6 +82,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN next_scan_at DATETIME")
             )
+        if "download_from_year" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN download_from_year INTEGER")
+            )
 
         # Add is_short column to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))

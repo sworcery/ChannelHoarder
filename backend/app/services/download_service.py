@@ -18,7 +18,7 @@ from app.services.notification_service import NotificationService
 from app.services.ytdlp_service import YtdlpService
 from app.utils.error_codes import ErrorCode, ERROR_CATALOG, classify_error
 from app.utils.platform_utils import build_video_url
-from app.utils.rate_limiter import wait_for_rate_limit, mark_download_complete
+from app.utils.rate_limiter import wait_for_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -188,8 +188,6 @@ class DownloadService:
                     pass
                 raise Exception("Download timed out after 15 minutes - the PO token server may have been stuck and has been restarted. Retry this download.")
 
-            mark_download_complete()
-
             # Verify output file
             mp4_path = output_path + ".mp4"
             if not os.path.exists(mp4_path):
@@ -246,7 +244,6 @@ class DownloadService:
             )
 
         except Exception as e:
-            mark_download_complete()
             # ── Phase 3 (error): record failure ──────────────────────────
             await self._record_failure(video_id, channel_id, queue_id, e, vdata)
             return False
@@ -289,16 +286,26 @@ class DownloadService:
                     message=f"Downloaded successfully: {self._format_bytes(file_size)}",
                 ))
 
-                # Track last successful auth time (for cookie health dashboard)
+                # Track last successful auth time and auto-recover from expired state
                 result = await db.execute(
-                    select(AppSetting).where(AppSetting.key == "last_successful_auth")
+                    select(AppSetting).where(
+                        AppSetting.key.in_(["last_successful_auth", "cookies_expired", "queue_paused", "queue_pause_reason"])
+                    )
                 )
-                auth_ts = result.scalar_one_or_none()
+                db_flags = {s.key: s for s in result.scalars().all()}
                 now_str = json.dumps(datetime.now(timezone.utc).isoformat())
-                if auth_ts:
-                    auth_ts.value = now_str
+                if "last_successful_auth" in db_flags:
+                    db_flags["last_successful_auth"].value = now_str
                 else:
                     db.add(AppSetting(key="last_successful_auth", value=now_str))
+                if db_flags.get("cookies_expired") and db_flags["cookies_expired"].value == "true":
+                    db_flags["cookies_expired"].value = "false"
+                    reason = db_flags.get("queue_pause_reason")
+                    pause = db_flags.get("queue_paused")
+                    if pause and pause.value == "true" and reason and reason.value == "cookies_expired":
+                        pause.value = "false"
+                        reason.value = ""
+                    logger.info("Auto-recovery: download succeeded, cookies_expired cleared, queue unpaused")
 
                 await db.commit()
                 logger.info("Downloaded: %s (%s)", vdata.title, self._format_bytes(file_size))
@@ -427,7 +434,6 @@ class DownloadService:
             # But only if cookies weren't recently uploaded (avoids loop where
             # an in-flight download with old cookies fails and invalidates fresh ones)
             if code == ErrorCode.AUTH_EXPIRED:
-                import os
                 cookie_age_seconds = 0
                 try:
                     if settings.cookies_path.exists():
