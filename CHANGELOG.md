@@ -5,6 +5,18 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.31] - 2026-04-25
+
+### Added
+- **Per-channel year filter** - New "Download From Year" setting on each channel. Only videos published in that year or later are downloaded during scans. Leave empty to download everything.
+- **Cookie auto-recovery** - When cookies are flagged as expired but a health check or successful download proves they still work, the expired flag is automatically cleared and the queue resumes without manual intervention.
+
+### Fixed
+- **Concurrent download staggering** - Download delays were using a single shared timer, causing concurrent downloads to serialize instead of staggering independently. Each concurrent slot now properly waits its own delay from the previous dispatch.
+- **Queue only filling one slot per tick** - The queue processor now fills all available concurrent download slots at once instead of picking up one video every 30 seconds.
+- **Auto-recovery respects manual pause** - Cookie auto-recovery no longer overrides a user-initiated queue pause. A `queue_pause_reason` flag distinguishes auto-pause from manual pause.
+- **Download success clears expired state** - A successful download now clears both the `cookies_expired` flag and unpauses the queue (previously only cleared the flag, leaving the queue stuck).
+
 ## [1.7.30] - 2026-04-22
 
 ### Changed
