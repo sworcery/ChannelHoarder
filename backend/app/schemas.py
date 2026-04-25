@@ -209,6 +209,9 @@ class SettingsUpdate(BaseModel):
     shorts_enabled: Optional[bool] = None  # Global toggle to allow shorts downloading
     livestreams_enabled: Optional[bool] = None  # Global toggle to allow livestream downloading
     subtitles_enabled: Optional[bool] = None  # Download subtitles/captions with videos
+    chapters_enabled: Optional[bool] = None  # Embed chapter markers in downloaded videos
+    # Notification providers
+    discord_webhook_url: Optional[str] = None
     # File permissions
     set_permissions: Optional[bool] = None  # Apply chmod after download
     chmod_folder: Optional[str] = None  # Octal chmod for folders (e.g. "755")

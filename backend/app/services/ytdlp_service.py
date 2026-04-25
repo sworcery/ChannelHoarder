@@ -217,9 +217,17 @@ class YtdlpService:
         progress_hook=None,
         platform: str = "youtube",
         subtitles_enabled: bool = False,
+        chapters_enabled: bool = False,
     ) -> dict:
         """Download a single video. Returns info dict on success, raises on failure."""
         opts = self._base_opts(platform=platform)
+        postprocessors = [
+            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
+            {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
+            {"key": "EmbedThumbnail", "already_have_thumbnail": True},
+        ]
+        if chapters_enabled:
+            postprocessors.append({"key": "FFmpegEmbedChapters"})
         opts.update({
             "format": self._quality_to_format(quality),
             "merge_output_format": "mp4",
@@ -229,11 +237,7 @@ class YtdlpService:
             "writesubtitles": subtitles_enabled,
             "writeautomaticsub": subtitles_enabled,
             "subtitleslangs": ["en"] if subtitles_enabled else [],
-            "postprocessors": [
-                {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
-                {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-                {"key": "EmbedThumbnail", "already_have_thumbnail": True},
-            ],
+            "postprocessors": postprocessors,
             "socket_timeout": 30,
             "retries": 3,
             "fragment_retries": 5,
@@ -352,14 +356,16 @@ class YtdlpService:
             else:
                 yt_args = {"player_client": player_client.split(",")}
 
-            # Only use PO tokens if cookies are not available
-            if settings.has_cookies:
-                logger.info("Cookies available - using cookies as primary auth (PO tokens skipped)")
-                yt_args["fetch_pot"] = ["never"]
-            elif settings.POT_SERVER_ENABLED:
-                logger.info("No cookies - falling back to PO token server: %s", settings.POT_SERVER_URL)
+            if settings.POT_SERVER_ENABLED:
+                if settings.has_cookies:
+                    logger.info("Using cookies + PO tokens for authentication")
+                else:
+                    logger.info("No cookies - using PO token server: %s", settings.POT_SERVER_URL)
                 yt_args["fetch_pot"] = ["always"]
                 use_pot = True
+            elif settings.has_cookies:
+                logger.info("Cookies available, PO token server disabled")
+                yt_args["fetch_pot"] = ["never"]
             else:
                 logger.warning("No cookies and PO token server disabled - downloads may fail")
                 yt_args["fetch_pot"] = ["never"]

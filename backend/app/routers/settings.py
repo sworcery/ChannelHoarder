@@ -137,7 +137,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
     settings_list = result.scalars().all()
     SENSITIVE_KEYS = {
         "telegram_bot_token", "pushover_app_token", "pushover_user_key",
-        "youtube_api_key", "telegram_chat_id",
+        "youtube_api_key", "telegram_chat_id", "discord_webhook_url",
     }
     settings_dict = {}
     for s in settings_list:

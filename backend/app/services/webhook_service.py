@@ -1,4 +1,4 @@
-"""Push notifications via Telegram and Pushover.
+"""Push notifications via Telegram, Pushover, and Discord.
 
 Reads provider credentials from AppSettings. All failures are logged
 but silently swallowed  - webhook errors must never disrupt downloads.
@@ -92,6 +92,7 @@ async def _get_webhook_settings() -> dict[str, str]:
         "telegram_chat_id",
         "pushover_app_token",
         "pushover_user_key",
+        "discord_webhook_url",
         "webhook_events",
     ]
     settings: dict[str, str] = {}
@@ -149,6 +150,33 @@ async def _send_pushover(app_token: str, user_key: str, title: str, message: str
             logger.warning("Pushover webhook failed: %s %s", resp.status_code, resp.text[:200])
 
 
+async def _send_discord(webhook_url: str, title: str, message: str) -> None:
+    """POST a message to a Discord webhook using an embed."""
+    color_map = {
+        "Download Complete": 0x22C55E,
+        "Download Failed": 0xEF4444,
+        "Cookies Expired": 0xF59E0B,
+        "Cookies Refreshed": 0x22C55E,
+        "Health Alert": 0xF59E0B,
+        "Critical Alert": 0xEF4444,
+    }
+    color = 0x3B82F6
+    for key, val in color_map.items():
+        if key in title:
+            color = val
+            break
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(webhook_url, json={
+            "embeds": [{
+                "title": title,
+                "description": message,
+                "color": color,
+            }],
+        })
+        if resp.status_code not in (200, 204):
+            logger.warning("Discord webhook failed: %s %s", resp.status_code, resp.text[:200])
+
+
 async def send_notification(event_type: str, payload: dict[str, Any]) -> None:
     """Dispatch push notification to all configured providers.
 
@@ -184,6 +212,14 @@ async def send_notification(event_type: str, payload: dict[str, Any]) -> None:
         except Exception:
             logger.debug("Pushover notification failed", exc_info=True)
 
+    # Discord
+    discord_url = cfg.get("discord_webhook_url", "")
+    if discord_url:
+        try:
+            await _send_discord(str(discord_url), title, text)
+        except Exception:
+            logger.debug("Discord notification failed", exc_info=True)
+
 
 async def send_test_notification(provider: str) -> dict[str, Any]:
     """Send a test message to verify provider config. Returns result dict."""
@@ -209,6 +245,16 @@ async def send_test_notification(provider: str) -> dict[str, Any]:
         try:
             await _send_pushover(str(app_token), str(user_key), "ChannelHoarder", test_text)
             return {"success": True, "message": "Test message sent to Pushover"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    elif provider == "discord":
+        discord_url = cfg.get("discord_webhook_url", "")
+        if not discord_url:
+            return {"success": False, "error": "Discord webhook URL not configured"}
+        try:
+            await _send_discord(str(discord_url), "ChannelHoarder", test_text)
+            return {"success": True, "message": "Test message sent to Discord"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

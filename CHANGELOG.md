@@ -5,6 +5,16 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.32] - 2026-04-25
+
+### Added
+- **Chapter embedding** - New "Embed Chapters" toggle in Settings > Media Management. Videos with chapter markers will have them embedded in the MP4 file for players like Plex and VLC.
+- **Discord webhook notifications** - Add a Discord webhook URL in Settings > Connect. Uses embeds with color-coded notifications for all supported events.
+
+### Fixed
+- **PO tokens skipped when cookies present** - The mweb player client requires PO tokens even with cookies, but they were being disabled. Downloads now use both cookies and PO tokens together, fixing 360p-480p quality caps for authenticated users. (Fixes #6, #8)
+- **Debug log export crash** - Export was referencing wrong attribute names on the diagnostic report (`cookies_present`, `disk_free`, `total_downloaded`). (Fixes #9)
+
 ## [1.7.31] - 2026-04-25
 
 ### Added
