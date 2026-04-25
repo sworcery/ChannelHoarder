@@ -5,14 +5,6 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.33] - 2026-04-25
-
-### Fixed
-- **TypeScript build failures** - Fixed all type mismatches between frontend TypeScript interfaces and actual backend API responses. Updated types for diagnostics, auth status, move preview, renumber, detect-clean, naming preview, standalone settings, and settings data endpoints.
-
-### Changed
-- **README updates** - Added Discord webhooks to notifications section, chapter embedding to features, `EXTRA_DOWNLOAD_DIRS` to environment variables table, and Media Management to settings list.
-
 ## [1.7.32] - 2026-04-25
 
 ### Added
@@ -22,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - **PO tokens skipped when cookies present** - The mweb player client requires PO tokens even with cookies, but they were being disabled. Downloads now use both cookies and PO tokens together, fixing 360p-480p quality caps for authenticated users. (Fixes #6, #8)
 - **Debug log export crash** - Export was referencing wrong attribute names on the diagnostic report (`cookies_present`, `disk_free`, `total_downloaded`). (Fixes #9)
+- **TypeScript build failures** - Fixed all type mismatches between frontend TypeScript interfaces and actual backend API responses.
 
 ## [1.7.31] - 2026-04-25
 
