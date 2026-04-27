@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.34] - 2026-04-27
+
+### Fixed
+- **Chapter embedding crashes downloads** - Wrong yt-dlp postprocessor key (`FFmpegEmbedChapters` doesn't exist). Changed to `FFmpegMetadata` with `add_chapters` flag, which is the correct way to embed chapter markers.
+
 ## [1.7.33] - 2026-04-26
 
 ### Fixed

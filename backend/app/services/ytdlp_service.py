@@ -227,7 +227,7 @@ class YtdlpService:
             {"key": "EmbedThumbnail", "already_have_thumbnail": True},
         ]
         if chapters_enabled:
-            postprocessors.append({"key": "FFmpegEmbedChapters"})
+            postprocessors.append({"key": "FFmpegMetadata", "add_chapters": True})
         opts.update({
             "format": self._quality_to_format(quality),
             "merge_output_format": "mp4",
