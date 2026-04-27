@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.33] - 2026-04-26
+
+### Fixed
+- **Missing UI for chapters and Discord** - The chapter embedding toggle and Discord webhook URL input were added to the backend in v1.7.32 but not wired into the settings UI. Now visible under Settings > Media Management and Settings > Connect respectively.
+
 ## [1.7.32] - 2026-04-25
 
 ### Added

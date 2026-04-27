@@ -679,6 +679,7 @@ function MediaManagementTab() {
   const [shortsEnabled, setShortsEnabled] = useState(false)
   const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
+  const [chaptersEnabled, setChaptersEnabled] = useState(false)
   const [setPermissions, setSetPermissions] = useState(false)
   const [chmodFolder, setChmodFolder] = useState("755")
   const [chmodFile, setChmodFile] = useState("644")
@@ -696,6 +697,7 @@ function MediaManagementTab() {
       if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
       if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
+      if (settings.chapters_enabled != null) setChaptersEnabled(settings.chapters_enabled === true || settings.chapters_enabled === "true")
       if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
       if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
       if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
@@ -711,6 +713,7 @@ function MediaManagementTab() {
         shorts_enabled: shortsEnabled,
         livestreams_enabled: livestreamsEnabled,
         subtitles_enabled: subtitlesEnabled,
+        chapters_enabled: chaptersEnabled,
         set_permissions: setPermissions,
         chmod_folder: chmodFolder,
         chmod_file: chmodFile,
@@ -822,6 +825,26 @@ function MediaManagementTab() {
         </label>
         <p className="text-xs text-muted-foreground">
           Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
+        </p>
+      </div>
+
+      {/* Chapters */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">Chapters</h3>
+          <HelpIcon text="Embeds chapter markers into the MP4 file so players like Plex and VLC can display them." anchor="episode-management" />
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={chaptersEnabled}
+            onChange={(e) => setChaptersEnabled(e.target.checked)}
+            className="rounded"
+          />
+          <span className="text-sm">Embed chapter markers in downloaded videos</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Only applies to videos that have chapter markers set by the uploader.
         </p>
       </div>
 
@@ -1195,6 +1218,7 @@ function NotificationsTab() {
   const [telegramChatId, setTelegramChatId] = useState("")
   const [pushoverAppToken, setPushoverAppToken] = useState("")
   const [pushoverUserKey, setPushoverUserKey] = useState("")
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("")
   const [enabledEvents, setEnabledEvents] = useState<string[]>(WEBHOOK_EVENTS.map(e => e.key))
 
   const { data: settings } = useQuery({
@@ -1208,6 +1232,7 @@ function NotificationsTab() {
       if (settings.telegram_chat_id) setTelegramChatId(String(settings.telegram_chat_id))
       if (settings.pushover_app_token) setPushoverAppToken(String(settings.pushover_app_token))
       if (settings.pushover_user_key) setPushoverUserKey(String(settings.pushover_user_key))
+      if (settings.discord_webhook_url) setDiscordWebhookUrl(String(settings.discord_webhook_url))
       if (settings.webhook_events && Array.isArray(settings.webhook_events)) {
         setEnabledEvents(settings.webhook_events)
       }
@@ -1221,6 +1246,7 @@ function NotificationsTab() {
         telegram_chat_id: telegramChatId || null,
         pushover_app_token: pushoverAppToken || null,
         pushover_user_key: pushoverUserKey || null,
+        discord_webhook_url: discordWebhookUrl || null,
         webhook_events: enabledEvents,
       }),
     onSuccess: () => {
@@ -1238,6 +1264,12 @@ function NotificationsTab() {
 
   const testPushoverMutation = useMutation({
     mutationFn: () => api.testWebhook("pushover"),
+    onSuccess: (data: any) => toast(data.success ? data.message : data.error, data.success ? "success" : "error"),
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const testDiscordMutation = useMutation({
+    mutationFn: () => api.testWebhook("discord"),
     onSuccess: (data: any) => toast(data.success ? data.message : data.error, data.success ? "success" : "error"),
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -1331,6 +1363,36 @@ function NotificationsTab() {
         >
           {testPushoverMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
           Test Pushover
+        </button>
+      </div>
+
+      {/* Discord */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Globe className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold">Discord</h3>
+          <HelpIcon text="Send notifications to a Discord channel via webhook. Uses embeds with color-coded status." anchor="notifications" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Create a webhook in your Discord channel settings under Integrations.
+        </p>
+        <div>
+          <label className="block text-sm mb-1">Webhook URL</label>
+          <input
+            type="password"
+            placeholder="https://discord.com/api/webhooks/..."
+            value={discordWebhookUrl}
+            onChange={(e) => setDiscordWebhookUrl(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+          />
+        </div>
+        <button
+          onClick={() => testDiscordMutation.mutate()}
+          disabled={!discordWebhookUrl || testDiscordMutation.isPending}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+        >
+          {testDiscordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
+          Test Discord
         </button>
       </div>
 
