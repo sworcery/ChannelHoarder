@@ -5,10 +5,10 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.7.36] - 2026-04-27
+## [1.7.37] - 2026-04-27
 
 ### Fixed
-- **Force-refresh creates duplicate downloads** - After force-rescan deletes and recreates video records, existing MP4 files on disk are now matched back by video ID in the filename. Videos with matching files are marked as completed instead of pending, preventing re-downloads. (#14)
+- **Force-refresh creates duplicate downloads** - After force-rescan deletes and recreates video records, existing MP4 files on disk are now matched back to prevent re-downloads. Matches by video ID in the filename first, then falls back to reading `.info.json` sidecar files for custom naming templates that don't include `{video_id}`. (#14)
 
 ## [1.7.35] - 2026-04-27
 

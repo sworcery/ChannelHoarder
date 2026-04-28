@@ -1830,6 +1830,7 @@ async def force_rescan(
 
     # Match existing files on disk back to the new video records by video ID
     import re
+    import json as _json
     from pathlib import Path
 
     matched_count = 0
@@ -1838,10 +1839,27 @@ async def force_rescan(
     search_dir = channel_dir if channel_dir.is_dir() else download_dir
     if search_dir.is_dir():
         file_map: dict[str, Path] = {}
+
+        # Primary: extract video ID from [video_id] in filename
         for mp4 in search_dir.rglob("*.mp4"):
             m = re.search(r"\[([A-Za-z0-9_-]{8,})\]", mp4.stem)
             if m:
                 file_map[m.group(1)] = mp4
+
+        # Fallback: read video ID from .info.json sidecar files
+        for info_json in search_dir.rglob("*.info.json"):
+            try:
+                data = _json.loads(info_json.read_text(encoding="utf-8"))
+                vid_id = data.get("id")
+                if vid_id and vid_id not in file_map:
+                    mp4_sibling = info_json.with_suffix("").with_suffix(".mp4")
+                    if not mp4_sibling.exists():
+                        stem = info_json.stem.removesuffix(".info")
+                        mp4_sibling = info_json.parent / f"{stem}.mp4"
+                    if mp4_sibling.exists():
+                        file_map[vid_id] = mp4_sibling
+            except Exception:
+                continue
 
         if file_map:
             result = await db.execute(
