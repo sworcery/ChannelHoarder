@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.utils.file_utils import delete_video_files, escape_like, move_video_files
+from app.utils.file_utils import delete_video_files, escape_like, move_video_files, sanitize_filename
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
@@ -1828,10 +1828,43 @@ async def force_rescan(
             "new_videos": 0,
         }
 
+    # Match existing files on disk back to the new video records by video ID
+    import re
+    from pathlib import Path
+
+    matched_count = 0
+    download_dir = Path(channel.download_dir or settings.DOWNLOAD_DIR)
+    channel_dir = download_dir / sanitize_filename(channel.channel_name)
+    search_dir = channel_dir if channel_dir.is_dir() else download_dir
+    if search_dir.is_dir():
+        file_map: dict[str, Path] = {}
+        for mp4 in search_dir.rglob("*.mp4"):
+            m = re.search(r"\[([A-Za-z0-9_-]{8,})\]", mp4.stem)
+            if m:
+                file_map[m.group(1)] = mp4
+
+        if file_map:
+            result = await db.execute(
+                select(Video).where(
+                    Video.channel_id == channel.id,
+                    Video.video_id.in_(list(file_map.keys())),
+                )
+            )
+            for video in result.scalars().all():
+                mp4_path = file_map.get(video.video_id)
+                if mp4_path and mp4_path.exists():
+                    video.status = "completed"
+                    video.file_path = str(mp4_path)
+                    video.file_size = mp4_path.stat().st_size
+                    matched_count += 1
+            await db.commit()
+            logger.info("Force rescan matched %d existing files for %s", matched_count, channel.channel_name)
+
     return {
-        "message": f"Cleared {deleted_count} old records, found {new_count} videos on rescan",
+        "message": f"Cleared {deleted_count} old records, found {new_count} videos on rescan, matched {matched_count} existing files",
         "deleted": deleted_count,
         "new_videos": new_count,
+        "matched_files": matched_count,
     }
 
 
