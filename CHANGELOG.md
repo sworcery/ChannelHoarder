@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.35] - 2026-04-27
+
+### Fixed
+- **Channels page limited to 50 channels** - The channels list API defaulted to returning 50 results and the frontend didn't override it. Raised the default to 500 (max 1000). (Fixes #13)
+
 ## [1.7.34] - 2026-04-27
 
 ### Fixed

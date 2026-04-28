@@ -28,7 +28,7 @@ router = APIRouter()
 @router.get("/", response_model=list[ChannelResponse])
 async def list_channels(
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(500, ge=1, le=1000),
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
