@@ -1868,13 +1868,22 @@ async def force_rescan(
                     Video.video_id.in_(list(file_map.keys())),
                 )
             )
+            matched_video_ids = []
             for video in result.scalars().all():
                 mp4_path = file_map.get(video.video_id)
                 if mp4_path and mp4_path.exists():
                     video.status = "completed"
                     video.file_path = str(mp4_path)
                     video.file_size = mp4_path.stat().st_size
+                    matched_video_ids.append(video.id)
                     matched_count += 1
+            if matched_video_ids:
+                from sqlalchemy import delete as sa_delete
+                await db.execute(
+                    sa_delete(DownloadQueue).where(
+                        DownloadQueue.video_id.in_(matched_video_ids)
+                    )
+                )
             await db.commit()
             logger.info("Force rescan matched %d existing files for %s", matched_count, channel.channel_name)
 

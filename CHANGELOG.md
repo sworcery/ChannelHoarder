@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.37.1] - 2026-04-28
+
+### Fixed
+- **Force-rescan still queues matched files for download** - After force-rescan matched existing files on disk back to video records, the videos were marked as completed but their download queue entries were not removed. The download worker would then re-download them anyway. Queue entries are now cleaned up for all matched files. (#14)
+
 ## [1.7.37] - 2026-04-27
 
 ### Fixed
