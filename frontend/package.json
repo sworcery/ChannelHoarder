@@ -1,7 +1,9 @@
 {
   "name": "channelhoarder",
   "private": true,
-  "version": "1.7.37.1",
+  "license": "MIT",
+  "author": "sworcery <sworcery@gmail.com>",
+  "version": "1.7.38",
   "type": "module",
   "scripts": {
     "dev": "vite",
