@@ -114,7 +114,10 @@ def get_platform_config(platform: str) -> dict:
 def build_video_url(platform: str, video_id: str) -> str:
     """Construct a full video URL from platform + video_id."""
     config = get_platform_config(platform)
-    return config["video_url_template"].format(video_id=video_id)
+    vid = video_id
+    if platform == "twitch" and vid.startswith("v") and vid[1:].isdigit():
+        vid = vid[1:]
+    return config["video_url_template"].format(video_id=vid)
 
 
 def get_channel_videos_url(platform: str, channel_url: str) -> str:

@@ -16,7 +16,11 @@ const VIDEO_URL_TEMPLATES: Record<string, string> = {
 
 export function buildVideoUrl(platform: string, videoId: string): string {
   const template = VIDEO_URL_TEMPLATES[platform] || `https://www.youtube.com/watch?v=${videoId}`
-  return template.replace("{video_id}", videoId)
+  let vid = videoId
+  if (platform === "twitch" && vid.startsWith("v") && /^\d+$/.test(vid.slice(1))) {
+    vid = vid.slice(1)
+  }
+  return template.replace("{video_id}", vid)
 }
 
 export function formatBytes(bytes: number): string {
