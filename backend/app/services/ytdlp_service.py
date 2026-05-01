@@ -35,11 +35,11 @@ atexit.register(_cleanup_cookie_cache)
 class YtdlpService:
     """Wrapper for all yt-dlp interactions."""
 
-    def get_channel_info(self, url: str) -> dict | None:
+    def get_channel_info(self, url: str, platform: str = "youtube") -> dict | None:
         """Fetch channel metadata without downloading."""
         from app.utils.platform_utils import is_playlist_url
 
-        opts = self._base_opts()
+        opts = self._base_opts(platform=platform)
 
         if is_playlist_url(url):
             # Playlists fail with playlist_items: "0" (triggers tab extraction/404)

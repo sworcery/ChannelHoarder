@@ -40,7 +40,7 @@ class ChannelService:
         is_playlist = is_playlist_url(data.url)
 
         # Resolve channel info via yt-dlp
-        info = await asyncio.to_thread(self.ytdlp.get_channel_info, data.url)
+        info = await asyncio.to_thread(self.ytdlp.get_channel_info, data.url, platform)
         if not info:
             raise ValueError(f"Could not find channel for: {data.url}")
 

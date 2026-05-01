@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -238,7 +239,12 @@ async def get_auth_status():
                 cookies_status = "expired"
                 cookies_message = "Cookies expired  - please upload fresh cookies.txt"
 
-            last_auth = db_settings.get("last_successful_auth")
+            last_auth_raw = db_settings.get("last_successful_auth")
+            if last_auth_raw:
+                try:
+                    last_auth = json.loads(last_auth_raw)
+                except (json.JSONDecodeError, TypeError):
+                    last_auth = last_auth_raw
 
         return {
             "pot_status": pot_status,

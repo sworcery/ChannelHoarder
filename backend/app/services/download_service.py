@@ -95,22 +95,11 @@ class DownloadService:
                 download_dir=channel.download_dir,
             )
 
-            output_path = build_output_path(
-                channel_name=cdata.channel_name,
-                video_title=vdata.title,
-                video_id=vdata.video_id,
-                upload_date=vdata.upload_date,
-                season=vdata.season,
-                episode=vdata.episode,
-                naming_template=cdata.naming_template,
-                base_dir=cdata.download_dir,
-            )
-
-            # Read download feature settings while we have a DB session
+            # Read download feature settings and global fallbacks while we have a DB session
             import json
             feature_result = await db.execute(
                 select(AppSetting).where(
-                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled"])
+                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "naming_template"])
                 )
             )
             feature_settings = {s.key: s.value for s in feature_result.scalars().all()}
@@ -124,6 +113,25 @@ class DownloadService:
                 chapters_enabled = bool(json.loads(feature_settings.get("chapters_enabled", "false")))
             except Exception:
                 pass
+
+            # Per-channel naming_template takes priority; fall back to global setting
+            effective_template = cdata.naming_template
+            if not effective_template:
+                try:
+                    effective_template = json.loads(feature_settings.get("naming_template", "null"))
+                except (json.JSONDecodeError, TypeError):
+                    effective_template = None
+
+            output_path = build_output_path(
+                channel_name=cdata.channel_name,
+                video_title=vdata.title,
+                video_id=vdata.video_id,
+                upload_date=vdata.upload_date,
+                season=vdata.season,
+                episode=vdata.episode,
+                naming_template=effective_template,
+                base_dir=cdata.download_dir,
+            )
         # ← session released
 
         # ── Phase 2: actual download  - no DB session held ────────────────
