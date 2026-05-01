@@ -5,6 +5,13 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.39] - 2026-05-01
+
+### Fixed
+- **"Invalid Date" on authentication status page** - The `last_successful_auth` timestamp was double-encoded in the database, causing the frontend to display "Invalid Date" instead of the actual time. (#17)
+- **Global naming template ignored during downloads** - The naming template set in Settings > Media Management was saved but never read during downloads. The download path now checks the global template when no per-channel template is set. (#18)
+- **Rumble channels fail to add or scan** - YouTube-specific yt-dlp options (PO tokens, player client, JS runtimes) were being applied to all platforms, breaking non-YouTube extractors. Platform detection is now passed through to the yt-dlp options builder. (#19)
+
 ## [1.7.38] - 2026-04-29
 
 ### Changed
