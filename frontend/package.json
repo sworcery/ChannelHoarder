@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "author": "sworcery <sworcery@gmail.com>",
-  "version": "1.7.39",
+  "version": "1.8.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
