@@ -61,7 +61,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create default directories
-RUN mkdir -p /config /downloads /cookies /StandaloneDownloads
+RUN mkdir -p /config /downloads /cookies
 
 # Environment defaults
 ENV CONFIG_DIR=/config \
@@ -80,6 +80,6 @@ EXPOSE 8000
 HEALTHCHECK --interval=60s --timeout=10s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/system/health || exit 1
 
-VOLUME ["/config", "/downloads", "/cookies", "/StandaloneDownloads"]
+VOLUME ["/config", "/downloads", "/cookies"]
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

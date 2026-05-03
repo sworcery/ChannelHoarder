@@ -30,7 +30,7 @@
 - Simplified queue controls  - download-now button for direct queue bypass
 
 ### v1.4.0
-- Queue controls with download-now and inline standalone download progress
+- Queue controls with download-now and inline download progress
     </Changes>
     <Config Name="Web UI Port" Target="8000" Default="8587" Mode="tcp" Description="Web interface port. Access the UI at http://your-server-ip:8587" Type="Port" Display="always" Required="true">8587</Config>
     <Config Name="Config" Target="/config" Default="/mnt/user/appdata/channelhoarder" Mode="rw" Description="Configuration, database, and settings storage" Type="Path" Display="always" Required="true">/mnt/user/appdata/channelhoarder</Config>

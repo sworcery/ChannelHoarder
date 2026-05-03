@@ -21,12 +21,12 @@ if ! getent passwd appuser > /dev/null 2>&1; then
 fi
 
 # Create directories and set ownership
-mkdir -p /config /downloads /cookies /StandaloneDownloads /home/appuser
+mkdir -p /config /downloads /cookies /tmp/quick-downloads /home/appuser
 chown -R appuser:appuser /config /home/appuser /app /opt/pot-provider
 # Downloads and cookies may be NFS/SMB mounts that reject chown  - don't fail the container
 chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?)  - continuing"
 chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?)  - continuing"
-chown -R appuser:appuser /StandaloneDownloads 2>/dev/null || echo "WARNING: Could not chown /StandaloneDownloads  - continuing"
+chown -R appuser:appuser /tmp/quick-downloads 2>/dev/null || true
 
 # Set up bgutil symlink in user's home so the yt-dlp plugin can find its files
 ln -sf /opt/bgutil-ytdlp-pot-provider /home/appuser/bgutil-ytdlp-pot-provider

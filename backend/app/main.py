@@ -143,10 +143,11 @@ app.add_middleware(
 )
 
 # Import and register routers
-from app.routers import channels, downloads, dashboard, auth, settings as settings_router, system, websocket  # noqa: E402
+from app.routers import channels, downloads, dashboard, auth, settings as settings_router, system, websocket, quick_download  # noqa: E402
 
 app.include_router(channels.router, prefix="/api/v1/channels", tags=["channels"])
 app.include_router(downloads.router, prefix="/api/v1/downloads", tags=["downloads"])
+app.include_router(quick_download.router, prefix="/api/v1", tags=["quick-download"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(settings_router.router, prefix="/api/v1/settings", tags=["settings"])

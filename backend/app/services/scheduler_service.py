@@ -86,6 +86,16 @@ class SchedulerService:
             name="Watch cookies.txt for external updates",
         )
 
+        # Quick download cleanup (every 6 hours)
+        from app.tasks.quick_download_cleanup import cleanup_quick_downloads
+        self.scheduler.add_job(
+            cleanup_quick_downloads,
+            IntervalTrigger(hours=6),
+            id="quick_download_cleanup",
+            replace_existing=True,
+            name="Clean up expired quick-download files",
+        )
+
         self.scheduler.start()
         logger.info("Scheduler started with %d jobs", len(self.scheduler.get_jobs()))
 

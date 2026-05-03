@@ -6,13 +6,12 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.8.0"
+    APP_VERSION: str = "1.8.1"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
     CONFIG_DIR: str = "/config"
     DOWNLOAD_DIR: str = "/downloads"
-    STANDALONE_DOWNLOAD_DIR: str = ""  # Separate directory for standalone downloads (defaults to DOWNLOAD_DIR/Standalone Downloads)
     EXTRA_DOWNLOAD_DIRS: str = ""  # Comma-separated additional allowed download paths (e.g. /cartoons,/media)
     COOKIE_WATCH_DIR: str = "/cookies"
     DATABASE_URL: str = ""
@@ -37,12 +36,6 @@ class Settings(BaseSettings):
     TZ: str = "America/New_York"
 
     model_config = {"env_prefix": "", "case_sensitive": True}
-
-    @property
-    def standalone_dir(self) -> str:
-        if self.STANDALONE_DOWNLOAD_DIR:
-            return self.STANDALONE_DOWNLOAD_DIR
-        return "/StandaloneDownloads"
 
     @property
     def allowed_download_roots(self) -> list[str]:

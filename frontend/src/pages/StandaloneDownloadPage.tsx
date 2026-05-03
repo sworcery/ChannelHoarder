@@ -8,22 +8,27 @@ import {
   Download,
   Loader2,
   Link as LinkIcon,
-  FolderOpen,
   CheckCircle,
   AlertCircle,
-  Save,
-  RotateCcw,
   Clock,
-  XCircle,
+  Trash2,
+  FileVideo,
 } from "lucide-react"
 
-interface QueuedVideo {
-  videoId: number
-  videoDbId: string
+interface ActiveDownload {
+  downloadId: string
   title: string
-  thumbnail?: string
-  duration?: number
-  channel?: string
+  thumbnail: string | null
+  duration: number | null
+}
+
+interface DownloadProgress {
+  percent: number
+  speed_bytes: number
+  downloaded_bytes: number
+  total_bytes: number
+  eta: number
+  startTime: number
 }
 
 export default function StandaloneDownloadPage() {
@@ -33,160 +38,112 @@ export default function StandaloneDownloadPage() {
 
   const [url, setUrl] = useState("")
   const [quality, setQuality] = useState("best")
-  const [customDir, setCustomDir] = useState("")
-  const [useCustomDir, setUseCustomDir] = useState(false)
-  const [lastResult, setLastResult] = useState<{ message: string; success: boolean } | null>(null)
-  const [defaultDir, setDefaultDir] = useState("")
-  const [reorganizing, setReorganizing] = useState(false)
 
-  // Tracked downloads on this page
-  const [trackedVideos, setTrackedVideos] = useState<QueuedVideo[]>([])
-  const trackedVideosRef = useRef<QueuedVideo[]>(trackedVideos)
-  const [progress, setProgress] = useState<Record<string, any>>({})
-  const [completedVideos, setCompletedVideos] = useState<Set<string>>(new Set())
-  const [failedVideos, setFailedVideos] = useState<Record<string, string>>({})
+  const [activeDownloads, setActiveDownloads] = useState<ActiveDownload[]>([])
+  const activeRef = useRef<ActiveDownload[]>([])
+  const [progress, setProgress] = useState<Record<string, DownloadProgress>>({})
+  const [completed, setCompleted] = useState<Set<string>>(new Set())
+  const [failed, setFailed] = useState<Record<string, string>>({})
   const maxPercentRef = useRef<Record<string, number>>({})
   const speedHistoryRef = useRef<Record<string, number[]>>({})
   const startTimeRef = useRef<Record<string, number>>({})
 
-  const { data: settings } = useQuery({
-    queryKey: ["standalone-settings"],
-    queryFn: api.getStandaloneSettings,
-    staleTime: 60000,
+  const { data: files, isFetching: filesFetching } = useQuery({
+    queryKey: ["quick-download-files"],
+    queryFn: api.getQuickDownloadFiles,
+    refetchInterval: 10000,
   })
 
-  // Sync default directory from query data
-  useEffect(() => {
-    if (settings?.download_dir) setDefaultDir(settings.download_dir)
-  }, [settings?.download_dir])
+  useEffect(() => { activeRef.current = activeDownloads }, [activeDownloads])
 
-  // Keep ref in sync with state
-  useEffect(() => { trackedVideosRef.current = trackedVideos }, [trackedVideos])
-
-  // Subscribe to WebSocket for progress on tracked videos
   useEffect(() => {
     return subscribe((msg) => {
-      if (msg.type === "download_progress") {
+      if (msg.type === "quick_download_progress") {
         const p = msg.payload
-        const vid = String(p.video_id)
+        const id = p.download_id
+        if (!activeRef.current.some((d) => d.downloadId === id)) return
 
-        // Only track videos we queued from this page
-        if (!trackedVideosRef.current.some((v) => v.videoDbId === vid)) return
+        if (!startTimeRef.current[id]) startTimeRef.current[id] = Date.now()
 
-        if (!startTimeRef.current[vid]) startTimeRef.current[vid] = Date.now()
-
-        const prevMax = maxPercentRef.current[vid] || 0
-        const smoothedPercent = Math.max(prevMax, p.percent || 0)
-        maxPercentRef.current[vid] = smoothedPercent
+        const prevMax = maxPercentRef.current[id] || 0
+        const smoothed = Math.max(prevMax, p.percent || 0)
+        maxPercentRef.current[id] = smoothed
 
         const rawSpeed = p.speed_bytes || 0
-        if (!speedHistoryRef.current[vid]) speedHistoryRef.current[vid] = []
-        const hist = speedHistoryRef.current[vid]
+        if (!speedHistoryRef.current[id]) speedHistoryRef.current[id] = []
+        const hist = speedHistoryRef.current[id]
         if (rawSpeed > 0) {
           hist.push(rawSpeed)
           if (hist.length > 3) hist.shift()
         }
-        const smoothedSpeed = hist.length > 0
-          ? hist.reduce((a, b) => a + b, 0) / hist.length
-          : rawSpeed
+        const avgSpeed = hist.length > 0 ? hist.reduce((a, b) => a + b, 0) / hist.length : rawSpeed
 
         setProgress((prev) => ({
           ...prev,
-          [vid]: {
-            ...p,
-            percent: Math.round(smoothedPercent * 10) / 10,
-            smoothed_speed: smoothedSpeed,
-            startTime: startTimeRef.current[vid],
+          [id]: {
+            percent: Math.round(smoothed * 10) / 10,
+            speed_bytes: avgSpeed,
+            downloaded_bytes: p.downloaded_bytes || 0,
+            total_bytes: p.total_bytes || 0,
+            eta: p.eta || 0,
+            startTime: startTimeRef.current[id],
           },
         }))
       }
 
-      if (msg.type === "download_complete") {
-        const vid = String(msg.payload.video_id)
-        setCompletedVideos((prev) => new Set(prev).add(vid))
-        setProgress((prev) => { const next = { ...prev }; delete next[vid]; return next })
-        delete maxPercentRef.current[vid]
-        delete speedHistoryRef.current[vid]
-        queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      if (msg.type === "quick_download_complete") {
+        const id = msg.payload.download_id
+        setCompleted((prev) => new Set(prev).add(id))
+        setProgress((prev) => { const next = { ...prev }; delete next[id]; return next })
+        delete maxPercentRef.current[id]
+        delete speedHistoryRef.current[id]
+        queryClient.invalidateQueries({ queryKey: ["quick-download-files"] })
       }
 
-      if (msg.type === "download_failed") {
-        const vid = String(msg.payload.video_id)
-        setFailedVideos((prev) => ({ ...prev, [vid]: msg.payload.error || "Download failed" }))
-        setProgress((prev) => { const next = { ...prev }; delete next[vid]; return next })
-        delete maxPercentRef.current[vid]
-        delete speedHistoryRef.current[vid]
-        queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      if (msg.type === "quick_download_failed") {
+        const id = msg.payload.download_id
+        setFailed((prev) => ({ ...prev, [id]: msg.payload.error || "Download failed" }))
+        setProgress((prev) => { const next = { ...prev }; delete next[id]; return next })
+        delete maxPercentRef.current[id]
+        delete speedHistoryRef.current[id]
       }
     })
   }, [subscribe, queryClient])
 
   const downloadMutation = useMutation({
-    mutationFn: () =>
-      api.downloadStandalone({
-        url: url.trim(),
-        quality,
-        ...(useCustomDir && customDir.trim() ? { download_dir: customDir.trim() } : {}),
-      }),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
-      setLastResult({ message: data.message, success: true })
-
-      // Track this video for progress
-      if (data.video_id && !data.already_exists) {
-        const newVideo: QueuedVideo = {
-          videoId: data.video_id,
-          videoDbId: String(data.video_id),
-          title: data.title || "Unknown",
-          thumbnail: data.thumbnail,
-          duration: data.duration,
-          channel: data.channel,
-        }
-        setTrackedVideos((prev) => [newVideo, ...prev])
-      }
-
+    mutationFn: () => api.startQuickDownload({ url: url.trim(), quality }),
+    onSuccess: (data) => {
+      setActiveDownloads((prev) => [
+        { downloadId: data.download_id, title: data.title, thumbnail: data.thumbnail, duration: data.duration },
+        ...prev,
+      ])
       setUrl("")
-      toast(data.message)
-    },
-    onError: (e: Error) => {
-      setLastResult({ message: e.message, success: false })
-      toast(e.message, "error")
-    },
-  })
-
-  const retryMutation = useMutation({
-    mutationFn: (videoId: number) => api.retryDownload(videoId),
-    onSuccess: (_, videoId) => {
-      const vid = String(videoId)
-      setFailedVideos((prev) => { const next = { ...prev }; delete next[vid]; return next })
-      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
-      toast("Queued for retry")
+      toast(`Downloading: ${data.title}`)
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
-  const saveDirMutation = useMutation({
-    mutationFn: (dir: string) => api.updateStandaloneSettings(dir),
-    onSuccess: (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ["standalone-settings"] })
-      toast(data.message || "Download directory updated")
+  const deleteMutation = useMutation({
+    mutationFn: (filename: string) => api.deleteQuickDownloadFile(filename),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quick-download-files"] })
+      toast("File deleted")
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
 
-  const dismissVideo = (videoDbId: string) => {
-    setTrackedVideos((prev) => prev.filter((v) => v.videoDbId !== videoDbId))
-    setCompletedVideos((prev) => { const next = new Set(prev); next.delete(videoDbId); return next })
-    setFailedVideos((prev) => { const next = { ...prev }; delete next[videoDbId]; return next })
-    setProgress((prev) => { const next = { ...prev }; delete next[videoDbId]; return next })
+  const daysUntilExpiry = (expiresAt: string) => {
+    const diff = new Date(expiresAt).getTime() - Date.now()
+    const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
+    return Math.max(0, days)
   }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Download Video</h1>
+        <h1 className="text-2xl font-bold">Quick Download</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Download individual videos by URL. These are not tied to any channel subscription.
+          Download any video by URL. Files are stored temporarily and available for download from your browser for 7 days.
         </p>
       </div>
 
@@ -200,16 +157,13 @@ export default function StandaloneDownloadPage() {
           <input
             type="text"
             value={url}
-            onChange={(e) => { setUrl(e.target.value); setLastResult(null) }}
-            placeholder="https://youtube.com/watch?v=... or any supported URL"
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="Paste a video URL from any supported platform"
             className="w-full px-3 py-2.5 rounded-md border bg-background text-sm"
             onKeyDown={(e) => {
-              if (e.key === "Enter" && url.trim()) downloadMutation.mutate()
+              if (e.key === "Enter" && url.trim() && !downloadMutation.isPending) downloadMutation.mutate()
             }}
           />
-          <p className="text-xs text-muted-foreground mt-1">
-            Supports YouTube, Rumble, and other platforms supported by yt-dlp.
-          </p>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -229,42 +183,6 @@ export default function StandaloneDownloadPage() {
           </div>
         </div>
 
-        <div>
-          <label className="flex items-center gap-2 cursor-pointer mb-2">
-            <input
-              type="checkbox"
-              checked={useCustomDir}
-              onChange={(e) => setUseCustomDir(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm font-medium">Use custom download directory</span>
-          </label>
-          {useCustomDir && (
-            <input
-              type="text"
-              value={customDir}
-              onChange={(e) => setCustomDir(e.target.value)}
-              placeholder={settings?.download_dir || "/downloads"}
-              className="w-full px-3 py-2.5 rounded-md border bg-background text-sm"
-            />
-          )}
-        </div>
-
-        {lastResult && (
-          <div className={`flex items-center gap-2 p-3 rounded-md text-sm ${
-            lastResult.success
-              ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400"
-              : "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
-          }`}>
-            {lastResult.success ? (
-              <CheckCircle className="h-4 w-4 flex-shrink-0" />
-            ) : (
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            )}
-            {lastResult.message}
-          </div>
-        )}
-
         <button
           onClick={() => downloadMutation.mutate()}
           disabled={!url.trim() || downloadMutation.isPending}
@@ -278,44 +196,40 @@ export default function StandaloneDownloadPage() {
           ) : (
             <>
               <Download className="h-4 w-4" />
-              Download Video
+              Download
             </>
           )}
         </button>
       </div>
 
-      {/* Active / Recent Downloads */}
-      {trackedVideos.length > 0 && (
+      {/* Active Downloads */}
+      {activeDownloads.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Downloads</h2>
-          {trackedVideos.map((video) => {
-            const vid = video.videoDbId
-            const prog = progress[vid]
-            const isComplete = completedVideos.has(vid)
-            const failError = failedVideos[vid]
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Active Downloads</h2>
+          {activeDownloads.map((dl) => {
+            const id = dl.downloadId
+            const prog = progress[id]
+            const isComplete = completed.has(id)
+            const failError = failed[id]
             const isActive = !!prog
             const percent = prog?.percent || 0
             const isProcessing = percent >= 99.5 && isActive
             const elapsed = prog?.startTime ? Math.floor((Date.now() - prog.startTime) / 1000) : 0
 
             return (
-              <div key={vid} className="rounded-lg border bg-card overflow-hidden">
+              <div key={id} className="rounded-lg border bg-card overflow-hidden">
                 <div className="p-4">
                   <div className="flex items-start gap-3">
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{video.title}</p>
-                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                        {video.channel && <span>{video.channel}</span>}
-                        {video.duration && <span>{formatDuration(video.duration)}</span>}
-                      </div>
+                      <p className="font-medium truncate">{dl.title}</p>
+                      {dl.duration && (
+                        <p className="text-xs text-muted-foreground mt-1">{formatDuration(dl.duration)}</p>
+                      )}
                     </div>
-
-                    {/* Status badge + dismiss */}
                     <div className="flex items-center gap-2 shrink-0">
                       {isComplete && (
                         <span className="flex items-center gap-1 text-xs font-medium text-green-500">
-                          <CheckCircle className="h-3.5 w-3.5" /> Downloaded
+                          <CheckCircle className="h-3.5 w-3.5" /> Ready
                         </span>
                       )}
                       {failError && (
@@ -325,7 +239,7 @@ export default function StandaloneDownloadPage() {
                       )}
                       {!isComplete && !failError && !isActive && (
                         <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                          <Clock className="h-3.5 w-3.5" /> Queued
+                          <Clock className="h-3.5 w-3.5" /> Starting...
                         </span>
                       )}
                       {isActive && !isProcessing && (
@@ -338,19 +252,9 @@ export default function StandaloneDownloadPage() {
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing...
                         </span>
                       )}
-                      {(isComplete || failError) && (
-                        <button
-                          onClick={() => dismissVideo(vid)}
-                          className="p-1 hover:bg-accent rounded"
-                          title="Dismiss"
-                        >
-                          <XCircle className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      )}
                     </div>
                   </div>
 
-                  {/* Progress bar */}
                   {isActive && (
                     <div className="mt-3 space-y-1.5">
                       <div className="h-2.5 bg-muted rounded-full overflow-hidden">
@@ -363,30 +267,22 @@ export default function StandaloneDownloadPage() {
                       </div>
                       <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <div className="flex items-center gap-3">
-                          {prog?.downloaded_bytes > 0 && prog?.total_bytes > 0 && (
+                          {prog.downloaded_bytes > 0 && prog.total_bytes > 0 && (
                             <span>{formatBytes(prog.downloaded_bytes)} / {formatBytes(prog.total_bytes)}</span>
                           )}
-                          {prog?.smoothed_speed > 0 && <span>{formatSpeed(prog.smoothed_speed)}</span>}
+                          {prog.speed_bytes > 0 && <span>{formatSpeed(prog.speed_bytes)}</span>}
                         </div>
                         <div className="flex items-center gap-3">
-                          {prog?.eta > 0 && <span>ETA: {formatEta(prog.eta)}</span>}
+                          {prog.eta > 0 && <span>ETA: {formatEta(prog.eta)}</span>}
                           {elapsed > 0 && <span>{formatElapsed(elapsed)}</span>}
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Failed: show error + retry */}
                   {failError && (
-                    <div className="mt-3 flex items-center justify-between p-2.5 rounded-md bg-red-50 dark:bg-red-900/20">
-                      <p className="text-xs text-red-600 dark:text-red-400 truncate flex-1">{failError}</p>
-                      <button
-                        onClick={() => retryMutation.mutate(video.videoId)}
-                        disabled={retryMutation.isPending}
-                        className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 disabled:opacity-50 shrink-0 ml-2"
-                      >
-                        <RotateCcw className="h-3 w-3" /> Retry
-                      </button>
+                    <div className="mt-3 p-2.5 rounded-md bg-red-50 dark:bg-red-900/20">
+                      <p className="text-xs text-red-600 dark:text-red-400 truncate">{failError}</p>
                     </div>
                   )}
                 </div>
@@ -396,59 +292,66 @@ export default function StandaloneDownloadPage() {
         </div>
       )}
 
-      {/* Default Download Directory Setting */}
-      <div className="rounded-lg border bg-card p-6 space-y-3">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <FolderOpen className="h-4 w-4" />
-          Default Download Directory
+      {/* Downloaded Files */}
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <FileVideo className="h-4 w-4" />
+          Downloaded Files
         </h2>
         <p className="text-xs text-muted-foreground">
-          Set the default directory for standalone video downloads. Individual downloads can override this.
+          Files are automatically removed after 7 days. Download them to your computer before they expire.
         </p>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={defaultDir}
-            onChange={(e) => setDefaultDir(e.target.value)}
-            placeholder={settings?.default_dir || "/downloads"}
-            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
-          />
-          <button
-            onClick={() => {
-              if (defaultDir.trim()) saveDirMutation.mutate(defaultDir.trim())
-            }}
-            disabled={saveDirMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-          >
-            {saveDirMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            Save
-          </button>
-        </div>
-      </div>
 
-      {/* Reorganize Legacy Downloads */}
-      <div className="rounded-lg border bg-card p-6 space-y-3">
-        <h2 className="text-sm font-semibold flex items-center gap-2">
-          <FolderOpen className="h-4 w-4" />
-          Reorganize Legacy Downloads
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Migrate standalone downloads from the old flat folder structure into the main download directory, organized by uploader channel with proper season/episode naming.
-        </p>
-        <button
-          onClick={() => {
-            setReorganizing(true)
-            api.reorganizeStandalone()
-              .then((r) => toast(r.message))
-              .catch((e: any) => toast(e.message, "error"))
-              .finally(() => setReorganizing(false))
-          }}
-          disabled={reorganizing}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-        >
-          {reorganizing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderOpen className="h-3.5 w-3.5" />}
-          {reorganizing ? "Reorganizing..." : "Reorganize"}
-        </button>
+        {filesFetching && !files && (
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading...
+          </div>
+        )}
+
+        {files && files.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            No files yet. Download a video to get started.
+          </div>
+        )}
+
+        {files && files.length > 0 && (
+          <div className="space-y-2">
+            {files.map((file) => {
+              const days = daysUntilExpiry(file.expires_at)
+              return (
+                <div key={file.filename} className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                  <FileVideo className="h-5 w-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{file.filename}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                      <span>{formatBytes(file.size_bytes)}</span>
+                      <span className={days <= 1 ? "text-red-500 font-medium" : ""}>
+                        {days === 0 ? "Expires today" : `Expires in ${days} day${days !== 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a
+                      href={`/api/v1/quick-download/files/${encodeURIComponent(file.filename)}`}
+                      download
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      <Download className="h-3.5 w-3.5" /> Save
+                    </a>
+                    <button
+                      onClick={() => deleteMutation.mutate(file.filename)}
+                      disabled={deleteMutation.isPending}
+                      className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-red-500 transition-colors"
+                      title="Delete file"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-05-03
+
+### Added
+- **Quick Download** - Redesigned the Download Video page into a lightweight quick download tool. Paste any URL, pick a quality, and download the video directly to your browser. Files are stored temporarily inside the container for 7 days, then auto-cleaned. No Plex organization, no channel records, no database entries.
+
+### Removed
+- **Standalone download system** - Replaced by Quick Download. The old system created channel records and database entries for one-off downloads. The `/StandaloneDownloads` volume mount is no longer needed.
+
 ## [1.8.0] - 2026-05-02
 
 ### Changed

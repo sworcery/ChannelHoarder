@@ -228,14 +228,13 @@ export const api = {
   downloadNow: (queueId: number) =>
     request<MessageResponse>(`/downloads/queue/${queueId}/download-now`, { method: "POST" }),
 
-  // Standalone downloads
-  downloadStandalone: (data: { url: string; quality?: string; download_dir?: string }) =>
-    request<MessageResponse>("/downloads/standalone", { method: "POST", body: JSON.stringify(data) }),
-  getStandaloneSettings: () => request<{ download_dir: string; default_dir: string }>("/downloads/standalone/settings"),
-  updateStandaloneSettings: (download_dir: string) =>
-    request<MessageResponse>("/downloads/standalone/settings", { method: "PUT", body: JSON.stringify({ download_dir }) }),
-  reorganizeStandalone: () =>
-    request<MessageResponse>("/downloads/standalone/reorganize", { method: "POST" }),
+  // Quick downloads
+  startQuickDownload: (data: { url: string; quality?: string }) =>
+    request<{ download_id: string; title: string; thumbnail: string | null; duration: number | null }>("/quick-download", { method: "POST", body: JSON.stringify(data) }),
+  getQuickDownloadFiles: () =>
+    request<{ filename: string; size_bytes: number; created_at: string; expires_at: string }[]>("/quick-download/files"),
+  deleteQuickDownloadFile: (filename: string) =>
+    request<MessageResponse>(`/quick-download/files/${encodeURIComponent(filename)}`, { method: "DELETE" }),
 
   // Dashboard
   getStats: () => request<DashboardStats>("/dashboard/stats"),
