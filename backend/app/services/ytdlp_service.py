@@ -48,10 +48,17 @@ class YtdlpService:
                 "extract_flat": "in_playlist",
                 "playlistend": 1,
             })
-        else:
+        elif platform == "youtube":
             opts.update({
                 "extract_flat": True,
                 "playlist_items": "0",
+            })
+        else:
+            # Non-YouTube extractors often don't return channel metadata with
+            # playlist_items: "0". Fetch one entry so yt-dlp can derive it.
+            opts.update({
+                "extract_flat": "in_playlist",
+                "playlistend": 1,
             })
 
         try:
