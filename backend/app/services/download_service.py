@@ -22,6 +22,12 @@ from app.utils.rate_limiter import wait_for_rate_limit
 
 logger = logging.getLogger(__name__)
 
+_download_active = False
+
+
+def is_download_active() -> bool:
+    return _download_active
+
 
 class DownloadService:
     """Manages video downloads with short-lived DB sessions.
@@ -179,6 +185,8 @@ class DownloadService:
                 settings.has_cookies, settings.POT_SERVER_ENABLED,
             )
 
+            global _download_active
+            _download_active = True
             try:
                 info = await asyncio.wait_for(
                     asyncio.to_thread(
@@ -202,6 +210,8 @@ class DownloadService:
                 except Exception:
                     pass
                 raise Exception("Download timed out after 15 minutes - the PO token server may have been stuck and has been restarted. Retry this download.")
+            finally:
+                _download_active = False
 
             # Verify output file
             mp4_path = output_path + ".mp4"

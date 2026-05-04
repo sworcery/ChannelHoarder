@@ -102,6 +102,13 @@ async def check_pot_server():
         await _restart_pot_server()
         return
 
+    # Skip the heavy /get_pot test if a download is in progress — the server
+    # may be legitimately busy serving tokens for the active download.
+    from app.services.download_service import is_download_active
+    if is_download_active():
+        logger.debug("PO token watchdog: skipping /get_pot test (download in progress)")
+        return
+
     # Test actual token generation with a timeout
     try:
         async with httpx.AsyncClient() as client:
