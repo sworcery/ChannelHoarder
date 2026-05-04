@@ -16,6 +16,14 @@
         Includes real-time download progress, per-channel quality settings, Shorts filtering,
         Telegram/Pushover notifications, and import support for existing video libraries.
     </Overview>
+    <Description>
+        ChannelHoarder is a self-hosted video channel archiver with a modern web UI.
+        Monitor and automatically download videos from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee.
+        Videos are saved in Plex-compatible TV Show format (Channel / Season Year / S01E01 - Title).
+        Features a built-in PO token server so no YouTube account or cookies are required.
+        Includes real-time download progress, per-channel quality settings, Shorts filtering,
+        Telegram/Pushover notifications, and import support for existing video libraries.
+    </Description>
     <Category>MediaApp:Video Downloaders</Category>
     <WebUI>http://[IP]:[PORT:8587]</WebUI>
     <Icon>https://raw.githubusercontent.com/sworcery/ChannelHoarder/main/frontend/public/logo.png</Icon>
