@@ -16,6 +16,7 @@ class ErrorCode(str, Enum):
     PO_TOKEN_FAILURE = "PO_TOKEN_FAILURE"
     FORMAT_UNAVAILABLE = "FORMAT_UNAVAILABLE"
     AGE_RESTRICTED = "AGE_RESTRICTED"
+    QUALITY_TOO_LOW = "QUALITY_TOO_LOW"
     SCAN_FAILED = "SCAN_FAILED"
     LIVESTREAM_SCHEDULED = "LIVESTREAM_SCHEDULED"
     UNKNOWN = "UNKNOWN"
@@ -136,6 +137,14 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         retry_strategy="none",
         severity="warning",
     ),
+    ErrorCode.QUALITY_TOO_LOW: ErrorInfo(
+        code=ErrorCode.QUALITY_TOO_LOW,
+        summary="Video quality below minimum",
+        explanation="The best available quality for this video is below the channel's minimum quality threshold.",
+        suggested_fix="Lower the minimum quality setting on the channel if you want to download this video, or wait for a higher quality version to become available.",
+        retry_strategy="none",
+        severity="info",
+    ),
     ErrorCode.LIVESTREAM_SCHEDULED: ErrorInfo(
         code=ErrorCode.LIVESTREAM_SCHEDULED,
         summary="Scheduled livestream or premiere",
@@ -200,6 +209,9 @@ def classify_error(error_str: str) -> ErrorCode:
 
     if "po token" in error_lower or "po_token" in error_lower or "pot provider" in error_lower or "pot server" in error_lower:
         return ErrorCode.PO_TOKEN_FAILURE
+
+    if "below minimum" in error_lower and "quality" in error_lower:
+        return ErrorCode.QUALITY_TOO_LOW
 
     if "requested format" in error_lower or "format not available" in error_lower:
         return ErrorCode.FORMAT_UNAVAILABLE

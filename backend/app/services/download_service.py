@@ -97,6 +97,7 @@ class DownloadService:
                 description=channel.description,
                 thumbnail_url=channel.thumbnail_url,
                 quality=channel.quality,
+                min_quality=channel.min_quality,
                 naming_template=channel.naming_template,
                 download_dir=channel.download_dir,
             )
@@ -178,6 +179,19 @@ class DownloadService:
 
         try:
             await wait_for_rate_limit()
+
+            # Check minimum quality requirement before downloading
+            if cdata.min_quality:
+                from app.utils.quality_utils import best_available_quality, quality_rank
+                info = await asyncio.to_thread(
+                    self.ytdlp.get_video_info, vdata.video_id, cdata.platform
+                )
+                if info:
+                    best_q = best_available_quality(info.get("formats") or [])
+                    if best_q and quality_rank(best_q) < quality_rank(cdata.min_quality):
+                        raise Exception(
+                            f"Best available quality ({best_q}) is below minimum ({cdata.min_quality})"
+                        )
 
             logger.info(
                 "Starting download: %s (video_id=%s, quality=%s, output=%s, cookies=%s, pot=%s)",
@@ -531,8 +545,8 @@ class _VideoData:
 class _ChannelData:
     __slots__ = (
         "pk", "channel_id", "channel_name", "channel_url", "platform",
-        "description", "thumbnail_url", "quality", "naming_template",
-        "download_dir",
+        "description", "thumbnail_url", "quality", "min_quality",
+        "naming_template", "download_dir",
     )
 
     def __init__(self, **kw):

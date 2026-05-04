@@ -15,6 +15,7 @@ export interface Channel {
   include_livestreams: boolean
   auto_download: boolean
   quality_cutoff: string | null
+  min_quality: string | null
   min_video_duration: number | null
   download_from_year: number | null
   last_scanned_at: string | null

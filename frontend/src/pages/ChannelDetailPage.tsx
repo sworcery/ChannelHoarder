@@ -480,6 +480,20 @@ export default function ChannelDetailPage() {
               </div>
             </div>
             <div>
+              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Minimum Quality <HelpIcon text="Skip videos if the best available quality is below this threshold. Leave as 'None' to download regardless of quality." anchor="channel-management" /></label>
+              <select
+                value={channel.min_quality || ""}
+                onChange={(e) => updateMutation.mutate({ min_quality: e.target.value || null })}
+                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+              >
+                <option value="">None (download any quality)</option>
+                <option value="2160p">4K (2160p)</option>
+                <option value="1080p">1080p</option>
+                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+              </select>
+            </div>
+            <div>
               <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
               <div className="flex gap-1">
                 <input
