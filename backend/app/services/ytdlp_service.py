@@ -67,7 +67,7 @@ class YtdlpService:
                 return info
         except Exception as e:
             logger.error("Failed to get channel info for %s: %s", url, e)
-            return None
+            raise ValueError(f"yt-dlp could not extract channel info: {e}") from e
         finally:
             self._cleanup_cookie_tmp(opts)
 

@@ -40,7 +40,12 @@ class ChannelService:
         is_playlist = is_playlist_url(data.url)
 
         # Resolve channel info via yt-dlp
-        info = await asyncio.to_thread(self.ytdlp.get_channel_info, data.url, platform)
+        try:
+            info = await asyncio.to_thread(self.ytdlp.get_channel_info, data.url, platform)
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Could not find channel for: {data.url} ({e})")
         if not info:
             raise ValueError(f"Could not find channel for: {data.url}")
 
@@ -144,7 +149,10 @@ class ChannelService:
                 logger.warning("Could not fetch thumbnail via API: %s", e)
 
         # Also try yt-dlp for banner and description
-        info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
+        try:
+            info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
+        except Exception:
+            info = None
 
         if info:
             if not channel.thumbnail_url:
