@@ -16,6 +16,7 @@ class ErrorCode(str, Enum):
     PO_TOKEN_FAILURE = "PO_TOKEN_FAILURE"
     FORMAT_UNAVAILABLE = "FORMAT_UNAVAILABLE"
     AGE_RESTRICTED = "AGE_RESTRICTED"
+    DOWNLOAD_STALLED = "DOWNLOAD_STALLED"
     QUALITY_TOO_LOW = "QUALITY_TOO_LOW"
     SCAN_FAILED = "SCAN_FAILED"
     LIVESTREAM_SCHEDULED = "LIVESTREAM_SCHEDULED"
@@ -137,6 +138,14 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         retry_strategy="none",
         severity="warning",
     ),
+    ErrorCode.DOWNLOAD_STALLED: ErrorInfo(
+        code=ErrorCode.DOWNLOAD_STALLED,
+        summary="Download stalled",
+        explanation="The download stopped making progress. This can happen with very large files on slow connections, or if the source server stopped responding.",
+        suggested_fix="The download will be retried automatically. If this keeps happening, check your network connection and available disk space.",
+        retry_strategy="linear",
+        severity="warning",
+    ),
     ErrorCode.QUALITY_TOO_LOW: ErrorInfo(
         code=ErrorCode.QUALITY_TOO_LOW,
         summary="Video quality below minimum",
@@ -191,6 +200,9 @@ def classify_error(error_str: str) -> ErrorCode:
 
     if "age" in error_lower and ("restricted" in error_lower or "gate" in error_lower):
         return ErrorCode.AGE_RESTRICTED
+
+    if "download stalled" in error_lower:
+        return ErrorCode.DOWNLOAD_STALLED
 
     if "timed out" in error_lower and "po token" in error_lower:
         return ErrorCode.PO_TOKEN_FAILURE

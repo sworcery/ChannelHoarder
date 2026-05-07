@@ -171,11 +171,22 @@ class DownloadService:
                     "elapsed_seconds": int(elapsed),
                 })
 
+        _last_progress_time = time.monotonic()
+        _cancel_requested = False
+
         def progress_hook(d: dict):
+            nonlocal _last_progress_time
+            if _cancel_requested:
+                raise Exception("Download cancelled - no progress detected")
+            _last_progress_time = time.monotonic()
             try:
                 asyncio.run_coroutine_threadsafe(_broadcast_progress(d), _loop)
             except Exception:
                 pass
+
+        def pp_hook(d: dict):
+            nonlocal _last_progress_time
+            _last_progress_time = time.monotonic()
 
         try:
             await wait_for_rate_limit()
@@ -201,29 +212,46 @@ class DownloadService:
 
             global _download_active
             _download_active = True
+            stall_timeout = 600  # 10 min with no progress from yt-dlp
+            _last_progress_time = time.monotonic()
             try:
-                info = await asyncio.wait_for(
+                download_task = asyncio.ensure_future(
                     asyncio.to_thread(
                         self.ytdlp.download_video,
                         video_url,
                         output_path,
                         quality=cdata.quality,
                         progress_hook=progress_hook,
+                        pp_hook=pp_hook,
                         platform=cdata.platform,
                         subtitles_enabled=subtitles_enabled,
                         chapters_enabled=chapters_enabled,
-                    ),
-                    timeout=900,
+                    )
                 )
+                while not download_task.done():
+                    await asyncio.sleep(10)
+                    if time.monotonic() - _last_progress_time > stall_timeout:
+                        _cancel_requested = True
+                        download_task.cancel()
+                        try:
+                            await asyncio.wait_for(download_task, timeout=30)
+                        except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                            pass
+                        raise asyncio.TimeoutError()
+                info = download_task.result()
             except asyncio.TimeoutError:
-                # Trigger a PO token server restart since a timeout usually means it's hung
-                logger.warning("Download timed out - triggering PO token server watchdog")
-                try:
-                    from app.tasks.pot_watchdog import _restart_pot_server
-                    await _restart_pot_server()
-                except Exception:
-                    pass
-                raise Exception("Download timed out after 15 minutes - the PO token server may have been stuck and has been restarted. Retry this download.")
+                logger.warning("Download stalled - no progress for %d minutes", stall_timeout // 60)
+                if cdata.platform == "youtube":
+                    try:
+                        from app.tasks.pot_watchdog import _restart_pot_server
+                        await _restart_pot_server()
+                    except Exception:
+                        pass
+                raise Exception(
+                    f"Download stalled - no progress for {stall_timeout // 60} minutes. "
+                    + ("The PO token server has been restarted. " if cdata.platform == "youtube" else "")
+                    + "Retry this download."
+                )
             finally:
                 _download_active = False
 

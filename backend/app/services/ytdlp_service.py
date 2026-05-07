@@ -222,6 +222,7 @@ class YtdlpService:
         output_path: str,
         quality: str = "best",
         progress_hook=None,
+        pp_hook=None,
         platform: str = "youtube",
         subtitles_enabled: bool = False,
         chapters_enabled: bool = False,
@@ -254,6 +255,9 @@ class YtdlpService:
 
         if progress_hook:
             opts["progress_hooks"] = [progress_hook]
+
+        if pp_hook:
+            opts["postprocessor_hooks"] = [pp_hook]
 
         logger.info("yt-dlp download starting: %s -> %s", video_url, output_path)
         logger.info("yt-dlp extracting info and acquiring PO token (this may take a moment)...")

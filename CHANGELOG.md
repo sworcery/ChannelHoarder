@@ -5,6 +5,17 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.5] - 2026-05-07
+
+### Fixed
+- **Large downloads killed by 15-minute hard timeout** - Replaced the fixed 15-minute wall-clock timeout with a progress-based stall detector. Downloads now run as long as yt-dlp is making progress, only timing out after 10 minutes of zero activity. This fixes downloads of long livestream VODs (7-20+ hours) that were previously impossible. (#22)
+- **Post-processing not tracked by timeout** - Added postprocessor hook so ffmpeg remuxing/merging resets the stall timer. Large file post-processing no longer risks a false timeout.
+- **Stalled download thread kept running after timeout** - The yt-dlp thread now gets a cancellation signal via the progress hook, terminating the download cleanly instead of leaving an orphaned thread consuming bandwidth.
+- **Timeout error incorrectly blamed PO token server** - Downloads on non-YouTube platforms (Rumble, Twitch, etc.) no longer mention the PO token server in stall error messages. PO token restart only triggers for YouTube downloads.
+
+### Added
+- **DOWNLOAD_STALLED error code** - Stall timeouts now get their own error classification with an accurate message instead of being mislabeled as PO token failures.
+
 ## [1.8.1] - 2026-05-03
 
 ### Added
