@@ -90,6 +90,14 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN min_quality VARCHAR(10)")
             )
+        if "title_filter" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN title_filter TEXT")
+            )
+        if "title_filter_is_regex" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN title_filter_is_regex BOOLEAN DEFAULT 0 NOT NULL")
+            )
 
         # Add is_short column to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))

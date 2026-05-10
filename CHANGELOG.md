@@ -5,7 +5,10 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.5] - 2026-05-07
+## [1.8.5] - 2026-05-09
+
+### Added
+- **Per-channel title filter** - Only download videos whose title matches specific keywords or a regex pattern. Supports comma-separated keyword mode (case-insensitive substring match) and regex mode with a toggle. Useful for archiving specific games from a Twitch streamer or filtering by topic. (#21)
 
 ### Fixed
 - **Large downloads killed by 15-minute hard timeout** - Replaced the fixed 15-minute wall-clock timeout with a progress-based stall detector. Downloads now run as long as yt-dlp is making progress, only timing out after 10 minutes of zero activity. This fixes downloads of long livestream VODs (7-20+ hours) that were previously impossible. (#22)

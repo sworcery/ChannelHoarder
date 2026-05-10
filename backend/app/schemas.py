@@ -29,6 +29,8 @@ class ChannelCreate(BaseModel):
     min_quality: Optional[str] = Field(default=None, pattern="^(2160p|1080p|720p|480p)$")
     min_video_duration: Optional[int] = None
     download_from_year: Optional[int] = None
+    title_filter: Optional[str] = None
+    title_filter_is_regex: bool = False
 
 
 class ChannelUpdate(BaseModel):
@@ -43,6 +45,8 @@ class ChannelUpdate(BaseModel):
     min_quality: Optional[str] = Field(default=None, pattern="^(2160p|1080p|720p|480p)$")
     min_video_duration: Optional[int] = None
     download_from_year: Optional[int] = None
+    title_filter: Optional[str] = None
+    title_filter_is_regex: Optional[bool] = None
 
 
 class ChannelResponse(UTCBaseModel):
@@ -65,6 +69,8 @@ class ChannelResponse(UTCBaseModel):
     min_quality: Optional[str]
     min_video_duration: Optional[int]
     download_from_year: Optional[int]
+    title_filter: Optional[str]
+    title_filter_is_regex: bool
     last_scanned_at: Optional[datetime]
     next_scan_at: Optional[datetime]
     total_videos: int

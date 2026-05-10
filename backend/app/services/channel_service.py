@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -107,6 +108,8 @@ class ChannelService:
             quality_cutoff=data.quality_cutoff,
             min_video_duration=data.min_video_duration,
             download_from_year=data.download_from_year,
+            title_filter=data.title_filter,
+            title_filter_is_regex=data.title_filter_is_regex,
             naming_template=data.naming_template,
             download_dir=data.download_dir,
             enabled=data.enabled,
@@ -477,6 +480,27 @@ class ChannelService:
                             vid_id, title, duration, channel.min_video_duration)
                 new_count += 1
                 continue
+
+            # Check per-channel title filter (keyword or regex)
+            if channel.title_filter and title:
+                title_matched = False
+                if channel.title_filter_is_regex:
+                    try:
+                        title_matched = bool(re.search(channel.title_filter, title, re.IGNORECASE))
+                    except re.error:
+                        logger.warning("Invalid regex in title filter for %s: %s",
+                                       channel.channel_name, channel.title_filter)
+                        title_matched = True
+                else:
+                    keywords = [k.strip() for k in channel.title_filter.split(",") if k.strip()]
+                    title_lower = title.lower()
+                    title_matched = any(kw.lower() in title_lower for kw in keywords)
+                if not title_matched:
+                    video.status = "skipped"
+                    video.monitored = False
+                    logger.info("Skipped by title filter: %s (%s)", vid_id, title)
+                    new_count += 1
+                    continue
 
             # Check livestream / long video filter
             max_dur_val = self._settings_cache.get("max_video_duration")

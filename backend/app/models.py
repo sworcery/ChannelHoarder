@@ -35,6 +35,8 @@ class Channel(Base):
     min_quality: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     min_video_duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Seconds; skip videos shorter than this
     download_from_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    title_filter: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    title_filter_is_regex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     download_dir: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

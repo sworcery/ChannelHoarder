@@ -54,6 +54,7 @@ export default function ChannelDetailPage() {
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
   const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
   const [editFromYear, setEditFromYear] = useState<string | null>(null)
+  const [editTitleFilter, setEditTitleFilter] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importFolder, setImportFolder] = useState("")
   const [importMatches, setImportMatches] = useState<any[] | null>(null)
@@ -569,6 +570,61 @@ export default function ChannelDetailPage() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Title Filter */}
+          <div className="mt-3">
+            <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+              Title Filter
+              <HelpIcon text="Only download videos whose title matches. Leave empty to download all videos. Works on future scans only." anchor="channel-management" />
+            </label>
+            <div className="flex gap-1 max-w-lg">
+              <input
+                type="text"
+                value={editTitleFilter ?? channel.title_filter ?? ""}
+                placeholder={channel.title_filter_is_regex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
+                onChange={(e) => setEditTitleFilter(e.target.value)}
+                className="flex-1 px-2 py-1.5 rounded-md border bg-background text-sm"
+              />
+              {editTitleFilter !== null && editTitleFilter !== (channel.title_filter ?? "") && (
+                <button
+                  onClick={() => {
+                    updateMutation.mutate({ title_filter: editTitleFilter || null })
+                    setEditTitleFilter(null)
+                  }}
+                  className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                >
+                  Save
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-2">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <button
+                  onClick={() => updateMutation.mutate({ title_filter_is_regex: !channel.title_filter_is_regex })}
+                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_is_regex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
+                >
+                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_is_regex ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+                <span className="text-xs text-muted-foreground">Regex mode</span>
+              </label>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">
+              {channel.title_filter_is_regex ? (
+                <>
+                  <span className="font-medium">Regex mode:</span> Uses regular expression matching (case-insensitive).{" "}
+                  <span className="text-muted-foreground/70">Examples: </span>
+                  <code className="text-[11px] bg-muted px-1 rounded">rust|minecraft</code>{" "}matches either word, {" "}
+                  <code className="text-[11px] bg-muted px-1 rounded">rust(?!\s*bucket)</code>{" "}matches "Rust" but not "Rust Bucket"
+                </>
+              ) : (
+                <>
+                  <span className="font-medium">Keyword mode:</span> Comma-separated list, matches if any keyword appears in the title (case-insensitive).{" "}
+                  <span className="text-muted-foreground/70">Example: </span>
+                  <code className="text-[11px] bg-muted px-1 rounded">Rust, Arc Raiders</code>{" "}downloads videos with "Rust" or "Arc Raiders" in the title
+                </>
+              )}
+            </p>
           </div>
 
           {/* Advanced toggle */}

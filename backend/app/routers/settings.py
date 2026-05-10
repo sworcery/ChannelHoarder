@@ -167,6 +167,8 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "include_shorts": ch.include_shorts,
             "include_livestreams": ch.include_livestreams,
             "auto_download": ch.auto_download,
+            "title_filter": ch.title_filter,
+            "title_filter_is_regex": ch.title_filter_is_regex,
         }
         for ch in channels
     ]

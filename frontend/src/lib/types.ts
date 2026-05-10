@@ -18,6 +18,8 @@ export interface Channel {
   min_quality: string | null
   min_video_duration: number | null
   download_from_year: number | null
+  title_filter: string | null
+  title_filter_is_regex: boolean
   last_scanned_at: string | null
   next_scan_at: string | null
   total_videos: number
