@@ -48,7 +48,7 @@ export const api = {
   // Channels
   getChannels: (search?: string) =>
     request<Channel[]>(`/channels/${search ? `?search=${encodeURIComponent(search)}` : ""}`),
-  addChannel: (data: { url: string; quality?: string; download_dir?: string }) =>
+  addChannel: (data: { url: string; quality?: string; download_dir?: string; auto_download?: boolean; title_filter?: string; title_filter_is_regex?: boolean }) =>
     request<Channel>("/channels/", { method: "POST", body: JSON.stringify(data) }),
   getChannel: (id: number) => request<Channel>(`/channels/${id}`),
   updateChannel: (id: number, data: Partial<Channel>) =>

@@ -27,6 +27,7 @@
 - **Quality Cutoff** - Set minimum acceptable quality per channel with upgrade detection and search
 - **Per-Channel Download Directories** - Route channels to different storage locations
 - **Minimum Duration Filter** - Per-channel setting to skip videos shorter than a configurable duration
+- **Title Filter** - Per-channel keyword or regex filter to only download videos whose title matches specific terms. Set at add time or on the channel detail page
 
 ### Plex Integration
 - **TV Show Naming** - Organizes videos in Plex TV Show format (seasons by year, episodes numbered chronologically)
