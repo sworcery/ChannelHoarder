@@ -1,7 +1,8 @@
+import re
 from datetime import datetime, date, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 
 class UTCBaseModel(BaseModel):
@@ -32,6 +33,15 @@ class ChannelCreate(BaseModel):
     title_filter: Optional[str] = None
     title_filter_is_regex: bool = False
 
+    @model_validator(mode="after")
+    def validate_title_filter_regex(self):
+        if self.title_filter_is_regex and self.title_filter:
+            try:
+                re.compile(self.title_filter)
+            except re.error as e:
+                raise ValueError(f"Invalid regex pattern: {e}")
+        return self
+
 
 class ChannelUpdate(BaseModel):
     quality: Optional[str] = Field(default=None, pattern="^(best|2160p|1080p|720p|480p)$")
@@ -47,6 +57,15 @@ class ChannelUpdate(BaseModel):
     download_from_year: Optional[int] = None
     title_filter: Optional[str] = None
     title_filter_is_regex: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def validate_title_filter_regex(self):
+        if self.title_filter_is_regex and self.title_filter:
+            try:
+                re.compile(self.title_filter)
+            except re.error as e:
+                raise ValueError(f"Invalid regex pattern: {e}")
+        return self
 
 
 class ChannelResponse(UTCBaseModel):

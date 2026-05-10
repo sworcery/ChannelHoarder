@@ -229,6 +229,9 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             enabled=ch_data.get("enabled", True),
             include_shorts=ch_data.get("include_shorts", False),
             include_livestreams=ch_data.get("include_livestreams", False),
+            min_quality=ch_data.get("min_quality"),
+            title_filter=ch_data.get("title_filter"),
+            title_filter_is_regex=ch_data.get("title_filter_is_regex", False),
             auto_download=ch_data.get("auto_download", True),
             health_status="unknown",
         )

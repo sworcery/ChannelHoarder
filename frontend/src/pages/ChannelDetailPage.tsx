@@ -589,6 +589,12 @@ export default function ChannelDetailPage() {
               {editTitleFilter !== null && editTitleFilter !== (channel.title_filter ?? "") && (
                 <button
                   onClick={() => {
+                    if (channel.title_filter_is_regex && editTitleFilter) {
+                      try { new RegExp(editTitleFilter, "i") } catch {
+                        toast("Invalid regular expression", "error")
+                        return
+                      }
+                    }
                     updateMutation.mutate({ title_filter: editTitleFilter || null })
                     setEditTitleFilter(null)
                   }}

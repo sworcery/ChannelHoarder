@@ -336,6 +336,15 @@ class ChannelService:
         # Sort by upload date (oldest first) so episode numbers are chronological
         enriched_entries.sort(key=lambda e: e["upload_date"])
 
+        # Pre-compile title filter regex once (avoids recompiling per video)
+        title_filter_re = None
+        if channel.title_filter and channel.title_filter_is_regex:
+            try:
+                title_filter_re = re.compile(channel.title_filter, re.IGNORECASE)
+            except re.error:
+                logger.warning("Invalid regex in title filter for %s: %s",
+                               channel.channel_name, channel.title_filter)
+
         # Third pass: assign episode numbers and insert into DB
         # Shorts are excluded from episode numbering
         new_count = 0
@@ -485,12 +494,8 @@ class ChannelService:
             if channel.title_filter and title:
                 title_matched = False
                 if channel.title_filter_is_regex:
-                    try:
-                        title_matched = bool(re.search(channel.title_filter, title, re.IGNORECASE))
-                    except re.error:
-                        logger.warning("Invalid regex in title filter for %s: %s",
-                                       channel.channel_name, channel.title_filter)
-                        title_matched = True
+                    if title_filter_re:
+                        title_matched = bool(title_filter_re.search(title))
                 else:
                     keywords = [k.strip() for k in channel.title_filter.split(",") if k.strip()]
                     title_lower = title.lower()
