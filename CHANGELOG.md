@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.6] - 2026-05-14
+
+### Fixed
+- **Odysee downloads failing with "Unsupported URL"** - Odysee videos use LBRY claim IDs that can't be reconstructed into valid URLs from a template. Downloads now store the original URL from yt-dlp during scanning and use it directly for downloads, subtitles, and metadata lookups. (#23)
+- **Rumble channels returning 403 Forbidden** - Added curl_cffi for TLS fingerprint impersonation on non-YouTube platforms. Rumble and other sites using Cloudflare-style anti-bot protection now see browser-like TLS handshakes instead of Python's default fingerprint. (#19)
+
 ## [1.8.5] - 2026-05-09
 
 ### Added

@@ -402,6 +402,14 @@ class YtdlpService:
             opts["js_runtimes"] = {"node": {}, "deno": {}}
             opts["remote_components"] = {"ejs:github"}
 
+        # Non-YouTube: impersonate a browser to bypass anti-bot protections (Cloudflare, etc.)
+        if platform != "youtube":
+            try:
+                import curl_cffi  # noqa: F401
+                opts["impersonate"] = "chrome"
+            except ImportError:
+                pass
+
         if settings.has_cookies:
             cookie_size = settings.cookies_path.stat().st_size if settings.cookies_path.exists() else 0
             logger.info("Using cookies file: %s (%d bytes)", settings.cookies_path, cookie_size)

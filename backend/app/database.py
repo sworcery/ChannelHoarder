@@ -99,9 +99,13 @@ async def init_database():
                 text("ALTER TABLE channels ADD COLUMN title_filter_is_regex BOOLEAN DEFAULT 0 NOT NULL")
             )
 
-        # Add is_short column to videos table
+        # Add new columns to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))
         video_columns = {row[1] for row in result2.fetchall()}
+        if "source_url" not in video_columns:
+            await conn.execute(
+                text("ALTER TABLE videos ADD COLUMN source_url VARCHAR(1024)")
+            )
         if "is_short" not in video_columns:
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN is_short BOOLEAN DEFAULT 0 NOT NULL")

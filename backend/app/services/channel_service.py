@@ -383,8 +383,11 @@ class ChannelService:
                 season_episode_counts[season] += 1
                 episode = season_episode_counts[season]
 
+            source_url = entry.get("url") or entry.get("webpage_url")
+
             video = Video(
                 video_id=vid_id,
+                source_url=source_url,
                 channel_id=channel.id,
                 title=title,
                 description=description,

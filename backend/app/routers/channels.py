@@ -965,7 +965,7 @@ async def download_video_subtitles(
     platform = channel.platform if channel else "youtube"
 
     from app.utils.platform_utils import build_video_url
-    video_url = build_video_url(platform, video.video_id)
+    video_url = video.source_url or build_video_url(platform, video.video_id)
     output_base = os.path.splitext(video.file_path)[0]
 
     from app.services.ytdlp_service import YtdlpService
@@ -1006,7 +1006,7 @@ async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
         platform = channel.platform or "youtube"
 
         result = await db.execute(
-            select(Video.video_id, Video.file_path)
+            select(Video.video_id, Video.file_path, Video.source_url)
             .where(Video.channel_id == channel_id)
             .where(Video.status == "completed")
             .where(Video.file_path.isnot(None))
@@ -1018,12 +1018,12 @@ async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
     skipped = 0
     failed = 0
 
-    for vid_id, file_path in video_rows:
+    for vid_id, file_path, source_url in video_rows:
         if not file_path or not os.path.exists(file_path) or _has_subtitles(file_path):
             skipped += 1
             continue
 
-        video_url = build_video_url(platform, vid_id)
+        video_url = source_url or build_video_url(platform, vid_id)
         output_base = os.path.splitext(file_path)[0]
 
         success = await asyncio.to_thread(

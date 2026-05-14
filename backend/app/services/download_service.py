@@ -59,7 +59,7 @@ class DownloadService:
                 logger.error("Download task: missing video/channel/queue for video_id=%d", video_id)
                 return False
 
-            video_url = build_video_url(channel.platform, video.video_id)
+            video_url = video.source_url or build_video_url(channel.platform, video.video_id)
             video.status = "downloading"
             if not queue_entry.started_at:
                 queue_entry.started_at = datetime.now(timezone.utc)
