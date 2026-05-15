@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.7] - 2026-05-15
+
+### Changed
+- **Sonarr-style season layout** - Channel detail page now shows all episodes grouped by season in collapsible sections instead of paginated pages of 50. Seasons are collapsed by default for a cleaner overview.
+- **Select entire season** - Each season header now has a Select/Deselect button to select all episodes in that season at once. Combined with the existing bulk action bar (Unmonitor, Delete Selected), this makes it easy to remove an entire year of content in two clicks.
+
 ## [1.8.6] - 2026-05-14
 
 ### Fixed

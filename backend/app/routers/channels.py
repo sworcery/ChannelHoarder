@@ -192,7 +192,7 @@ async def delete_channel(
 async def list_channel_videos(
     channel_id: int,
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=50000),
     status: Optional[str] = None,
     monitored: Optional[bool] = None,
     search: Optional[str] = None,
@@ -431,7 +431,7 @@ async def queue_all_videos(channel_id: int, db: AsyncSession = Depends(get_db)):
 
 
 class BulkVideoAction(BaseModel):
-    video_ids: list[int] = Field(..., min_length=1, max_length=1000)
+    video_ids: list[int] = Field(..., min_length=1, max_length=50000)
 
 
 @router.post("/{channel_id}/videos/bulk-queue")
@@ -520,7 +520,7 @@ async def bulk_unskip_videos(
 
 
 class BulkDeleteRequest(BaseModel):
-    video_ids: list[int] = Field(..., min_length=1, max_length=1000)
+    video_ids: list[int] = Field(..., min_length=1, max_length=50000)
     delete_files: bool = False
 
 
@@ -760,7 +760,7 @@ class MonitorRequest(BaseModel):
 
 
 class BulkMonitorRequest(BaseModel):
-    video_ids: list[int] = Field(..., min_length=1, max_length=1000)
+    video_ids: list[int] = Field(..., min_length=1, max_length=50000)
     monitored: bool
 
 

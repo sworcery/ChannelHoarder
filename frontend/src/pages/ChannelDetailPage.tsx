@@ -22,10 +22,7 @@ import {
   Square,
   Search,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   SkipForward,
   Play,
   ListX,
@@ -40,8 +37,6 @@ import {
 } from "lucide-react"
 import { useState, useCallback, useMemo } from "react"
 
-const PAGE_SIZE = 50
-
 export default function ChannelDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -50,7 +45,6 @@ export default function ChannelDetailPage() {
   const [statusFilter, setStatusFilter] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [searchInput, setSearchInput] = useState("")
-  const [page, setPage] = useState(0)
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
   const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
   const [editFromYear, setEditFromYear] = useState<string | null>(null)
@@ -70,7 +64,7 @@ export default function ChannelDetailPage() {
   const [renumberLoading, setRenumberLoading] = useState(false)
   const [renumberApplying, setRenumberApplying] = useState(false)
 
-  const [collapsedSeasons, setCollapsedSeasons] = useState<Set<number>>(new Set())
+  const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
 
   // Video multi-select
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
@@ -84,10 +78,9 @@ export default function ChannelDetailPage() {
   })
 
   const { data: videosData, isLoading: videosLoading } = useQuery({
-    queryKey: ["channel-videos", channelId, statusFilter, searchQuery, page],
+    queryKey: ["channel-videos", channelId, statusFilter, searchQuery],
     queryFn: () => api.getChannelVideos(channelId, {
-      limit: PAGE_SIZE,
-      skip: page * PAGE_SIZE,
+      limit: 50000,
       status: statusFilter && !["monitored", "unmonitored"].includes(statusFilter) ? statusFilter : undefined,
       monitored: statusFilter === "monitored" ? true : statusFilter === "unmonitored" ? false : undefined,
       search: searchQuery || undefined,
@@ -105,7 +98,18 @@ export default function ChannelDetailPage() {
 
   const videos = videosData?.items || []
   const totalVideos = videosData?.total || 0
-  const totalPages = Math.ceil(totalVideos / PAGE_SIZE)
+
+  const { seasonGroups, seasons, videoIndexMap } = useMemo(() => {
+    const groups: Record<number, any[]> = {}
+    const indexMap = new Map<number, number>()
+    videos.forEach((v: any, i: number) => {
+      if (!groups[v.season]) groups[v.season] = []
+      groups[v.season].push(v)
+      indexMap.set(v.id, i)
+    })
+    const sorted = Object.keys(groups).map(Number).sort((a, b) => b - a)
+    return { seasonGroups: groups, seasons: sorted, videoIndexMap: indexMap }
+  }, [videos])
 
   const invalidateVideos = () => {
     queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
@@ -260,13 +264,11 @@ export default function ChannelDetailPage() {
 
   const handleSearch = () => {
     setSearchQuery(searchInput)
-    setPage(0)
     setSelectedVideoIds(new Set())
   }
 
   const handleStatusChange = (val: string) => {
     setStatusFilter(val)
-    setPage(0)
     setSelectedVideoIds(new Set())
   }
 
@@ -907,7 +909,7 @@ export default function ChannelDetailPage() {
           </button>
           {searchQuery && (
             <button
-              onClick={() => { setSearchInput(""); setSearchQuery(""); setPage(0) }}
+              onClick={() => { setSearchInput(""); setSearchQuery("") }}
               className="px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
             >
               Clear
@@ -1023,17 +1025,9 @@ export default function ChannelDetailPage() {
                 </thead>
                 <tbody className="divide-y">
                   {(() => {
-                    // Group videos by season
-                    const seasonGroups: Record<number, any[]> = {}
-                    videos.forEach((v: any) => {
-                      if (!seasonGroups[v.season]) seasonGroups[v.season] = []
-                      seasonGroups[v.season].push(v)
-                    })
-                    const seasons = Object.keys(seasonGroups).map(Number).sort((a, b) => b - a)
-
                     return seasons.flatMap((season) => {
                       const seasonVideos = seasonGroups[season]
-                      const isCollapsed = collapsedSeasons.has(season)
+                      const isCollapsed = !expandedSeasons.has(season)
                       const downloaded = seasonVideos.filter((v: any) => v.status === "completed").length
                       const monitored = seasonVideos.filter((v: any) => v.monitored).length
 
@@ -1045,7 +1039,7 @@ export default function ChannelDetailPage() {
                           <td colSpan={8} className="px-3 py-2">
                             <div className="flex items-center justify-between">
                               <button
-                                onClick={() => setCollapsedSeasons(prev => {
+                                onClick={() => setExpandedSeasons(prev => {
                                   const next = new Set(prev)
                                   next.has(season) ? next.delete(season) : next.add(season)
                                   return next
@@ -1059,6 +1053,29 @@ export default function ChannelDetailPage() {
                                 </span>
                               </button>
                               <div className="flex items-center gap-1">
+                                {(() => {
+                                  const seasonIds = seasonVideos.map((v: any) => v.id)
+                                  const allSelected = seasonIds.every((id: number) => selectedVideoIds.has(id))
+                                  return (
+                                    <button
+                                      onClick={() => {
+                                        setSelectedVideoIds(prev => {
+                                          const next = new Set(prev)
+                                          if (allSelected) {
+                                            seasonIds.forEach((id: number) => next.delete(id))
+                                          } else {
+                                            seasonIds.forEach((id: number) => next.add(id))
+                                          }
+                                          return next
+                                        })
+                                      }}
+                                      className={`px-2 py-0.5 text-xs rounded border hover:bg-accent ${allSelected ? "bg-primary/10 border-primary/30 text-primary" : ""}`}
+                                      title={allSelected ? "Deselect all in this season" : "Select all in this season"}
+                                    >
+                                      {allSelected ? "Deselect" : "Select"}
+                                    </button>
+                                  )
+                                })()}
                                 <button
                                   onClick={() => { api.monitorSeason(channelId, season, true).then(() => invalidateVideos()) }}
                                   className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
@@ -1082,7 +1099,7 @@ export default function ChannelDetailPage() {
                       // Video rows (if not collapsed)
                       if (!isCollapsed) {
                         seasonVideos.forEach((video: any) => {
-                          const globalIdx = videos.indexOf(video)
+                          const globalIdx = videoIndexMap.get(video.id) ?? 0
                           const isSelected = selectedVideoIds.has(video.id)
                           rows.push(
                       <tr
@@ -1181,51 +1198,6 @@ export default function ChannelDetailPage() {
               </table>
             </div>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between mt-3">
-                <p className="text-sm text-muted-foreground">
-                  Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, totalVideos)} of {totalVideos}
-                </p>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => { setPage(0); setSelectedVideoIds(new Set()) }}
-                    disabled={page === 0}
-                    className="p-1.5 rounded-md border hover:bg-accent disabled:opacity-30"
-                    title="First page"
-                  >
-                    <ChevronsLeft className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => { setPage(p => Math.max(0, p - 1)); setSelectedVideoIds(new Set()) }}
-                    disabled={page === 0}
-                    className="p-1.5 rounded-md border hover:bg-accent disabled:opacity-30"
-                    title="Previous page"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <span className="px-3 text-sm">
-                    Page {page + 1} of {totalPages}
-                  </span>
-                  <button
-                    onClick={() => { setPage(p => Math.min(totalPages - 1, p + 1)); setSelectedVideoIds(new Set()) }}
-                    disabled={page >= totalPages - 1}
-                    className="p-1.5 rounded-md border hover:bg-accent disabled:opacity-30"
-                    title="Next page"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => { setPage(totalPages - 1); setSelectedVideoIds(new Set()) }}
-                    disabled={page >= totalPages - 1}
-                    className="p-1.5 rounded-md border hover:bg-accent disabled:opacity-30"
-                    title="Last page"
-                  >
-                    <ChevronsRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         ) : (
           <p className="text-center py-8 text-muted-foreground">
