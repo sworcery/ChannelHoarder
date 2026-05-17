@@ -155,3 +155,66 @@ class TestRegexMatching:
 
     def test_dot_star(self):
         assert regex_matches("rust.*raid", "Rust Base Raiding Tips") is True
+
+
+# --- Filter mode tests ---
+
+def should_skip(title_filter: str, title: str, is_regex: bool, mode: str) -> bool:
+    """Replicates the filtering logic from channel_service."""
+    if is_regex:
+        title_matched = regex_matches(title_filter, title)
+    else:
+        title_matched = keyword_matches(title_filter, title)
+    if mode == "include":
+        return not title_matched
+    else:
+        return title_matched
+
+
+class TestFilterModeInclude:
+    def test_include_match_downloads(self):
+        assert should_skip("Rust", "Rust Gameplay", False, "include") is False
+
+    def test_include_no_match_skips(self):
+        assert should_skip("Rust", "Minecraft Gameplay", False, "include") is True
+
+    def test_include_regex_match_downloads(self):
+        assert should_skip("rust|minecraft", "Playing Rust", True, "include") is False
+
+    def test_include_regex_no_match_skips(self):
+        assert should_skip("rust|minecraft", "Fortnite stream", True, "include") is True
+
+
+class TestFilterModeExclude:
+    def test_exclude_match_skips(self):
+        assert should_skip("shorts, compilation", "Best Shorts Compilation", False, "exclude") is True
+
+    def test_exclude_no_match_downloads(self):
+        assert should_skip("shorts, compilation", "Full Gameplay Episode 5", False, "exclude") is False
+
+    def test_exclude_regex_match_skips(self):
+        assert should_skip(r"#shorts|compilation", "Fun Video #shorts", True, "exclude") is True
+
+    def test_exclude_regex_no_match_downloads(self):
+        assert should_skip(r"#shorts|compilation", "Tutorial Part 3", True, "exclude") is False
+
+    def test_exclude_partial_keyword_match_skips(self):
+        assert should_skip("clip", "Best Clips of 2024", False, "exclude") is True
+
+
+class TestFilterModeSchema:
+    def test_default_mode_is_include(self):
+        ch = ChannelCreate(url="https://youtube.com/@test", title_filter="Rust")
+        assert ch.title_filter_mode == "include"
+
+    def test_exclude_mode_accepted(self):
+        ch = ChannelCreate(url="https://youtube.com/@test", title_filter="shorts", title_filter_mode="exclude")
+        assert ch.title_filter_mode == "exclude"
+
+    def test_invalid_mode_rejected(self):
+        with pytest.raises(ValidationError):
+            ChannelCreate(url="https://youtube.com/@test", title_filter="Rust", title_filter_mode="invalid")
+
+    def test_update_mode(self):
+        update = ChannelUpdate(title_filter_mode="exclude")
+        assert update.title_filter_mode == "exclude"

@@ -32,6 +32,7 @@ class ChannelCreate(BaseModel):
     download_from_year: Optional[int] = None
     title_filter: Optional[str] = None
     title_filter_is_regex: bool = False
+    title_filter_mode: str = Field(default="include", pattern="^(include|exclude)$")
 
     @model_validator(mode="after")
     def validate_title_filter_regex(self):
@@ -57,6 +58,7 @@ class ChannelUpdate(BaseModel):
     download_from_year: Optional[int] = None
     title_filter: Optional[str] = None
     title_filter_is_regex: Optional[bool] = None
+    title_filter_mode: Optional[str] = Field(default=None, pattern="^(include|exclude)$")
 
     @model_validator(mode="after")
     def validate_title_filter_regex(self):
@@ -90,6 +92,7 @@ class ChannelResponse(UTCBaseModel):
     download_from_year: Optional[int]
     title_filter: Optional[str]
     title_filter_is_regex: bool
+    title_filter_mode: str
     last_scanned_at: Optional[datetime]
     next_scan_at: Optional[datetime]
     total_videos: int

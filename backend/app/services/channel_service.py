@@ -110,6 +110,7 @@ class ChannelService:
             download_from_year=data.download_from_year,
             title_filter=data.title_filter,
             title_filter_is_regex=data.title_filter_is_regex,
+            title_filter_mode=data.title_filter_mode,
             naming_template=data.naming_template,
             download_dir=data.download_dir,
             enabled=data.enabled,
@@ -323,15 +324,32 @@ class ChannelService:
                     skip_metadata_fetch = True
 
             if not upload_date:
-                from datetime import date as date_cls
-                upload_date = date_cls.today()
-                logger.warning("Could not determine upload date for %s, defaulting to today", vid_id)
+                upload_date = None
 
             enriched_entries.append({
                 "vid_id": vid_id, "title": title, "description": description,
                 "upload_date": upload_date, "duration": duration, "thumbnail": thumbnail,
                 "source_tab": source_tab, "live_status": live_status,
             })
+
+        # Batch-resolve missing dates via YouTube API if available
+        missing_date_ids = [e["vid_id"] for e in enriched_entries if e["upload_date"] is None]
+        if missing_date_ids and self.yt_api and platform == "youtube":
+            logger.info("Batch-fetching %d missing upload dates via YouTube API", len(missing_date_ids))
+            api_dates = await self.yt_api.get_video_dates(missing_date_ids)
+            for entry in enriched_entries:
+                if entry["upload_date"] is None and entry["vid_id"] in api_dates:
+                    raw = api_dates[entry["vid_id"]]
+                    if raw:
+                        entry["upload_date"] = self._parse_upload_date(raw)
+
+        # Final fallback: assign today's date to anything still missing
+        from datetime import date as date_cls
+        today = date_cls.today()
+        for entry in enriched_entries:
+            if entry["upload_date"] is None:
+                entry["upload_date"] = today
+                logger.warning("Could not determine upload date for %s, defaulting to today", entry["vid_id"])
 
         # Sort by upload date (oldest first) so episode numbers are chronological
         enriched_entries.sort(key=lambda e: e["upload_date"])
@@ -503,10 +521,12 @@ class ChannelService:
                     keywords = [k.strip() for k in channel.title_filter.split(",") if k.strip()]
                     title_lower = title.lower()
                     title_matched = any(kw.lower() in title_lower for kw in keywords)
-                if not title_matched:
+                filter_mode = getattr(channel, "title_filter_mode", "include")
+                should_skip = (not title_matched) if filter_mode == "include" else title_matched
+                if should_skip:
                     video.status = "skipped"
                     video.monitored = False
-                    logger.info("Skipped by title filter: %s (%s)", vid_id, title)
+                    logger.info("Skipped by title filter (%s): %s (%s)", filter_mode, vid_id, title)
                     new_count += 1
                     continue
 
@@ -547,8 +567,15 @@ class ChannelService:
         await self.db.commit()
         logger.info("Found %d new videos for %s", new_count, channel.channel_name)
 
-        # Phase C: Renumber episodes if Phase A reclassified anything
-        if reclassified_count > 0:
+        # Phase B2: Correct fallback dates on existing videos via YouTube API
+        dates_corrected = 0
+        if self.yt_api and platform == "youtube":
+            dates_corrected = await self._correct_fallback_dates(channel)
+            if dates_corrected > 0:
+                logger.info("Corrected %d fallback upload dates for %s", dates_corrected, channel.channel_name)
+
+        # Phase C: Renumber episodes if Phase A reclassified anything or dates were corrected
+        if reclassified_count > 0 or dates_corrected > 0:
             from app.utils.renumber import renumber_channel_episodes
             result = await self.db.execute(
                 select(Video)
@@ -572,6 +599,44 @@ class ChannelService:
             logger.info("Renamed %d files for %s to match naming template", renamed, channel.channel_name)
 
         return new_count
+
+    async def _correct_fallback_dates(self, channel: Channel) -> int:
+        """Fix videos whose upload_date was set to their discovered_at date (fallback).
+
+        This happens when yt-dlp couldn't determine the real date during scan.
+        Uses the YouTube Data API to batch-resolve correct dates.
+        """
+        from datetime import date as date_cls
+
+        result = await self.db.execute(
+            select(Video).where(
+                Video.channel_id == channel.id,
+                func.date(Video.discovered_at) == Video.upload_date,
+            )
+        )
+        suspect_videos = result.scalars().all()
+        if not suspect_videos:
+            return 0
+
+        video_ids = [v.video_id for v in suspect_videos]
+        logger.info("Found %d videos with suspected fallback dates, resolving via API", len(video_ids))
+        api_dates = await self.yt_api.get_video_dates(video_ids)
+
+        corrected = 0
+        for video in suspect_videos:
+            raw_date = api_dates.get(video.video_id)
+            if not raw_date:
+                continue
+            parsed = self._parse_upload_date(raw_date)
+            if parsed and parsed != video.upload_date:
+                video.upload_date = parsed
+                video.season = parsed.year
+                corrected += 1
+
+        if corrected > 0:
+            await self.db.commit()
+
+        return corrected
 
     async def _reclassify_existing_videos(self, channel: Channel, video_list: list[dict]) -> int:
         """Re-check tab classification for existing videos and auto-clean disabled categories.

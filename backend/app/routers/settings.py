@@ -169,6 +169,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "auto_download": ch.auto_download,
             "title_filter": ch.title_filter,
             "title_filter_is_regex": ch.title_filter_is_regex,
+            "title_filter_mode": ch.title_filter_mode,
         }
         for ch in channels
     ]
@@ -232,6 +233,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             min_quality=ch_data.get("min_quality"),
             title_filter=ch_data.get("title_filter"),
             title_filter_is_regex=ch_data.get("title_filter_is_regex", False),
+            title_filter_mode=ch_data.get("title_filter_mode", "include"),
             auto_download=ch_data.get("auto_download", True),
             health_status="unknown",
         )

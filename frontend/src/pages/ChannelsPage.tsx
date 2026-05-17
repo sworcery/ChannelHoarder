@@ -59,6 +59,7 @@ export default function ChannelsPage() {
   const [autoDownload, setAutoDownload] = useState(true)
   const [addTitleFilter, setAddTitleFilter] = useState("")
   const [addTitleFilterIsRegex, setAddTitleFilterIsRegex] = useState(false)
+  const [addTitleFilterMode, setAddTitleFilterMode] = useState<"include" | "exclude">("include")
   const [search, setSearch] = useState("")
   const [viewMode, setViewMode] = useState<ViewMode>(() => getStored("ch_view", "grid"))
   const [cardSize, setCardSize] = useState<CardSize>(() => getStored("ch_size", "medium"))
@@ -75,7 +76,7 @@ export default function ChannelsPage() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean; title_filter?: string; title_filter_is_regex?: boolean }) => api.addChannel(data),
+    mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean; title_filter?: string; title_filter_is_regex?: boolean; title_filter_mode?: string }) => api.addChannel(data),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       setShowAdd(false)
@@ -276,17 +277,29 @@ export default function ChannelsPage() {
                   onChange={(e) => setAddTitleFilter(e.target.value)}
                   className="w-full px-3 py-2 rounded-md border bg-background"
                 />
-                <div className="flex items-center gap-1.5 mt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setAddTitleFilterIsRegex(!addTitleFilterIsRegex)}
-                    className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterIsRegex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
-                  >
-                    <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterIsRegex ? "translate-x-4" : "translate-x-0.5"}`} />
-                  </button>
-                  <span className="text-xs text-muted-foreground">Regex mode</span>
+                <div className="flex items-center gap-3 mt-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddTitleFilterMode(addTitleFilterMode === "include" ? "exclude" : "include")}
+                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterMode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterMode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className="text-xs text-muted-foreground">{addTitleFilterMode === "exclude" ? "Exclude" : "Include"}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setAddTitleFilterIsRegex(!addTitleFilterIsRegex)}
+                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterIsRegex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterIsRegex ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className="text-xs text-muted-foreground">Regex</span>
+                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Only download videos matching these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
+                <p className="text-xs text-muted-foreground mt-1">{addTitleFilterMode === "exclude" ? "Skip" : "Only download"} videos {addTitleFilterMode === "exclude" ? "containing" : "matching"} these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
               </div>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -312,7 +325,7 @@ export default function ChannelsPage() {
               )}
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => { setShowAdd(false); setAddUrl(""); setAddTitleFilter(""); setAddTitleFilterIsRegex(false) }}
+                  onClick={() => { setShowAdd(false); setAddUrl(""); setAddTitleFilter(""); setAddTitleFilterIsRegex(false); setAddTitleFilterMode("include") }}
                   className="px-4 py-2 rounded-md border hover:bg-accent"
                 >
                   Cancel
@@ -325,7 +338,7 @@ export default function ChannelsPage() {
                         return
                       }
                     }
-                    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex } : {}) })
+                    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex, title_filter_mode: addTitleFilterMode } : {}) })
                   }}
                   disabled={!addUrl || addMutation.isPending}
                   className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"

@@ -94,6 +94,39 @@ class YouTubeAPIService:
 
         return items[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
 
+    async def get_video_dates(self, video_ids: list[str]) -> dict[str, str | None]:
+        """Batch-fetch upload dates for specific video IDs. Returns {video_id: "YYYYMMDD" or None}."""
+        if not self.api_key or not video_ids:
+            return {}
+
+        dates: dict[str, str | None] = {}
+        for i in range(0, len(video_ids), 50):
+            batch = video_ids[i:i + 50]
+            params = {
+                "part": "contentDetails,snippet",
+                "id": ",".join(batch),
+                "key": self.api_key,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(f"{YOUTUBE_API_BASE}/videos", params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                for item in data.get("items", []):
+                    vid_id = item.get("id", "")
+                    snippet = item.get("snippet", {})
+                    published = snippet.get("publishedAt", "")
+                    if published:
+                        dates[vid_id] = published[:10].replace("-", "")
+                    else:
+                        dates[vid_id] = None
+            except Exception as e:
+                logger.warning("Failed to batch-fetch video dates: %s", e)
+                break
+
+        return dates
+
     async def validate_api_key(self) -> tuple[bool, str]:
         """Check if the API key is valid. Returns (success, message)."""
         if not self.api_key:

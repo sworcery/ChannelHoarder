@@ -578,7 +578,7 @@ export default function ChannelDetailPage() {
           <div className="mt-3">
             <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
               Title Filter
-              <HelpIcon text="Only download videos whose title matches. Leave empty to download all videos. Works on future scans only." anchor="channel-management" />
+              <HelpIcon text="Filter videos by title. Include mode downloads only matching videos. Exclude mode skips matching videos. Leave empty to download all. Works on future scans only." anchor="channel-management" />
             </label>
             <div className="flex gap-1 max-w-lg">
               <input
@@ -609,6 +609,15 @@ export default function ChannelDetailPage() {
             <div className="flex items-center gap-3 mt-2">
               <label className="flex items-center gap-1.5 cursor-pointer">
                 <button
+                  onClick={() => updateMutation.mutate({ title_filter_mode: channel.title_filter_mode === "include" ? "exclude" : "include" })}
+                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_mode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
+                >
+                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_mode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
+                </button>
+                <span className="text-xs text-muted-foreground">{channel.title_filter_mode === "exclude" ? "Exclude mode" : "Include mode"}</span>
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <button
                   onClick={() => updateMutation.mutate({ title_filter_is_regex: !channel.title_filter_is_regex })}
                   className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_is_regex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
                 >
@@ -618,16 +627,31 @@ export default function ChannelDetailPage() {
               </label>
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
-              {channel.title_filter_is_regex ? (
+              {channel.title_filter_mode === "exclude" ? (
                 <>
-                  <span className="font-medium">Regex mode:</span> Uses regular expression matching (case-insensitive).{" "}
+                  <span className="font-medium">Exclude mode:</span> Skip videos whose title matches.{" "}
+                  {channel.title_filter_is_regex ? (
+                    <>
+                      <span className="text-muted-foreground/70">Example: </span>
+                      <code className="text-[11px] bg-muted px-1 rounded">shorts|compilation</code>{" "}skips videos with "shorts" or "compilation" in the title
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-muted-foreground/70">Example: </span>
+                      <code className="text-[11px] bg-muted px-1 rounded">shorts, compilation, clip</code>{" "}skips videos containing any of those words
+                    </>
+                  )}
+                </>
+              ) : channel.title_filter_is_regex ? (
+                <>
+                  <span className="font-medium">Include + Regex:</span> Uses regular expression matching (case-insensitive).{" "}
                   <span className="text-muted-foreground/70">Examples: </span>
                   <code className="text-[11px] bg-muted px-1 rounded">rust|minecraft</code>{" "}matches either word, {" "}
                   <code className="text-[11px] bg-muted px-1 rounded">rust(?!\s*bucket)</code>{" "}matches "Rust" but not "Rust Bucket"
                 </>
               ) : (
                 <>
-                  <span className="font-medium">Keyword mode:</span> Comma-separated list, matches if any keyword appears in the title (case-insensitive).{" "}
+                  <span className="font-medium">Include + Keyword:</span> Comma-separated list, matches if any keyword appears in the title (case-insensitive).{" "}
                   <span className="text-muted-foreground/70">Example: </span>
                   <code className="text-[11px] bg-muted px-1 rounded">Rust, Arc Raiders</code>{" "}downloads videos with "Rust" or "Arc Raiders" in the title
                 </>

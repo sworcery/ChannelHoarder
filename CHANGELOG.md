@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.8] - 2026-05-17
+
+### Added
+- **Title filter exclude mode** - Title filters now support an include/exclude toggle. Include mode (existing behavior) only downloads videos matching the filter. Exclude mode skips videos that match, downloading everything else. Useful for ignoring compilations, shorts, or clips from a channel without needing to list every video you want.
+
+### Fixed
+- **Videos showing wrong upload date** - When yt-dlp couldn't determine upload dates during a scan (common on large channels), videos were assigned today's date as a fallback. Now uses the YouTube Data API (if configured) to batch-resolve missing dates. Also corrects previously-stored fallback dates on each scan automatically.
+
 ## [1.8.7] - 2026-05-15
 
 ### Changed

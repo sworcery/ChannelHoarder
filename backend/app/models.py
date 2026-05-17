@@ -37,6 +37,7 @@ class Channel(Base):
     download_from_year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     title_filter: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     title_filter_is_regex: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    title_filter_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="include", server_default="include")
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     download_dir: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

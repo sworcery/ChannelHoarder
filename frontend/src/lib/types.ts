@@ -20,6 +20,7 @@ export interface Channel {
   download_from_year: number | null
   title_filter: string | null
   title_filter_is_regex: boolean
+  title_filter_mode: "include" | "exclude"
   last_scanned_at: string | null
   next_scan_at: string | null
   total_videos: number

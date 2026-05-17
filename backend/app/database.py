@@ -98,6 +98,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN title_filter_is_regex BOOLEAN DEFAULT 0 NOT NULL")
             )
+        if "title_filter_mode" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN title_filter_mode VARCHAR(16) DEFAULT 'include' NOT NULL")
+            )
 
         # Add new columns to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))
