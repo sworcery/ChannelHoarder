@@ -49,6 +49,12 @@ class TestCurlCffiCompatibility:
 
 
 class TestImpersonationHelper:
+    @pytest.fixture(autouse=True)
+    def _reset_cache(self):
+        import app.services.ytdlp_service as mod
+        mod._impersonate_checked = False
+        mod._impersonate_target = None
+
     def test_get_impersonate_target_returns_target(self):
         from app.services.ytdlp_service import _get_impersonate_target
 

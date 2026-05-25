@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 _impersonate_target = None
 _impersonate_checked = False
+_impersonate_lock = threading.Lock()
 
 
 def _get_impersonate_target():
@@ -23,15 +24,18 @@ def _get_impersonate_target():
     global _impersonate_target, _impersonate_checked
     if _impersonate_checked:
         return _impersonate_target
-    _impersonate_checked = True
-    try:
-        from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
-        from yt_dlp.networking.impersonate import ImpersonateTarget
-        _impersonate_target = ImpersonateTarget.from_str("chrome")
-        logger.info("Browser impersonation available (curl_cffi)")
-    except (ImportError, Exception) as e:
-        logger.warning("Browser impersonation unavailable: %s", e)
-        _impersonate_target = None
+    with _impersonate_lock:
+        if _impersonate_checked:
+            return _impersonate_target
+        _impersonate_checked = True
+        try:
+            from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
+            from yt_dlp.networking.impersonate import ImpersonateTarget
+            _impersonate_target = ImpersonateTarget.from_str("chrome")
+            logger.info("Browser impersonation available (curl_cffi)")
+        except (ImportError, ValueError, TypeError) as e:
+            logger.warning("Browser impersonation unavailable: %s", e)
+            _impersonate_target = None
     return _impersonate_target
 
 
