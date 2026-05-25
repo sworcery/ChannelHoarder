@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import date
 
 import httpx
@@ -72,6 +73,12 @@ class YouTubeAPIService:
             if not page_token:
                 break
 
+        # Batch-fetch durations so shorts detection works
+        video_ids = [v["id"] for v in videos]
+        durations = await self._batch_fetch_durations(video_ids)
+        for v in videos:
+            v["duration"] = durations.get(v["id"])
+
         logger.info("YouTube API found %d videos for channel %s", len(videos), channel_id)
         return videos
 
@@ -93,6 +100,48 @@ class YouTubeAPIService:
             return None
 
         return items[0].get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
+
+    async def _batch_fetch_durations(self, video_ids: list[str]) -> dict[str, int | None]:
+        """Batch-fetch video durations in seconds via videos.list."""
+        if not self.api_key or not video_ids:
+            return {}
+
+        durations: dict[str, int | None] = {}
+        for i in range(0, len(video_ids), 50):
+            batch = video_ids[i:i + 50]
+            params = {
+                "part": "contentDetails",
+                "id": ",".join(batch),
+                "key": self.api_key,
+            }
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(f"{YOUTUBE_API_BASE}/videos", params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                for item in data.get("items", []):
+                    vid_id = item.get("id", "")
+                    iso_duration = item.get("contentDetails", {}).get("duration", "")
+                    durations[vid_id] = self._parse_iso8601_duration(iso_duration)
+            except Exception as e:
+                logger.warning("Failed to batch-fetch durations: %s", e)
+                break
+
+        return durations
+
+    @staticmethod
+    def _parse_iso8601_duration(iso: str) -> int | None:
+        """Parse ISO 8601 duration (e.g., PT5M30S) to seconds."""
+        if not iso:
+            return None
+        m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso)
+        if not m:
+            return None
+        hours = int(m.group(1) or 0)
+        minutes = int(m.group(2) or 0)
+        seconds = int(m.group(3) or 0)
+        return hours * 3600 + minutes * 60 + seconds
 
     async def get_video_dates(self, video_ids: list[str]) -> dict[str, str | None]:
         """Batch-fetch upload dates for specific video IDs. Returns {video_id: "YYYYMMDD" or None}."""
