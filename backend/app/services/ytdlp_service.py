@@ -14,6 +14,26 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+_impersonate_target = None
+_impersonate_checked = False
+
+
+def _get_impersonate_target():
+    """Return an ImpersonateTarget for Chrome if curl_cffi is available and compatible, else None."""
+    global _impersonate_target, _impersonate_checked
+    if _impersonate_checked:
+        return _impersonate_target
+    _impersonate_checked = True
+    try:
+        from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+        _impersonate_target = ImpersonateTarget.from_str("chrome")
+        logger.info("Browser impersonation available (curl_cffi)")
+    except (ImportError, Exception) as e:
+        logger.warning("Browser impersonation unavailable: %s", e)
+        _impersonate_target = None
+    return _impersonate_target
+
 
 _cookie_cache_path: str | None = None
 _cookie_cache_mtime: float = 0.0
@@ -404,11 +424,9 @@ class YtdlpService:
 
         # Non-YouTube: impersonate a browser to bypass anti-bot protections (Cloudflare, etc.)
         if platform != "youtube":
-            try:
-                import curl_cffi  # noqa: F401
-                opts["impersonate"] = "chrome"
-            except ImportError:
-                pass
+            target = _get_impersonate_target()
+            if target is not None:
+                opts["impersonate"] = target
 
         if settings.has_cookies:
             cookie_size = settings.cookies_path.stat().st_size if settings.cookies_path.exists() else 0

@@ -36,8 +36,8 @@ WORKDIR /app
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install yt-dlp and PO token provider plugin
-RUN pip install --no-cache-dir yt-dlp bgutil-ytdlp-pot-provider
+# Install PO token provider plugin (yt-dlp already in requirements.txt)
+RUN pip install --no-cache-dir bgutil-ytdlp-pot-provider
 
 # Set up bgutil POT provider server
 RUN git clone --single-branch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/pot-provider \
