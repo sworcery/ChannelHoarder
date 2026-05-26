@@ -5,10 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.9] - 2026-05-25
+## [1.9.0] - 2026-05-26
+
+### Added
+- **NFO maintenance task** - Background job (daily at 3 AM) checks all downloaded videos for missing or stale `.nfo` sidecar files and regenerates them. Catches metadata drift from renumbering, manual edits, or interrupted operations.
 
 ### Fixed
 - **Rumble/Odysee impersonation failing with "target not available"** - The curl_cffi version installed (0.15.0) was outside yt-dlp's supported range (0.10.x-0.14.x). The module imported fine but yt-dlp refused to register it as an impersonation backend. Pinned to a compatible version and replaced the naive import check with proper handler validation. (#19, #23)
+- **Shorts not detected when using YouTube API** - The YouTube Data API scan path didn't fetch video durations, so shorts detection fell through to only the hashtag-in-title check. Now batch-fetches durations via the videos endpoint so the threshold-based detection works. (#25)
+- **Metadata lost after fixing episode numbers** - The renumber function moved `.nfo` sidecar files alongside videos but never updated their contents. Plex would read stale season/episode data from the XML. Now regenerates `.nfo` files for every renumbered video. (#26)
 
 ## [1.8.8] - 2026-05-17
 

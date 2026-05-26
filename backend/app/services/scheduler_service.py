@@ -86,6 +86,16 @@ class SchedulerService:
             name="Watch cookies.txt for external updates",
         )
 
+        # NFO sidecar maintenance (daily at 3 AM)
+        from app.tasks.nfo_maintenance import sync_nfo_files
+        self.scheduler.add_job(
+            sync_nfo_files,
+            CronTrigger(hour=3, minute=0),
+            id="nfo_maintenance",
+            replace_existing=True,
+            name="Sync episode NFO files with database metadata",
+        )
+
         # Quick download cleanup (every 6 hours)
         from app.tasks.quick_download_cleanup import cleanup_quick_downloads
         self.scheduler.add_job(

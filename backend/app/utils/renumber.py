@@ -3,6 +3,7 @@
 import logging
 import os
 
+from app.services.metadata_service import write_episode_nfo
 from app.services.naming_service import build_output_path
 from app.utils.file_utils import move_video_files
 
@@ -52,4 +53,26 @@ def renumber_channel_episodes(videos: list, channel) -> int:
                     video.file_path = new_path
                     renamed += 1
 
+            _regenerate_nfo(video, channel)
+
     return renamed
+
+
+def _regenerate_nfo(video, channel) -> None:
+    """Rewrite the episode .nfo to match current season/episode metadata."""
+    try:
+        write_episode_nfo(
+            channel_name=channel.channel_name,
+            video_title=video.title,
+            video_id=video.video_id,
+            description=video.description,
+            upload_date=video.upload_date,
+            season=video.season,
+            episode=video.episode,
+            duration=video.duration,
+            thumbnail_url=video.thumbnail_url,
+            video_file_path=video.file_path,
+            platform=getattr(channel, "platform", "youtube"),
+        )
+    except Exception as e:
+        logger.warning("Failed to regenerate NFO for %s: %s", video.video_id, e)
