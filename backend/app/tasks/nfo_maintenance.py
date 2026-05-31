@@ -23,7 +23,7 @@ async def sync_nfo_files():
     async with async_session() as db:
         result = await db.execute(
             select(Video)
-            .where(Video.status == "downloaded", Video.file_path.isnot(None))
+            .where(Video.status == "completed", Video.file_path.isnot(None))
             .options(joinedload(Video.channel))
         )
         videos = result.scalars().all()

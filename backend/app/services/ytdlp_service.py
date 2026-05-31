@@ -128,14 +128,51 @@ class YtdlpService:
                     return []
                 entries = list(info.get("entries", []))
                 # Filter out None entries (failed extractions) and tag each with source tab
+                raw_count = len(entries)
                 entries = [e for e in entries if e is not None]
+                if raw_count > 0 and not entries:
+                    logger.warning("All %d entries were None (extraction failures) for %s", raw_count, target_url)
                 for entry in entries:
                     entry["_source_tab"] = tab
                 logger.info("Found %d entries in %s tab for %s", len(entries), tab, target_url)
+
+                # Non-YouTube: retry without extract_flat if flat extraction returned nothing
+                if not entries and platform != "youtube":
+                    logger.info("Flat extraction returned 0 entries for %s, retrying with full extraction", target_url)
+                    return self._get_channel_video_list_full(target_url, platform, tab)
+
                 return entries
         except Exception as e:
             # /shorts and /streams tabs can 404 on channels that don't have them
             logger.info("Failed to fetch %s tab (may not exist): %s", tab, e)
+            return []
+        finally:
+            self._cleanup_cookie_tmp(opts)
+
+    def _get_channel_video_list_full(self, target_url: str, platform: str, tab: str) -> list[dict]:
+        """Fallback: fetch video list without extract_flat for platforms where flat extraction fails."""
+        opts = self._base_opts(platform=platform)
+        opts.update({
+            "ignoreerrors": True,
+            "skip_download": True,
+            "quiet": False,
+            "playlistend": 200,
+        })
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(target_url, download=False)
+                if not info:
+                    return []
+                entries = list(info.get("entries", []))
+                entries = [e for e in entries if e is not None]
+                for entry in entries:
+                    entry["_source_tab"] = tab
+                    if "url" not in entry and "webpage_url" in entry:
+                        entry["url"] = entry["webpage_url"]
+                logger.info("Full extraction found %d entries for %s", len(entries), target_url)
+                return entries
+        except Exception as e:
+            logger.warning("Full extraction also failed for %s: %s", target_url, e)
             return []
         finally:
             self._cleanup_cookie_tmp(opts)

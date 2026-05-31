@@ -66,6 +66,17 @@ class ChannelService:
                     channel_url = channel_url[:-len(suffix)]
                     break
 
+        # Fallback: extract channel name from URL path when yt-dlp couldn't
+        if channel_name == "Unknown" and platform != "youtube":
+            from urllib.parse import urlparse
+            path = urlparse(data.url).path.rstrip("/")
+            slug = path.rsplit("/", 1)[-1] if "/" in path else path
+            if slug and slug not in ("c", "user", "@"):
+                channel_name = slug.lstrip("@")
+                if ":" in channel_name and platform == "odysee":
+                    channel_name = channel_name.split(":")[0]
+                logger.info("Derived channel name from URL: %s", channel_name)
+
         # Check if already subscribed
         existing = await self.db.execute(
             select(Channel).where(Channel.channel_id == channel_id)
@@ -251,6 +262,26 @@ class ChannelService:
         # livestreams when the user hasn't enabled those categories.
         reclassified_count = await self._reclassify_existing_videos(channel, video_list)
 
+        # Backfill source_url for existing videos missing it (fixes Odysee/Rumble URLs)
+        if existing_ids:
+            url_map = {}
+            for entry in video_list:
+                vid_id = entry.get("id") or entry.get("video_id", "")
+                src = entry.get("url") or entry.get("webpage_url")
+                if vid_id and src and vid_id in existing_ids:
+                    url_map[vid_id] = src
+            if url_map:
+                result = await self.db.execute(
+                    select(Video).where(
+                        Video.channel_id == channel.id,
+                        Video.video_id.in_(url_map.keys()),
+                        Video.source_url.is_(None),
+                    )
+                )
+                for video in result.scalars().all():
+                    video.source_url = url_map[video.video_id]
+                    logger.debug("Backfilled source_url for %s", video.video_id)
+
         # First pass: identify new video IDs
         new_entries = []
         for entry in video_list:
@@ -290,6 +321,7 @@ class ChannelService:
             thumbnail = entry.get("thumbnail")
             source_tab = entry.get("_source_tab", "videos")
             live_status = entry.get("live_status")
+            source_url = entry.get("url") or entry.get("webpage_url")
 
             if not upload_date and vid_id in rss_dates:
                 upload_date = self._parse_upload_date(rss_dates[vid_id])
@@ -330,6 +362,7 @@ class ChannelService:
                 "vid_id": vid_id, "title": title, "description": description,
                 "upload_date": upload_date, "duration": duration, "thumbnail": thumbnail,
                 "source_tab": source_tab, "live_status": live_status,
+                "source_url": source_url,
             })
 
         # Batch-resolve missing dates via YouTube API if available
@@ -401,7 +434,7 @@ class ChannelService:
                 season_episode_counts[season] += 1
                 episode = season_episode_counts[season]
 
-            source_url = entry.get("url") or entry.get("webpage_url")
+            source_url = entry.get("source_url")
 
             video = Video(
                 video_id=vid_id,
@@ -454,6 +487,7 @@ class ChannelService:
                     existing_video.error_message = None
                     existing_video.error_details = None
                     existing_video.retry_count = 0
+                    existing_video.source_url = source_url
                     video = existing_video  # Use the existing record for shorts/queue logic below
                 else:
                     # Video belongs to a different, active channel -- skip
