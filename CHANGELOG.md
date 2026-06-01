@@ -5,7 +5,7 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.2] - 2026-05-31
+## [1.9.3] - 2026-05-31
 
 ### Added
 - **Sonarr-style episode management UI** - Major overhaul of the channel detail page with a cleaner, more functional layout:
@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Bulk reclassify** - Select videos and mark them as Short, Livestream, or Regular in bulk. Reclassified videos have their episode number reset and get renumbered on the next scan
   - **Season progress bars** - Each season header now shows a download progress bar and total disk size for that season
   - **Type badges** - SHORT and LIVE badges appear on video titles for quick visual identification
+  - **Total channel size** - Header stats now show total disk usage for the channel
 
 ## [1.9.1] - 2026-05-31
 
