@@ -43,12 +43,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build and push dev image to local registry
+      - name: Build dev image
+        run: docker build -f docker/Dockerfile -t ${{ env.IMAGE_NAME }}:dev .
+
+      - name: Push to local registry
         run: |
-          docker build -f docker/Dockerfile -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev .
-          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+          apt-get update -qq && apt-get install -y -qq skopeo >/dev/null 2>&1
+          skopeo copy --dest-tls-verify=false \
+            docker-daemon:${{ env.IMAGE_NAME }}:dev \
+            docker://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
 
       - name: Image tag summary
-        run: |
-          echo "Pushed: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
-          echo "Ready to test on Unraid. Watchtower (if running) will auto-restart the container."
+        if: always()
+        run: echo "Tagged ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev"
