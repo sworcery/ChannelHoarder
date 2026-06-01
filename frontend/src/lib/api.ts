@@ -134,6 +134,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ video_ids: videoIds, delete_files: deleteFiles }),
     }),
+  bulkReclassifyVideos: (channelId: number, videoIds: number[], setShort?: boolean, setLivestream?: boolean) =>
+    request<{ count: number; message: string }>(`/channels/${channelId}/videos/bulk-reclassify`, {
+      method: "POST",
+      body: JSON.stringify({ video_ids: videoIds, set_short: setShort, set_livestream: setLivestream }),
+    }),
 
   // Video management
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>

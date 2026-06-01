@@ -805,6 +805,50 @@ async def bulk_monitor_videos(
     return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
 
 
+class BulkReclassifyRequest(BaseModel):
+    video_ids: list[int] = Field(..., min_length=1, max_length=50000)
+    set_short: Optional[bool] = None
+    set_livestream: Optional[bool] = None
+
+
+@router.post("/{channel_id}/videos/bulk-reclassify")
+async def bulk_reclassify_videos(
+    channel_id: int,
+    body: BulkReclassifyRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk update short/livestream classification for selected videos."""
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.id.in_(body.video_ids))
+    )
+    videos = result.scalars().all()
+    count = 0
+    for video in videos:
+        if body.set_short is not None:
+            video.is_short = body.set_short
+            if body.set_short:
+                video.episode = 0
+        if body.set_livestream is not None:
+            video.is_livestream = body.set_livestream
+            if body.set_livestream:
+                video.episode = 0
+        count += 1
+    await db.commit()
+
+    label_parts = []
+    if body.set_short is True:
+        label_parts.append("shorts")
+    if body.set_livestream is True:
+        label_parts.append("livestreams")
+    if body.set_short is False and body.set_livestream is False:
+        label_parts.append("regular videos")
+    label = " & ".join(label_parts) if label_parts else "reclassified"
+
+    return {"message": f"Marked {count} videos as {label}", "count": count}
+
+
 @router.post("/{channel_id}/monitor-all")
 async def monitor_all_videos(
     channel_id: int,

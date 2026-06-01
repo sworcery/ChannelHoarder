@@ -34,6 +34,7 @@ import {
   FileX,
   FileEdit,
   Tv,
+  Pencil,
 } from "lucide-react"
 import { useState, useCallback, useMemo } from "react"
 
@@ -43,8 +44,10 @@ export default function ChannelDetailPage() {
   const queryClient = useQueryClient()
   const channelId = Number(id)
   const [statusFilter, setStatusFilter] = useState("")
+  const [typeFilter, setTypeFilter] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [searchInput, setSearchInput] = useState("")
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
   const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
   const [editFromYear, setEditFromYear] = useState<string | null>(null)
@@ -66,7 +69,6 @@ export default function ChannelDetailPage() {
 
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
 
-  // Video multi-select
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null)
 
@@ -99,17 +101,27 @@ export default function ChannelDetailPage() {
   const videos = videosData?.items || []
   const totalVideos = videosData?.total || 0
 
+  const filteredVideos = useMemo(() => {
+    if (!typeFilter) return videos
+    switch (typeFilter) {
+      case "short": return videos.filter((v: any) => v.is_short)
+      case "livestream": return videos.filter((v: any) => v.is_livestream)
+      case "regular": return videos.filter((v: any) => !v.is_short && !v.is_livestream)
+      default: return videos
+    }
+  }, [videos, typeFilter])
+
   const { seasonGroups, seasons, videoIndexMap } = useMemo(() => {
     const groups: Record<number, any[]> = {}
     const indexMap = new Map<number, number>()
-    videos.forEach((v: any, i: number) => {
+    filteredVideos.forEach((v: any, i: number) => {
       if (!groups[v.season]) groups[v.season] = []
       groups[v.season].push(v)
       indexMap.set(v.id, i)
     })
     const sorted = Object.keys(groups).map(Number).sort((a, b) => b - a)
     return { seasonGroups: groups, seasons: sorted, videoIndexMap: indexMap }
-  }, [videos])
+  }, [filteredVideos])
 
   const invalidateVideos = () => {
     queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
@@ -236,6 +248,24 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: ({ ids, deleteFiles }: { ids: number[]; deleteFiles: boolean }) =>
+      api.bulkDeleteVideos(channelId, ids, deleteFiles),
+    onSuccess: (data: any) => { invalidateVideos(); setSelectedVideoIds(new Set()); toast(data.message) },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const bulkReclassifyMutation = useMutation({
+    mutationFn: ({ setShort, setLivestream }: { setShort?: boolean; setLivestream?: boolean }) =>
+      api.bulkReclassifyVideos(channelId, Array.from(selectedVideoIds), setShort, setLivestream),
+    onSuccess: (data: any) => {
+      invalidateVideos()
+      setSelectedVideoIds(new Set())
+      toast(data.message)
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const toggleVideoSelection = useCallback((videoId: number, idx: number, shiftKey: boolean) => {
     setSelectedVideoIds((prev) => {
       const next = new Set(prev)
@@ -243,7 +273,7 @@ export default function ChannelDetailPage() {
         const start = Math.min(lastSelectedIdx, idx)
         const end = Math.max(lastSelectedIdx, idx)
         for (let i = start; i <= end; i++) {
-          if (videos[i]) next.add(videos[i].id)
+          if (filteredVideos[i]) next.add(filteredVideos[i].id)
         }
       } else {
         if (next.has(videoId)) next.delete(videoId)
@@ -252,13 +282,13 @@ export default function ChannelDetailPage() {
       return next
     })
     setLastSelectedIdx(idx)
-  }, [lastSelectedIdx, videos])
+  }, [lastSelectedIdx, filteredVideos])
 
   const toggleSelectAll = () => {
-    if (selectedVideoIds.size === videos.length) {
+    if (selectedVideoIds.size === filteredVideos.length) {
       setSelectedVideoIds(new Set())
     } else {
-      setSelectedVideoIds(new Set(videos.map((v: any) => v.id)))
+      setSelectedVideoIds(new Set(filteredVideos.map((v: any) => v.id)))
     }
   }
 
@@ -272,12 +302,10 @@ export default function ChannelDetailPage() {
     setSelectedVideoIds(new Set())
   }
 
-  const bulkDeleteMutation = useMutation({
-    mutationFn: ({ ids, deleteFiles }: { ids: number[]; deleteFiles: boolean }) =>
-      api.bulkDeleteVideos(channelId, ids, deleteFiles),
-    onSuccess: (data: any) => { invalidateVideos(); setSelectedVideoIds(new Set()); toast(data.message) },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
+  const handleTypeChange = (val: string) => {
+    setTypeFilter(val)
+    setSelectedVideoIds(new Set())
+  }
 
   if (!channel) {
     return (
@@ -288,7 +316,7 @@ export default function ChannelDetailPage() {
   }
 
   const selectedCount = selectedVideoIds.size
-  const isBulkLoading = bulkQueueMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending || bulkMonitorMutation.isPending || bulkDeleteMutation.isPending
+  const isBulkLoading = bulkQueueMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending || bulkMonitorMutation.isPending || bulkDeleteMutation.isPending || bulkReclassifyMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -299,29 +327,19 @@ export default function ChannelDetailPage() {
 
       {/* Banner + Channel Info */}
       <div className="rounded-lg border bg-card overflow-hidden">
-        {/* Banner */}
         <div className="relative h-48 w-full">
           {channel.banner_url ? (
-            <img
-              src={channel.banner_url}
-              alt=""
-              className="w-full h-full object-cover"
-            />
+            <img src={channel.banner_url} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-primary/20 via-primary/10 to-background" />
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
         </div>
 
-        {/* Channel info overlapping banner */}
         <div className="relative px-6 pb-5 -mt-16">
           <div className="flex items-end gap-4">
             {channel.thumbnail_url ? (
-              <img
-                src={channel.thumbnail_url}
-                alt={channel.channel_name}
-                className="h-24 w-24 rounded-full object-cover border-4 border-card flex-shrink-0 shadow-lg"
-              />
+              <img src={channel.thumbnail_url} alt={channel.channel_name} className="h-24 w-24 rounded-full object-cover border-4 border-card flex-shrink-0 shadow-lg" />
             ) : (
               <div className="h-24 w-24 rounded-full bg-muted border-4 border-card flex items-center justify-center flex-shrink-0 shadow-lg">
                 <Tv className="h-12 w-12 text-muted-foreground" />
@@ -335,16 +353,9 @@ export default function ChannelDetailPage() {
                     {channel.platform}
                   </span>
                 )}
-                <Circle
-                  className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`}
-                />
+                <Circle className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
               </div>
-              <a
-                href={channel.channel_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5"
-              >
+              <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5">
                 {channel.channel_url} <ExternalLink className="h-3 w-3" />
               </a>
             </div>
@@ -356,17 +367,13 @@ export default function ChannelDetailPage() {
                 {channel.description}
               </p>
               {channel.description.length > 200 && (
-                <button
-                  onClick={() => setDescExpanded(!descExpanded)}
-                  className="text-xs text-primary hover:underline mt-1"
-                >
+                <button onClick={() => setDescExpanded(!descExpanded)} className="text-xs text-primary hover:underline mt-1">
                   {descExpanded ? "Show less" : "Show more"}
                 </button>
               )}
             </div>
           )}
 
-          {/* Stats row */}
           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
             <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
             <span className="text-border">|</span>
@@ -387,7 +394,6 @@ export default function ChannelDetailPage() {
             </div>
           )}
 
-          {/* Action buttons */}
           <div className="flex gap-2 flex-wrap mt-4">
             <button
               onClick={() => scanMutation.mutate()}
@@ -398,23 +404,28 @@ export default function ChannelDetailPage() {
               Scan
             </button>
             <button
-              onClick={() => refreshMetadataMutation.mutate()}
-              disabled={refreshMetadataMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-              title="Re-fetch thumbnail, banner, and description from the platform"
+              onClick={() => downloadAllMutation.mutate()}
+              disabled={downloadAllMutation.isPending}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
             >
-              <RotateCcw className={`h-4 w-4 ${refreshMetadataMutation.isPending ? "animate-spin" : ""}`} />
-              Refresh Metadata
+              <Download className="h-4 w-4" />
+              Download All
             </button>
             <button
-              onClick={() => { setImportOpen(true); setImportMatches(null); setImportFolder(""); setImportSelected(new Set()) }}
+              onClick={() => setEditModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
             >
-              <FolderInput className="h-4 w-4" />
-              Import Existing
+              <Pencil className="h-4 w-4" />
+              Edit
             </button>
-            <button
-              onClick={async () => {
+            <DropdownMenu trigger={<MoreVertical className="h-4 w-4" />}>
+              <DropdownItem onClick={() => refreshMetadataMutation.mutate()} disabled={refreshMetadataMutation.isPending}>
+                <RotateCcw className="h-3.5 w-3.5" /> Refresh Metadata
+              </DropdownItem>
+              <DropdownItem onClick={() => { setImportOpen(true); setImportMatches(null); setImportFolder(""); setImportSelected(new Set()) }}>
+                <FolderInput className="h-3.5 w-3.5" /> Import Existing
+              </DropdownItem>
+              <DropdownItem onClick={async () => {
                 setRenumberOpen(true)
                 setRenumberLoading(true)
                 setRenumberPreview(null)
@@ -427,492 +438,30 @@ export default function ChannelDetailPage() {
                 } finally {
                   setRenumberLoading(false)
                 }
-              }}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
-            >
-              <ListOrdered className="h-4 w-4" />
-              Fix Episode Numbers
-            </button>
-            <button
-              onClick={() => downloadAllMutation.mutate()}
-              disabled={downloadAllMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Download className="h-4 w-4" />
-              Download All
-            </button>
-            <button
-              onClick={() => setDeleteDialogOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+              }}>
+                <ListOrdered className="h-3.5 w-3.5" /> Fix Episode Numbers
+              </DropdownItem>
+              <DropdownSeparator />
+              <DropdownItem onClick={() => setDeleteDialogOpen(true)} variant="danger">
+                <Trash2 className="h-3.5 w-3.5" /> Delete Channel
+              </DropdownItem>
+            </DropdownMenu>
           </div>
         </div>
       </div>
 
-      {/* Series Management */}
-      <div className="rounded-lg border bg-card p-4 space-y-4">
-        <h2 className="text-sm font-semibold">Series Management</h2>
-
-        {/* Download Settings */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Download Settings</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon text="Target quality for new downloads. Also used as the cutoff for upgrade searches." anchor="channel-management" /></label>
-              <div className="flex gap-1">
-                <select
-                  value={channel.quality}
-                  onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                >
-                  <option value="best">Best Available</option>
-                  <option value="2160p">4K (2160p)</option>
-                  <option value="1080p">1080p</option>
-                  <option value="720p">720p</option>
-                  <option value="480p">480p</option>
-                </select>
-                <button
-                  onClick={() => api.upgradeQuality(channelId).then((r) => { invalidateVideos(); toast(r.message) })}
-                  className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
-                  title="Re-queue completed videos below the target quality"
-                >
-                  Search Upgrades
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Minimum Quality <HelpIcon text="Skip videos if the best available quality is below this threshold. Leave as 'None' to download regardless of quality." anchor="channel-management" /></label>
-              <select
-                value={channel.min_quality || ""}
-                onChange={(e) => updateMutation.mutate({ min_quality: e.target.value || null })}
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-              >
-                <option value="">None (download any quality)</option>
-                <option value="2160p">4K (2160p)</option>
-                <option value="1080p">1080p</option>
-                <option value="720p">720p</option>
-                <option value="480p">480p</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
-              <div className="flex gap-1">
-                <input
-                  type="text"
-                  value={editDownloadDir ?? channel.download_dir ?? ""}
-                  placeholder="/downloads (default)"
-                  onChange={(e) => setEditDownloadDir(e.target.value)}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                />
-                {editDownloadDir !== null && editDownloadDir !== (channel.download_dir ?? "") && (
-                  <>
-                  <button
-                    onClick={() => {
-                      updateMutation.mutate({ download_dir: editDownloadDir || null })
-                      setEditDownloadDir(null)
-                    }}
-                    className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={async () => {
-                      const targetDir = editDownloadDir || "/downloads"
-                      setMovingFiles(true)
-                      try {
-                        const preview = await api.moveFilesPreview(channelId, targetDir)
-                        if (preview.same_path) {
-                          toast("Files are already in that directory")
-                          return
-                        }
-                        setMovePreview(preview)
-                        setMovePreviewOpen(true)
-                      } catch (e: any) {
-                        toast(e.message, "error")
-                      } finally {
-                        setMovingFiles(false)
-                      }
-                    }}
-                    disabled={movingFiles}
-                    className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap disabled:opacity-50"
-                    title="Preview and move existing files to the new directory"
-                  >
-                    {movingFiles ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading...</> : "Save & Move"}
-                  </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Year Filter */}
-          <div className="mt-3">
-            <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans — already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
-            <div className="flex gap-1 max-w-xs">
-              <input
-                type="number"
-                min="2005"
-                max={new Date().getFullYear()}
-                value={editFromYear ?? (channel.download_from_year || "")}
-                placeholder="All years"
-                onChange={(e) => setEditFromYear(e.target.value)}
-                className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
-              />
-              {editFromYear !== null && editFromYear !== String(channel.download_from_year || "") && (
-                <button
-                  onClick={() => {
-                    updateMutation.mutate({ download_from_year: Number(editFromYear) || null })
-                    setEditFromYear(null)
-                  }}
-                  className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                >
-                  Save
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Title Filter */}
-          <div className="mt-3">
-            <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-              Title Filter
-              <HelpIcon text="Filter videos by title. Include mode downloads only matching videos. Exclude mode skips matching videos. Leave empty to download all. Works on future scans only." anchor="channel-management" />
-            </label>
-            <div className="flex gap-1 max-w-lg">
-              <input
-                type="text"
-                value={editTitleFilter ?? channel.title_filter ?? ""}
-                placeholder={channel.title_filter_is_regex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
-                onChange={(e) => setEditTitleFilter(e.target.value)}
-                className="flex-1 px-2 py-1.5 rounded-md border bg-background text-sm"
-              />
-              {editTitleFilter !== null && editTitleFilter !== (channel.title_filter ?? "") && (
-                <button
-                  onClick={() => {
-                    if (channel.title_filter_is_regex && editTitleFilter) {
-                      try { new RegExp(editTitleFilter, "i") } catch {
-                        toast("Invalid regular expression", "error")
-                        return
-                      }
-                    }
-                    updateMutation.mutate({ title_filter: editTitleFilter || null })
-                    setEditTitleFilter(null)
-                  }}
-                  className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                >
-                  Save
-                </button>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-2">
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <button
-                  onClick={() => updateMutation.mutate({ title_filter_mode: channel.title_filter_mode === "include" ? "exclude" : "include" })}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_mode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_mode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">{channel.title_filter_mode === "exclude" ? "Exclude mode" : "Include mode"}</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <button
-                  onClick={() => updateMutation.mutate({ title_filter_is_regex: !channel.title_filter_is_regex })}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_is_regex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_is_regex ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">Regex mode</span>
-              </label>
-            </div>
-            <p className="text-xs text-muted-foreground mt-1.5">
-              {channel.title_filter_mode === "exclude" ? (
-                <>
-                  <span className="font-medium">Exclude mode:</span> Skip videos whose title matches.{" "}
-                  {channel.title_filter_is_regex ? (
-                    <>
-                      <span className="text-muted-foreground/70">Example: </span>
-                      <code className="text-[11px] bg-muted px-1 rounded">shorts|compilation</code>{" "}skips videos with "shorts" or "compilation" in the title
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-muted-foreground/70">Example: </span>
-                      <code className="text-[11px] bg-muted px-1 rounded">shorts, compilation, clip</code>{" "}skips videos containing any of those words
-                    </>
-                  )}
-                </>
-              ) : channel.title_filter_is_regex ? (
-                <>
-                  <span className="font-medium">Include + Regex:</span> Uses regular expression matching (case-insensitive).{" "}
-                  <span className="text-muted-foreground/70">Examples: </span>
-                  <code className="text-[11px] bg-muted px-1 rounded">rust|minecraft</code>{" "}matches either word, {" "}
-                  <code className="text-[11px] bg-muted px-1 rounded">rust(?!\s*bucket)</code>{" "}matches "Rust" but not "Rust Bucket"
-                </>
-              ) : (
-                <>
-                  <span className="font-medium">Include + Keyword:</span> Comma-separated list, matches if any keyword appears in the title (case-insensitive).{" "}
-                  <span className="text-muted-foreground/70">Example: </span>
-                  <code className="text-[11px] bg-muted px-1 rounded">Rust, Arc Raiders</code>{" "}downloads videos with "Rust" or "Arc Raiders" in the title
-                </>
-              )}
-            </p>
-          </div>
-
-          {/* Advanced toggle */}
-          <div className="mt-4 pt-3 border-t">
-            <button
-              onClick={toggleAdvanced}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Advanced Options
-            </button>
-          </div>
-
-          {/* Shorts Management */}
-          {showAdvanced && channel.platform === "youtube" && (
-            <div className="mt-4">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
-              <div className="space-y-3">
-                {shortsGloballyEnabled ? (
-                  <>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={channel.include_shorts}
-                        onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
-                        className="rounded"
-                      />
-                      <span className="text-sm">Include shorts when downloading</span>
-                      <HelpIcon text={`Videos under ${channel.min_video_duration || 30} seconds.`} anchor="episode-management" />
-                    </label>
-                    <p className="text-xs text-muted-foreground">
-                      {channel.include_shorts
-                        ? `Shorts (videos under ${channel.min_video_duration || 30}s) will be included in downloads.`
-                        : "Shorts are excluded from downloads for this channel."}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Shorts downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
-                  </p>
-                )}
-                <div>
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                    Shorts Threshold (seconds)
-                    <HelpIcon text="Videos shorter than this are classified as shorts. Defaults to 30." anchor="episode-management" />
-                  </label>
-                  <div className="flex gap-1 max-w-[200px]">
-                    <input
-                      type="number"
-                      value={editMinDuration ?? (channel.min_video_duration || "")}
-                      placeholder="30 (default)"
-                      onChange={(e) => setEditMinDuration(e.target.value)}
-                      className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                      min={0}
-                    />
-                    {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
-                      <button
-                        onClick={() => {
-                          updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
-                          setEditMinDuration(null)
-                        }}
-                        className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                      >
-                        Save
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => detectShortsMutation.mutate()}
-                    disabled={detectShortsMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-                  >
-                    {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
-                    Detect Shorts
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setDetectCleanLoading(true)
-                      try {
-                        const preview = await api.detectCleanShortsPreview(channelId)
-                        setDetectCleanPreview(preview)
-                        setDetectCleanOpen(true)
-                      } catch (e: any) {
-                        toast(e.message, "error")
-                      } finally {
-                        setDetectCleanLoading(false)
-                      }
-                    }}
-                    disabled={detectCleanLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-                  >
-                    {detectCleanLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListX className="h-3 w-3" />}
-                    Detect & Clean
-                  </button>
-                  <button
-                    onClick={async () => {
-                      setShortsLoading(true)
-                      setShortsDeleteOpen(true)
-                      setShortsToDelete(null)
-                      try {
-                        const res = await api.getChannelShorts(channelId, "completed")
-                        setShortsToDelete(res.items)
-                      } catch (e: any) {
-                        toast(e.message, "error")
-                        setShortsDeleteOpen(false)
-                      } finally {
-                        setShortsLoading(false)
-                      }
-                    }}
-                    disabled={deleteShortsMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-                  >
-                    {deleteShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
-                    Delete Downloaded Shorts
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Livestreams Management */}
-        {showAdvanced && channel.platform === "youtube" && (
-          <div className="mt-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
-            <div className="space-y-3">
-              {livestreamsGloballyEnabled ? (
-                <>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={channel.include_livestreams}
-                      onChange={(e) => updateMutation.mutate({ include_livestreams: e.target.checked })}
-                      className="rounded"
-                    />
-                    <span className="text-sm">Include livestreams when downloading</span>
-                    <HelpIcon text="Live streams and premieres from this channel." anchor="episode-management" />
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    {channel.include_livestreams
-                      ? "Livestreams will be included in downloads."
-                      : "Livestreams are excluded from downloads for this channel."}
-                  </p>
-                </>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Livestream downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
-                </p>
-              )}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => api.detectChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
-                >
-                  <Search className="h-3 w-3" />
-                  Detect Livestreams
-                </button>
-                <button
-                  onClick={() => api.deleteChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Delete Downloaded Livestreams
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Subtitles */}
-        {showAdvanced && (
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
-          <button
-            onClick={() => {
-              api.downloadChannelSubtitles(channelId).then((r) => toast(r.message)).catch((e: any) => toast(e.message, "error"))
-            }}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
-            title="Download subtitles for all completed videos that don't have them yet"
-          >
-            <Download className="h-3 w-3" />
-            Download Missing Subtitles
-          </button>
-          <p className="text-xs text-muted-foreground mt-1">
-            Fetches English subtitles and auto-generated captions for completed videos without existing subtitle files.
-          </p>
-        </div>
-        )}
-
-        {/* Monitoring */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Monitoring</p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Auto-Download</label>
-              <button
-                onClick={() => updateMutation.mutate({ enabled: !channel.enabled })}
-                className={`px-3 py-1.5 rounded-md text-sm ${
-                  channel.enabled
-                    ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                }`}
-              >
-                {channel.enabled ? "Active" : "Paused"}
-              </button>
-              <p className="text-xs text-muted-foreground mt-1">
-                {channel.enabled
-                  ? "New videos will be automatically queued for download."
-                  : "New videos are discovered but not queued for download."}
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs text-muted-foreground mb-1">Scan for Videos</label>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => scanMutation.mutate()}
-                  disabled={scanMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${scanMutation.isPending ? "animate-spin" : ""}`} />
-                  Scan Now
-                </button>
-                <button
-                  onClick={() => setForceRescanOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                  title="Delete all video records and re-scan from scratch"
-                >
-                  <RotateCcw className="h-3 w-3" />
-                  Force Re-scan
-                </button>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Last scan: {formatDateTime(channel.last_scanned_at)}
-                {channel.next_scan_at && (
-                  <> · Next scan: {formatDateTime(channel.next_scan_at)}</>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Videos */}
+      {/* Episodes */}
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">
-            Videos
+            Episodes
             <span className="text-sm font-normal text-muted-foreground ml-2">
-              ({totalVideos} total)
+              ({typeFilter ? `${filteredVideos.length} of ${totalVideos}` : totalVideos})
             </span>
           </h2>
         </div>
 
-        {/* Search + Filter bar */}
+        {/* Toolbar */}
         <div className="flex items-center gap-2 mb-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -921,21 +470,15 @@ export default function ChannelDetailPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Search videos by title..."
+              placeholder="Search episodes..."
               className="w-full pl-9 pr-3 py-1.5 rounded-md border bg-background text-sm"
             />
           </div>
-          <button
-            onClick={handleSearch}
-            className="px-3 py-1.5 text-sm rounded-md border hover:bg-accent"
-          >
+          <button onClick={handleSearch} className="px-3 py-1.5 text-sm rounded-md border hover:bg-accent">
             Search
           </button>
           {searchQuery && (
-            <button
-              onClick={() => { setSearchInput(""); setSearchQuery("") }}
-              className="px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground"
-            >
+            <button onClick={() => { setSearchInput(""); setSearchQuery("") }} className="px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground">
               Clear
             </button>
           )}
@@ -955,67 +498,54 @@ export default function ChannelDetailPage() {
             <option value="monitored">Monitored</option>
             <option value="unmonitored">Unmonitored</option>
           </select>
+          <select
+            value={typeFilter}
+            onChange={(e) => handleTypeChange(e.target.value)}
+            className="px-2 py-1.5 rounded-md border bg-background text-sm"
+          >
+            <option value="">All Types</option>
+            <option value="regular">Regular</option>
+            <option value="short">Shorts</option>
+            <option value="livestream">Livestreams</option>
+          </select>
         </div>
 
         {/* Bulk action bar */}
         {selectedCount > 0 && (
-          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg border bg-muted/50">
+          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg border bg-muted/50 flex-wrap">
             <span className="text-sm font-medium">{selectedCount} selected</span>
             <div className="h-4 w-px bg-border" />
-            <button
-              onClick={() => bulkQueueMutation.mutate([...selectedVideoIds])}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-            >
-              <Play className="h-3 w-3" />
-              Queue Selected
+            <button onClick={() => bulkQueueMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              <Play className="h-3 w-3" /> Queue
             </button>
-            <button
-              onClick={() => bulkSkipMutation.mutate([...selectedVideoIds])}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-            >
-              <SkipForward className="h-3 w-3" />
-              Skip Selected
+            <button onClick={() => bulkSkipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              <SkipForward className="h-3 w-3" /> Skip
             </button>
-            <button
-              onClick={() => bulkUnskipMutation.mutate([...selectedVideoIds])}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-            >
-              <RotateCcw className="h-3 w-3" />
-              Unskip Selected
+            <button onClick={() => bulkUnskipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              <RotateCcw className="h-3 w-3" /> Unskip
             </button>
-            <button
-              onClick={() => bulkMonitorMutation.mutate({ monitored: true })}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-            >
-              <Bookmark className="h-3 w-3" />
-              Monitor
+            <button onClick={() => bulkMonitorMutation.mutate({ monitored: true })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              <Bookmark className="h-3 w-3" /> Monitor
             </button>
-            <button
-              onClick={() => bulkMonitorMutation.mutate({ monitored: false })}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
-            >
-              <BookmarkX className="h-3 w-3" />
-              Unmonitor
+            <button onClick={() => bulkMonitorMutation.mutate({ monitored: false })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              <BookmarkX className="h-3 w-3" /> Unmonitor
             </button>
-            <button
-              onClick={() => bulkDeleteMutation.mutate({ ids: [...selectedVideoIds], deleteFiles: true })}
-              disabled={isBulkLoading}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
-            >
-              <Trash2 className="h-3 w-3" />
-              Delete Selected
+            <div className="h-4 w-px bg-border" />
+            <button onClick={() => bulkReclassifyMutation.mutate({ setShort: true, setLivestream: false })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              Mark Short
             </button>
-            <button
-              onClick={() => setSelectedVideoIds(new Set())}
-              className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md text-muted-foreground hover:text-foreground"
-            >
-              <ListX className="h-3 w-3" />
-              Clear Selection
+            <button onClick={() => bulkReclassifyMutation.mutate({ setLivestream: true, setShort: false })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              Mark Livestream
+            </button>
+            <button onClick={() => bulkReclassifyMutation.mutate({ setShort: false, setLivestream: false })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              Mark Regular
+            </button>
+            <div className="h-4 w-px bg-border" />
+            <button onClick={() => bulkDeleteMutation.mutate({ ids: [...selectedVideoIds], deleteFiles: true })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+              <Trash2 className="h-3 w-3" /> Delete
+            </button>
+            <button onClick={() => setSelectedVideoIds(new Set())} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md text-muted-foreground hover:text-foreground">
+              <X className="h-3 w-3" /> Clear
             </button>
             {isBulkLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
           </div>
@@ -1023,7 +553,7 @@ export default function ChannelDetailPage() {
 
         {videosLoading && !videosData ? (
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
-        ) : videos.length > 0 ? (
+        ) : filteredVideos.length > 0 ? (
           <>
             <div className="rounded-lg border overflow-hidden">
               <table className="w-full text-sm">
@@ -1031,7 +561,7 @@ export default function ChannelDetailPage() {
                   <tr>
                     <th className="px-3 py-2 w-8">
                       <button onClick={toggleSelectAll} className="hover:text-foreground text-muted-foreground">
-                        {selectedCount === videos.length && videos.length > 0 ? (
+                        {selectedCount === filteredVideos.length && filteredVideos.length > 0 ? (
                           <CheckSquare className="h-4 w-4 text-primary" />
                         ) : (
                           <Square className="h-4 w-4" />
@@ -1054,10 +584,11 @@ export default function ChannelDetailPage() {
                       const isCollapsed = !expandedSeasons.has(season)
                       const downloaded = seasonVideos.filter((v: any) => v.status === "completed").length
                       const monitored = seasonVideos.filter((v: any) => v.monitored).length
+                      const seasonSize = seasonVideos.reduce((sum: number, v: any) => sum + (v.file_size || 0), 0)
+                      const pct = seasonVideos.length > 0 ? Math.round((downloaded / seasonVideos.length) * 100) : 0
 
                       const rows: React.ReactNode[] = []
 
-                      // Season header row
                       rows.push(
                         <tr key={`season-${season}`} className="bg-muted/30">
                           <td colSpan={8} className="px-3 py-2">
@@ -1073,54 +604,63 @@ export default function ChannelDetailPage() {
                                 <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                                 <span className="font-semibold text-sm">Season {season}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {downloaded}/{seasonVideos.length} downloaded, {monitored} monitored
+                                  {downloaded}/{seasonVideos.length} episodes
+                                  {seasonSize > 0 && <> &middot; {formatBytes(seasonSize)}</>}
+                                  {` · ${monitored} monitored`}
                                 </span>
                               </button>
-                              <div className="flex items-center gap-1">
-                                {(() => {
-                                  const seasonIds = seasonVideos.map((v: any) => v.id)
-                                  const allSelected = seasonIds.every((id: number) => selectedVideoIds.has(id))
-                                  return (
-                                    <button
-                                      onClick={() => {
-                                        setSelectedVideoIds(prev => {
-                                          const next = new Set(prev)
-                                          if (allSelected) {
-                                            seasonIds.forEach((id: number) => next.delete(id))
-                                          } else {
-                                            seasonIds.forEach((id: number) => next.add(id))
-                                          }
-                                          return next
-                                        })
-                                      }}
-                                      className={`px-2 py-0.5 text-xs rounded border hover:bg-accent ${allSelected ? "bg-primary/10 border-primary/30 text-primary" : ""}`}
-                                      title={allSelected ? "Deselect all in this season" : "Select all in this season"}
-                                    >
-                                      {allSelected ? "Deselect" : "Select"}
-                                    </button>
-                                  )
-                                })()}
-                                <button
-                                  onClick={() => { api.monitorSeason(channelId, season, true).then(() => invalidateVideos()) }}
-                                  className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
-                                  title="Monitor all in this season"
-                                >
-                                  Monitor
-                                </button>
-                                <button
-                                  onClick={() => { api.downloadMissingSeason(channelId, season).then((r) => { invalidateVideos(); toast(r.message) }) }}
-                                  className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
-                                  title="Download all monitored missing videos in this season"
-                                >
-                                  Download Missing
-                                </button>
+                              <div className="flex items-center gap-2">
+                                <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden" title={`${pct}% downloaded`}>
+                                  <div
+                                    className="h-full bg-primary rounded-full transition-all"
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  {(() => {
+                                    const seasonIds = seasonVideos.map((v: any) => v.id)
+                                    const allSelected = seasonIds.every((id: number) => selectedVideoIds.has(id))
+                                    return (
+                                      <button
+                                        onClick={() => {
+                                          setSelectedVideoIds(prev => {
+                                            const next = new Set(prev)
+                                            if (allSelected) {
+                                              seasonIds.forEach((id: number) => next.delete(id))
+                                            } else {
+                                              seasonIds.forEach((id: number) => next.add(id))
+                                            }
+                                            return next
+                                          })
+                                        }}
+                                        className={`px-2 py-0.5 text-xs rounded border hover:bg-accent ${allSelected ? "bg-primary/10 border-primary/30 text-primary" : ""}`}
+                                        title={allSelected ? "Deselect all in this season" : "Select all in this season"}
+                                      >
+                                        {allSelected ? "Deselect" : "Select"}
+                                      </button>
+                                    )
+                                  })()}
+                                  <button
+                                    onClick={() => { api.monitorSeason(channelId, season, true).then(() => invalidateVideos()) }}
+                                    className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
+                                    title="Monitor all in this season"
+                                  >
+                                    Monitor
+                                  </button>
+                                  <button
+                                    onClick={() => { api.downloadMissingSeason(channelId, season).then((r) => { invalidateVideos(); toast(r.message) }) }}
+                                    className="px-2 py-0.5 text-xs rounded border hover:bg-accent"
+                                    title="Download all monitored missing videos in this season"
+                                  >
+                                    Download Missing
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </td>
                         </tr>
                       )
 
-                      // Video rows (if not collapsed)
                       if (!isCollapsed) {
                         seasonVideos.forEach((video: any) => {
                           const globalIdx = videoIndexMap.get(video.id) ?? 0
@@ -1141,7 +681,11 @@ export default function ChannelDetailPage() {
                         <td className="px-3 py-2 text-muted-foreground">
                           S{video.season}E{String(video.episode).padStart(3, "0")}
                         </td>
-                        <td className="px-3 py-2 max-w-xs truncate" title={video.title}>{video.title}</td>
+                        <td className="px-3 py-2 max-w-xs truncate" title={video.title}>
+                          {video.title}
+                          {video.is_short && <span className="ml-1.5 px-1 py-0.5 text-[10px] rounded bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400">SHORT</span>}
+                          {video.is_livestream && <span className="ml-1.5 px-1 py-0.5 text-[10px] rounded bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400">LIVE</span>}
+                        </td>
                         <td className="px-3 py-2 text-muted-foreground">{formatDate(video.upload_date)}</td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {video.duration ? formatDuration(video.duration) : "-"}
@@ -1225,12 +769,479 @@ export default function ChannelDetailPage() {
           </>
         ) : (
           <p className="text-center py-8 text-muted-foreground">
-            {searchQuery || statusFilter
-              ? "No videos match your search/filter."
+            {searchQuery || statusFilter || typeFilter
+              ? "No episodes match your filters."
               : "No videos found. Try scanning the channel."}
           </p>
         )}
       </div>
+
+      {/* Edit Channel Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setEditModalOpen(false)}>
+          <div className="bg-card border rounded-lg shadow-lg w-full max-w-2xl max-h-[85vh] flex flex-col mx-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Edit Channel</h3>
+              <button onClick={() => setEditModalOpen(false)} className="p-1 hover:bg-accent rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {/* Download Settings */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Download Settings</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Quality <HelpIcon text="Target quality for new downloads. Also used as the cutoff for upgrade searches." anchor="channel-management" /></label>
+                    <div className="flex gap-1">
+                      <select
+                        value={channel.quality}
+                        onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
+                        className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                      >
+                        <option value="best">Best Available</option>
+                        <option value="2160p">4K (2160p)</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                      </select>
+                      <button
+                        onClick={() => api.upgradeQuality(channelId).then((r) => { invalidateVideos(); toast(r.message) })}
+                        className="px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap"
+                        title="Re-queue completed videos below the target quality"
+                      >
+                        Search Upgrades
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Minimum Quality <HelpIcon text="Skip videos if the best available quality is below this threshold. Leave as 'None' to download regardless of quality." anchor="channel-management" /></label>
+                    <select
+                      value={channel.min_quality || ""}
+                      onChange={(e) => updateMutation.mutate({ min_quality: e.target.value || null })}
+                      className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                    >
+                      <option value="">None (download any quality)</option>
+                      <option value="2160p">4K (2160p)</option>
+                      <option value="1080p">1080p</option>
+                      <option value="720p">720p</option>
+                      <option value="480p">480p</option>
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
+                    <div className="flex gap-1">
+                      <input
+                        type="text"
+                        value={editDownloadDir ?? channel.download_dir ?? ""}
+                        placeholder="/downloads (default)"
+                        onChange={(e) => setEditDownloadDir(e.target.value)}
+                        className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                      />
+                      {editDownloadDir !== null && editDownloadDir !== (channel.download_dir ?? "") && (
+                        <>
+                        <button
+                          onClick={() => {
+                            updateMutation.mutate({ download_dir: editDownloadDir || null })
+                            setEditDownloadDir(null)
+                          }}
+                          className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const targetDir = editDownloadDir || "/downloads"
+                            setMovingFiles(true)
+                            try {
+                              const preview = await api.moveFilesPreview(channelId, targetDir)
+                              if (preview.same_path) {
+                                toast("Files are already in that directory")
+                                return
+                              }
+                              setMovePreview(preview)
+                              setMovePreviewOpen(true)
+                            } catch (e: any) {
+                              toast(e.message, "error")
+                            } finally {
+                              setMovingFiles(false)
+                            }
+                          }}
+                          disabled={movingFiles}
+                          className="flex items-center gap-1 px-2 py-1.5 text-xs rounded-md border hover:bg-accent whitespace-nowrap disabled:opacity-50"
+                          title="Preview and move existing files to the new directory"
+                        >
+                          {movingFiles ? <><Loader2 className="h-3 w-3 animate-spin" /> Loading...</> : "Save & Move"}
+                        </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Year Filter */}
+              <div>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans — already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
+                <div className="flex gap-1 max-w-xs">
+                  <input
+                    type="number"
+                    min="2005"
+                    max={new Date().getFullYear()}
+                    value={editFromYear ?? (channel.download_from_year || "")}
+                    placeholder="All years"
+                    onChange={(e) => setEditFromYear(e.target.value)}
+                    className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+                  />
+                  {editFromYear !== null && editFromYear !== String(channel.download_from_year || "") && (
+                    <button
+                      onClick={() => {
+                        updateMutation.mutate({ download_from_year: Number(editFromYear) || null })
+                        setEditFromYear(null)
+                      }}
+                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Title Filter */}
+              <div>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                  Title Filter
+                  <HelpIcon text="Filter videos by title. Include mode downloads only matching videos. Exclude mode skips matching videos. Leave empty to download all. Works on future scans only." anchor="channel-management" />
+                </label>
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    value={editTitleFilter ?? channel.title_filter ?? ""}
+                    placeholder={channel.title_filter_is_regex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
+                    onChange={(e) => setEditTitleFilter(e.target.value)}
+                    className="flex-1 px-2 py-1.5 rounded-md border bg-background text-sm"
+                  />
+                  {editTitleFilter !== null && editTitleFilter !== (channel.title_filter ?? "") && (
+                    <button
+                      onClick={() => {
+                        if (channel.title_filter_is_regex && editTitleFilter) {
+                          try { new RegExp(editTitleFilter, "i") } catch {
+                            toast("Invalid regular expression", "error")
+                            return
+                          }
+                        }
+                        updateMutation.mutate({ title_filter: editTitleFilter || null })
+                        setEditTitleFilter(null)
+                      }}
+                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-3 mt-2">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <button
+                      onClick={() => updateMutation.mutate({ title_filter_mode: channel.title_filter_mode === "include" ? "exclude" : "include" })}
+                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_mode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_mode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className="text-xs text-muted-foreground">{channel.title_filter_mode === "exclude" ? "Exclude mode" : "Include mode"}</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <button
+                      onClick={() => updateMutation.mutate({ title_filter_is_regex: !channel.title_filter_is_regex })}
+                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_is_regex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_is_regex ? "translate-x-4" : "translate-x-0.5"}`} />
+                    </button>
+                    <span className="text-xs text-muted-foreground">Regex mode</span>
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1.5">
+                  {channel.title_filter_mode === "exclude" ? (
+                    <>
+                      <span className="font-medium">Exclude mode:</span> Skip videos whose title matches.{" "}
+                      {channel.title_filter_is_regex ? (
+                        <>
+                          <span className="text-muted-foreground/70">Example: </span>
+                          <code className="text-[11px] bg-muted px-1 rounded">shorts|compilation</code>{" "}skips videos with "shorts" or "compilation" in the title
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-muted-foreground/70">Example: </span>
+                          <code className="text-[11px] bg-muted px-1 rounded">shorts, compilation, clip</code>{" "}skips videos containing any of those words
+                        </>
+                      )}
+                    </>
+                  ) : channel.title_filter_is_regex ? (
+                    <>
+                      <span className="font-medium">Include + Regex:</span> Uses regular expression matching (case-insensitive).{" "}
+                      <span className="text-muted-foreground/70">Examples: </span>
+                      <code className="text-[11px] bg-muted px-1 rounded">rust|minecraft</code>{" "}matches either word, {" "}
+                      <code className="text-[11px] bg-muted px-1 rounded">rust(?!\s*bucket)</code>{" "}matches "Rust" but not "Rust Bucket"
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-medium">Include + Keyword:</span> Comma-separated list, matches if any keyword appears in the title (case-insensitive).{" "}
+                      <span className="text-muted-foreground/70">Example: </span>
+                      <code className="text-[11px] bg-muted px-1 rounded">Rust, Arc Raiders</code>{" "}downloads videos with "Rust" or "Arc Raiders" in the title
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Monitoring */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monitoring</p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Auto-Download</label>
+                    <button
+                      onClick={() => updateMutation.mutate({ enabled: !channel.enabled })}
+                      className={`px-3 py-1.5 rounded-md text-sm ${
+                        channel.enabled
+                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                      }`}
+                    >
+                      {channel.enabled ? "Active" : "Paused"}
+                    </button>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {channel.enabled
+                        ? "New videos will be automatically queued for download."
+                        : "New videos are discovered but not queued for download."}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Scan for Videos</label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => scanMutation.mutate()}
+                        disabled={scanMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${scanMutation.isPending ? "animate-spin" : ""}`} />
+                        Scan Now
+                      </button>
+                      <button
+                        onClick={() => setForceRescanOpen(true)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                        title="Delete all video records and re-scan from scratch"
+                      >
+                        <RotateCcw className="h-3 w-3" />
+                        Force Re-scan
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Last scan: {formatDateTime(channel.last_scanned_at)}
+                      {channel.next_scan_at && (
+                        <> &middot; Next scan: {formatDateTime(channel.next_scan_at)}</>
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Advanced toggle */}
+              <div className="pt-3 border-t">
+                <button
+                  onClick={toggleAdvanced}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {showAdvanced ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                  Advanced Options
+                </button>
+              </div>
+
+              {/* Shorts Management */}
+              {showAdvanced && channel.platform === "youtube" && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
+                  <div className="space-y-3">
+                    {shortsGloballyEnabled ? (
+                      <>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={channel.include_shorts}
+                            onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">Include shorts when downloading</span>
+                          <HelpIcon text={`Videos under ${channel.min_video_duration || 30} seconds.`} anchor="episode-management" />
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {channel.include_shorts
+                            ? `Shorts (videos under ${channel.min_video_duration || 30}s) will be included in downloads.`
+                            : "Shorts are excluded from downloads for this channel."}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Shorts downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
+                      </p>
+                    )}
+                    <div>
+                      <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                        Shorts Threshold (seconds)
+                        <HelpIcon text="Videos shorter than this are classified as shorts. Defaults to 30." anchor="episode-management" />
+                      </label>
+                      <div className="flex gap-1 max-w-[200px]">
+                        <input
+                          type="number"
+                          value={editMinDuration ?? (channel.min_video_duration || "")}
+                          placeholder="30 (default)"
+                          onChange={(e) => setEditMinDuration(e.target.value)}
+                          className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                          min={0}
+                        />
+                        {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
+                          <button
+                            onClick={() => {
+                              updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
+                              setEditMinDuration(null)
+                            }}
+                            className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                          >
+                            Save
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => detectShortsMutation.mutate()}
+                        disabled={detectShortsMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+                      >
+                        {detectShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                        Detect Shorts
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setDetectCleanLoading(true)
+                          try {
+                            const preview = await api.detectCleanShortsPreview(channelId)
+                            setDetectCleanPreview(preview)
+                            setDetectCleanOpen(true)
+                          } catch (e: any) {
+                            toast(e.message, "error")
+                          } finally {
+                            setDetectCleanLoading(false)
+                          }
+                        }}
+                        disabled={detectCleanLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
+                      >
+                        {detectCleanLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ListX className="h-3 w-3" />}
+                        Detect & Clean
+                      </button>
+                      <button
+                        onClick={async () => {
+                          setShortsLoading(true)
+                          setShortsDeleteOpen(true)
+                          setShortsToDelete(null)
+                          try {
+                            const res = await api.getChannelShorts(channelId, "completed")
+                            setShortsToDelete(res.items)
+                          } catch (e: any) {
+                            toast(e.message, "error")
+                            setShortsDeleteOpen(false)
+                          } finally {
+                            setShortsLoading(false)
+                          }
+                        }}
+                        disabled={deleteShortsMutation.isPending}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                      >
+                        {deleteShortsMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        Delete Downloaded Shorts
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Livestreams Management */}
+              {showAdvanced && channel.platform === "youtube" && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
+                  <div className="space-y-3">
+                    {livestreamsGloballyEnabled ? (
+                      <>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={channel.include_livestreams}
+                            onChange={(e) => updateMutation.mutate({ include_livestreams: e.target.checked })}
+                            className="rounded"
+                          />
+                          <span className="text-sm">Include livestreams when downloading</span>
+                          <HelpIcon text="Live streams and premieres from this channel." anchor="episode-management" />
+                        </label>
+                        <p className="text-xs text-muted-foreground">
+                          {channel.include_livestreams
+                            ? "Livestreams will be included in downloads."
+                            : "Livestreams are excluded from downloads for this channel."}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Livestream downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => api.detectChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
+                      >
+                        <Search className="h-3 w-3" />
+                        Detect Livestreams
+                      </button>
+                      <button
+                        onClick={() => api.deleteChannelLivestreams(channelId).then((r) => { invalidateVideos(); toast(r.message) }).catch((e: any) => toast(e.message, "error"))}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Delete Downloaded Livestreams
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Subtitles */}
+              {showAdvanced && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
+                <button
+                  onClick={() => {
+                    api.downloadChannelSubtitles(channelId).then((r) => toast(r.message)).catch((e: any) => toast(e.message, "error"))
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border hover:bg-accent"
+                  title="Download subtitles for all completed videos that don't have them yet"
+                >
+                  <Download className="h-3 w-3" />
+                  Download Missing Subtitles
+                </button>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fetches English subtitles and auto-generated captions for completed videos without existing subtitle files.
+                </p>
+              </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t flex justify-end">
+              <button onClick={() => setEditModalOpen(false)} className="px-4 py-2 text-sm rounded-md border hover:bg-accent">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Shorts Confirmation Modal */}
       {shortsDeleteOpen && (
@@ -1349,7 +1360,6 @@ export default function ChannelDetailPage() {
             </div>
 
             <div className="p-4 space-y-4 overflow-y-auto flex-1">
-              {/* Scan input */}
               <div>
                 <label className="block text-sm font-medium mb-1">Folder path (on server)</label>
                 <div className="flex gap-2">
@@ -1387,7 +1397,6 @@ export default function ChannelDetailPage() {
                 </p>
               </div>
 
-              {/* Match results */}
               {importMatches && importMatches.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -1457,7 +1466,6 @@ export default function ChannelDetailPage() {
               )}
             </div>
 
-            {/* Footer */}
             {importMatches && importMatches.length > 0 && (
               <div className="p-4 border-t flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">{importSelected.size} of {importMatches.length} selected</p>
@@ -1471,9 +1479,6 @@ export default function ChannelDetailPage() {
                         .map((m: any) => ({ file_path: m.file_path, matched_video_id: m.matched_video_id }))
                       const res = await api.importConfirm(channelId, selectedMatches)
                       toast(`Imported ${res.imported} videos${res.errors.length > 0 ? ` (${res.errors.length} errors)` : ""}`)
-                      if (res.errors.length > 0) {
-                        // errors are shown in the toast above
-                      }
                       invalidateVideos()
                       queryClient.invalidateQueries({ queryKey: ["download-queue"] })
                       setImportOpen(false)
