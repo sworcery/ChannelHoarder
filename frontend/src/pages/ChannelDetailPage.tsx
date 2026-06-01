@@ -101,6 +101,8 @@ export default function ChannelDetailPage() {
   const videos = videosData?.items || []
   const totalVideos = videosData?.total || 0
 
+  const totalChannelSize = useMemo(() => videos.reduce((sum: number, v: any) => sum + (v.file_size || 0), 0), [videos])
+
   const filteredVideos = useMemo(() => {
     if (!typeFilter) return videos
     switch (typeFilter) {
@@ -376,6 +378,12 @@ export default function ChannelDetailPage() {
 
           <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
             <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
+            {totalChannelSize > 0 && (
+              <>
+                <span className="text-border">|</span>
+                <span>{formatBytes(totalChannelSize)}</span>
+              </>
+            )}
             <span className="text-border">|</span>
             <span>Quality: {channel.quality}</span>
             <span className="text-border">|</span>
