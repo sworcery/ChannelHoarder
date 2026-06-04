@@ -169,6 +169,11 @@ class YtdlpService:
                     entry["_source_tab"] = tab
                     if "url" not in entry and "webpage_url" in entry:
                         entry["url"] = entry["webpage_url"]
+                    if not entry.get("id") and not entry.get("video_id") and entry.get("webpage_url"):
+                        from urllib.parse import urlparse
+                        path = urlparse(entry["webpage_url"]).path.strip("/")
+                        if path:
+                            entry["id"] = path.split(".")[0] if "." in path else path
                 logger.info("Full extraction found %d entries for %s", len(entries), target_url)
                 return entries
         except Exception as e:
