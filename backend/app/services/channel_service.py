@@ -26,6 +26,21 @@ logger = logging.getLogger(__name__)
 # Track channels currently being scanned to prevent concurrent scan races
 _scanning_channels: set[int] = set()
 
+# Placeholder titles yt-dlp returns for videos that can't be downloaded (private,
+# deleted, or otherwise unavailable). These appear as real entries in flat playlist
+# extraction and must be skipped so they don't get stored as videos.
+_UNAVAILABLE_TITLES = {"[private video]", "[deleted video]", "[unavailable video]"}
+_UNAVAILABLE_AVAILABILITY = {"private", "deleted"}
+
+
+def _is_unavailable_entry(entry: dict) -> bool:
+    """Return True if a playlist entry is for a private/deleted/unavailable video."""
+    title = (entry.get("title") or "").strip().lower()
+    if title in _UNAVAILABLE_TITLES:
+        return True
+    availability = (entry.get("availability") or "").strip().lower()
+    return availability in _UNAVAILABLE_AVAILABILITY
+
 
 class ChannelService:
     def __init__(self, db: AsyncSession):
@@ -284,11 +299,19 @@ class ChannelService:
 
         # First pass: identify new video IDs
         new_entries = []
+        skipped_unavailable = 0
         for entry in video_list:
             vid_id = entry.get("id") or entry.get("video_id", "")
             if not vid_id or vid_id in existing_ids:
                 continue
+            if _is_unavailable_entry(entry):
+                skipped_unavailable += 1
+                continue
             new_entries.append(entry)
+
+        if skipped_unavailable:
+            logger.info("Skipped %d private/deleted/unavailable video(s) for %s",
+                        skipped_unavailable, channel.channel_name)
 
         # Fetch upload dates from RSS feed (free, no auth, covers ~15 recent videos  - YouTube only)
         rss_dates = await asyncio.to_thread(

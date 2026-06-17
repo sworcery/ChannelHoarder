@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.5] - 2026-06-17
+
+### Fixed
+- **Private/deleted videos showing in playlists** - When scanning a YouTube playlist, private, deleted, and unavailable videos were stored as real entries with placeholder titles like "[Private video]". These are now skipped during scans, and the number skipped is logged.
+- **Cookie watcher error spam** - When `/cookies` and `/config` are mounted to overlapping paths, the cookie importer logged a "same file" error every interval. It now detects this case and skips quietly.
+
 ## [1.9.4] - 2026-06-17
 
 ### Fixed

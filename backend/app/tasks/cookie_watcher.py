@@ -52,6 +52,16 @@ async def watch_cookie_file() -> None:
     # Move to the config cookies.txt location
     dest = settings.cookies_path
     dest.parent.mkdir(parents=True, exist_ok=True)
+
+    # When /cookies and /config are mounted to overlapping paths, the source and
+    # destination resolve to the same file. Nothing to import in that case - skip
+    # quietly instead of logging a copy error every interval.
+    try:
+        if source.samefile(dest):
+            return
+    except OSError:
+        pass
+
     try:
         shutil.copy2(str(source), str(dest))
         source.unlink()
