@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.4] - 2026-06-17
+
+### Fixed
+- **Channel "More" menu clipping** - The three-dot action menu on the channel page was being cut off by its container. It now renders in a portal above all other content and is no longer clipped.
+
 ## [1.9.3] - 2026-05-31
 
 ### Added
