@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.8] - 2026-06-18
+
+### Documentation
+- Updated the README to reflect the player client changes: added a "Player Client Selection" feature note, a `FORMAT_UNAVAILABLE` error-table row, and a troubleshooting entry for "Requested format is not available". Corrected the download pipeline description (player client is now auto-selected by default) and added 4K/2160p to the per-channel quality options.
+
 ## [1.9.7] - 2026-06-18
 
 ### Fixed

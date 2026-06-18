@@ -23,7 +23,7 @@
 - **Auto-Scan on Add** - Optionally trigger an immediate scan when adding a new channel
 - **Auto-Download Toggle** - Choose whether new videos are automatically queued or left as pending for manual selection
 - **Channel Health Indicators** - Green/yellow/red status showing each channel's download success rate
-- **Per-Channel Quality** - Set download quality independently for each channel (best, 1080p, 720p, 480p)
+- **Per-Channel Quality** - Set download quality independently for each channel (best, 4K/2160p, 1080p, 720p, 480p)
 - **Quality Cutoff** - Set minimum acceptable quality per channel with upgrade detection and search
 - **Per-Channel Download Directories** - Route channels to different storage locations
 - **Minimum Duration Filter** - Per-channel setting to skip videos shorter than a configurable duration
@@ -64,6 +64,7 @@
 - **Browser Cookie Sync** - Tampermonkey userscript exports cookies on each YouTube page load
 - **Manual Cookie Upload** - Upload a cookies.txt file directly
 - **YouTube Data API** - Optional API key for faster, more reliable channel discovery and thumbnails
+- **Player Client Selection** - Choose which YouTube client yt-dlp uses, or leave on Default (automatic) so it picks a working client and adapts as YouTube changes
 - **In-App Help** - Hover tooltips throughout settings with setup guides for API keys, cookies, and configuration
 
 ### Anti-Detection
@@ -164,7 +165,7 @@ docker compose pull && docker compose up -d
 
 1. **Queue Processing**  - Every 30 seconds, the next queued video is picked up
 2. **Rate Limiting**  - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
-3. **Download**  - yt-dlp downloads the video using the configured player client with PO tokens, plus thumbnail and metadata
+3. **Download**  - yt-dlp downloads the video with PO tokens, plus thumbnail and metadata. By default yt-dlp auto-selects a working player client; a specific client can be forced in Settings → Authentication
 4. **Naming**  - Files are renamed to the Plex-compatible format with season/episode numbering
 5. **Verification**  - Output files are verified to exist and the database is updated
 6. **Progress**  - Real-time progress (speed, ETA, percentage) is broadcast via WebSocket to connected browsers
@@ -190,6 +191,7 @@ When a download fails, ChannelHoarder classifies the error and provides actionab
 | `RATE_LIMITED` | YouTube is throttling requests | Increases delay automatically |
 | `GEO_BLOCKED` | Video not available in your region | No |
 | `VIDEO_UNAVAILABLE` | Video was deleted or made private | No |
+| `FORMAT_UNAVAILABLE` | No downloadable format (player client hit a DRM/SABR restriction) | Retries; set player client to Default (automatic) if persistent |
 | `PO_TOKEN_FAILURE` | PO token server is not responding | Retries after health check |
 | `YTDLP_OUTDATED` | yt-dlp needs an update | Auto-updates daily |
 | `FFMPEG_ERROR` | Post-processing failed | Retries up to 3 times |
@@ -468,6 +470,12 @@ All endpoints are under `/api/v1/`:
 - Your session has been flagged  - try uploading fresh cookies
 - Adding a YouTube Data API key improves reliability
 - Wait 1–2 hours if recently rate-limited
+
+**Downloads failing with "Requested format is not available"**
+- YouTube restricts certain player clients (DRM-protected or URL-less SABR formats), leaving nothing downloadable
+- Set the player client to **Default (automatic)** in Settings → Authentication so yt-dlp picks a working client and adapts to YouTube's changes
+- If a specific video still fails, try `ios` or `web_safari` from the same dropdown
+- Make sure yt-dlp is up to date (Settings → yt-dlp)
 
 **Plex not showing downloaded videos**
 - Ensure your `/downloads` path is added as a **TV Shows** library in Plex
