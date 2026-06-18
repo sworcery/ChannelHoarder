@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.7] - 2026-06-18
+
+### Fixed
+- **Downloads still failing with "Requested format is not available"** - Forcing a single player client (`tv` in 1.9.6, `mweb` before) is unreliable because YouTube runs per-client experiments - `tv` is currently DRM-walled and `web`/`mweb` return URL-less SABR formats. The default no longer forces a client and instead lets yt-dlp use its own regularly-updated client set, which tries several and skips formats that can't be downloaded. If you manually selected a client, set it back to **Default (automatic)** in Settings > Authentication.
+
+### Changed
+- Player client selector default relabeled to **Default (automatic)** and now offers `web_safari`. Help text and the format-error message updated to recommend leaving it on automatic.
+
 ## [1.9.6] - 2026-06-18
 
 ### Fixed

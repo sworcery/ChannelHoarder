@@ -429,9 +429,11 @@ class YtdlpService:
         if platform == "youtube":
             player_client = settings.YTDLP_PLAYER_CLIENT
             if player_client == "default":
-                # tv is the most reliable client against YouTube's SABR streaming
-                # rollout; mweb increasingly returns incomplete format sets.
-                yt_args = {"player_client": ["tv"]}
+                # Don't force a single client. YouTube runs per-client experiments
+                # (DRM on tv, SABR on web/mweb) that break any one hardcoded client,
+                # so let yt-dlp use its own regularly-updated client set, which tries
+                # several and skips formats that aren't downloadable.
+                yt_args = {}
             else:
                 yt_args = {"player_client": player_client.split(",")}
 

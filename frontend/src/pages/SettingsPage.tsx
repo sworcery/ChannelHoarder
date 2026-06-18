@@ -677,7 +677,7 @@ function AuthTab() {
         <div className="flex items-center gap-2">
           <Key className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">yt-dlp Player Client</h3>
-          <HelpIcon text="The YouTube client yt-dlp impersonates when fetching formats. If downloads fail with 'Requested format is not available', try a different client. 'tv' is the most reliable default." anchor="player-client" />
+          <HelpIcon text="The YouTube client yt-dlp uses when fetching formats. Leave on Default (automatic) - yt-dlp picks a working client and adapts to YouTube's changes. Only override if a specific video fails; 'ios' and 'web_safari' are good fallbacks." anchor="player-client" />
         </div>
         <p className="text-sm text-muted-foreground">
           Controls which YouTube player API yt-dlp uses to list downloadable formats. Change this if downloads fail with a format error.
@@ -689,12 +689,13 @@ function AuthTab() {
             disabled={authLoading || playerClientMutation.isPending}
             className="flex-1 px-3 py-2 rounded-md border bg-background text-sm disabled:opacity-50"
           >
-            <option value="default">Default (tv)</option>
+            <option value="default">Default (automatic - recommended)</option>
+            <option value="ios">ios</option>
+            <option value="web_safari">web_safari</option>
             <option value="tv">tv</option>
             <option value="web">web</option>
             <option value="web_creator">web_creator</option>
             <option value="mweb">mweb</option>
-            <option value="ios">ios</option>
             <option value="android">android</option>
             <option value="android_vr">android_vr</option>
             <option value="mediaconnect">mediaconnect</option>

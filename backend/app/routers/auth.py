@@ -173,8 +173,8 @@ async def set_api_key(api_key: str):
 @router.put("/player-client")
 async def set_player_client(strategy: str):
     """Set yt-dlp player client strategy."""
-    valid_clients = {"default", "web", "web_creator", "mweb", "android", "android_vr",
-                     "ios", "tv", "mediaconnect"}
+    valid_clients = {"default", "web", "web_safari", "web_creator", "mweb", "android",
+                     "android_vr", "ios", "tv", "mediaconnect"}
     parts = [p.strip() for p in strategy.split(",")]
     for part in parts:
         if part not in valid_clients:
