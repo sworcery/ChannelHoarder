@@ -432,6 +432,12 @@ function AuthTab() {
     onSuccess: () => { refetchAuth(); toast("Cookies removed") },
   })
 
+  const playerClientMutation = useMutation({
+    mutationFn: (strategy: string) => api.setPlayerClient(strategy),
+    onSuccess: (data: any) => { refetchAuth(); toast(data.message || "Player client updated") },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const isExpired = authStatus?.cookies_status === "expired"
   const hasCookies = authStatus?.cookies_status === "present" || authStatus?.cookies_status === "warning" || isExpired
 
@@ -664,6 +670,36 @@ function AuthTab() {
         {apiKeyMutation.error && (
           <p className="text-sm text-red-500">{(apiKeyMutation.error as Error).message}</p>
         )}
+      </div>
+
+      {/* yt-dlp Player Client */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <Key className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold">yt-dlp Player Client</h3>
+          <HelpIcon text="The YouTube client yt-dlp impersonates when fetching formats. If downloads fail with 'Requested format is not available', try a different client. 'tv' is the most reliable default." anchor="player-client" />
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Controls which YouTube player API yt-dlp uses to list downloadable formats. Change this if downloads fail with a format error.
+        </p>
+        <div className="flex gap-2">
+          <select
+            value={authStatus?.player_client || "default"}
+            onChange={(e) => playerClientMutation.mutate(e.target.value)}
+            disabled={authLoading || playerClientMutation.isPending}
+            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm disabled:opacity-50"
+          >
+            <option value="default">Default (tv)</option>
+            <option value="tv">tv</option>
+            <option value="web">web</option>
+            <option value="web_creator">web_creator</option>
+            <option value="mweb">mweb</option>
+            <option value="ios">ios</option>
+            <option value="android">android</option>
+            <option value="android_vr">android_vr</option>
+            <option value="mediaconnect">mediaconnect</option>
+          </select>
+        </div>
       </div>
     </div>
   )

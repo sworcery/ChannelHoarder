@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6] - 2026-06-18
+
+### Fixed
+- **Downloads failing with "Requested format is not available"** - The default yt-dlp player client (`mweb`) increasingly returns incomplete format sets due to YouTube's SABR streaming changes, causing all downloads to fail format selection. The default is now `tv`, which is far more reliable.
+- **Unreadable Cancel button in dark mode** - The Cancel button on confirmation dialogs (e.g. Clear Queue) had no explicit text color and was invisible against the dark background. It now uses the theme foreground color.
+
+### Added
+- **Player client selector** - Settings > Authentication now has a dropdown to change the yt-dlp player client (tv, web, ios, etc.) without editing config files. The previous error message pointed users here, but no control existed.
+
 ## [1.9.5] - 2026-06-17
 
 ### Fixed

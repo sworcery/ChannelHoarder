@@ -255,6 +255,7 @@ async def get_auth_status():
             "api_key_configured": api_key_configured,
             "api_key_valid": None,
             "last_successful_auth": last_auth,
+            "player_client": settings.YTDLP_PLAYER_CLIENT,
         }
     except Exception as e:
         logger.error("Auth status endpoint failed: %s", e, exc_info=True)
@@ -266,4 +267,5 @@ async def get_auth_status():
             "cookies_age_hours": None,
             "api_key_configured": False,
             "api_key_valid": None,
+            "player_client": settings.YTDLP_PLAYER_CLIENT,
         }

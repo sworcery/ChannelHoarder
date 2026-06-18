@@ -259,7 +259,9 @@ export const api = {
   deleteCookies: () => request<void>("/auth/cookies", { method: "DELETE" }),
   setApiKey: (apiKey: string) =>
     request<MessageResponse>(`/auth/api-key?api_key=${encodeURIComponent(apiKey)}`, { method: "PUT" }),
-  getAuthStatus: () => request<{ pot_status: string; pot_message: string | null; cookies_status: string; cookies_message: string | null; cookies_age_hours: number | null; api_key_configured: boolean; api_key_valid: boolean | null; last_successful_auth: string | null }>("/auth/status"),
+  getAuthStatus: () => request<{ pot_status: string; pot_message: string | null; cookies_status: string; cookies_message: string | null; cookies_age_hours: number | null; api_key_configured: boolean; api_key_valid: boolean | null; last_successful_auth: string | null; player_client: string }>("/auth/status"),
+  setPlayerClient: (strategy: string) =>
+    request<MessageResponse>(`/auth/player-client?strategy=${encodeURIComponent(strategy)}`, { method: "PUT" }),
 
   // Settings
   getSettings: () => request<SettingsData>("/settings/"),
