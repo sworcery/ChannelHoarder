@@ -13,85 +13,15 @@
 
 ## Features
 
-### Channel Management
-- **Subscribe to Channels** - Add channels by URL or @handle from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee
-- **Playlist Support** - Add YouTube playlists by URL, tracked and scanned like channels
-- **Channel Artwork** - Displays channel logos and banner images from the platform, with a hero banner on the channel detail page
-- **Grid/List Views** - Toggle between grid cards and compact list view, with small/medium/large card size options
-- **Sorting** - Sort channels by name, recently added, most videos, or health status
-- **Automatic Scanning** - Checks subscribed channels on a configurable schedule (default: daily at 3 AM)
-- **Auto-Scan on Add** - Optionally trigger an immediate scan when adding a new channel
-- **Auto-Download Toggle** - Choose whether new videos are automatically queued or left as pending for manual selection
-- **Channel Health Indicators** - Green/yellow/red status showing each channel's download success rate
-- **Per-Channel Quality** - Set download quality independently for each channel (best, 4K/2160p, 1080p, 720p, 480p)
-- **Quality Cutoff** - Set minimum acceptable quality per channel with upgrade detection and search
-- **Per-Channel Download Directories** - Route channels to different storage locations
-- **Minimum Duration Filter** - Per-channel setting to skip videos shorter than a configurable duration
-- **Title Filter** - Per-channel keyword or regex filter to only download videos whose title matches specific terms. Set at add time or on the channel detail page
-
-### Plex Integration
-- **TV Show Naming** - Organizes videos in Plex TV Show format (seasons by year, episodes numbered chronologically)
-- **Customizable Naming Templates** - Configure the output filename format with variables like `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}` - with live preview
-- **Per-Channel Naming Overrides** - Each channel can use its own naming template
-- **NFO Metadata** - Generates tvshow.nfo and episode.nfo files for Plex/Jellyfin/Emby
-- **Poster Art** - Downloads channel thumbnails as poster images, with automatic season posters
-- **Fix Episode Numbers** - Preview and fix chronological episode numbering with file renames on disk
-
-### Episode Management
-- **Monitored/Unmonitored** - Toggle monitoring per episode, bulk monitor/unmonitor, filter by monitored state
-- **Status Icons** - Distinct colored icons for each state: downloaded (green), missing/monitored (orange), unmonitored (gray), queued (blue), downloading (animated), failed (red), skipped (gray)
-- **Collapsible Seasons** - Videos grouped by year with per-season Monitor and Download Missing buttons
-- **Per-Episode Actions** - Three-dot menu with: Retry, Re-download, Rename File, Delete File, Skip Episode
-- **Subtitle Download** - Toggle in Settings to download subtitles and auto-generated captions with videos. Bulk "Download Missing Subtitles" button to fetch subtitles for previously downloaded videos without re-downloading them
-
-### Downloads
-- **Queue-Based Pipeline** - Downloads are queued and processed sequentially with configurable delays
-- **Standalone Video Download** - Download individual videos by URL without subscribing to a channel. Videos are automatically organized under the uploader's channel folder with proper season/episode naming
-- **Download All Missing** - One-click button to queue all monitored pending/failed videos across all channels, plus per-channel and per-season download buttons
-- **Pause/Resume Queue** - Pause the entire download queue and resume when ready
-- **Real-Time Progress** - WebSocket-powered live download speed, ETA, and progress bars with quality badges
-- **Retry Failed Downloads** - Retry individual failures or all failed downloads at once
-- **Bulk Video Management** - Select multiple videos to queue, skip, unskip, monitor, or unmonitor at once
-- **Import Existing Files** - Scan a folder of previously downloaded videos and match them to channel entries by title
-- **Livestream / Long Video Filter** - Auto-skip videos over a configurable duration, with optional notification for manual review
-- **Chapter Embedding** - Optionally embed chapter markers into MP4 files for players like Plex and VLC
-- **YouTube Shorts Filter** - Shorts (videos under 30 seconds) are excluded by default. Global toggle with per-channel opt-in, configurable threshold via min duration setting.
-
-### Authentication
-- **Smart Auth** - Uses cookies as primary auth when available, falls back to PO tokens only when needed
-- **PO Token Authentication** - Built-in PO token server with automatic watchdog that restarts if it hangs
-- **Automatic Cookie Sync** - Windows cookie exporter reads Firefox cookies and pushes to ChannelHoarder every 30 minutes
-- **Browser Cookie Sync** - Tampermonkey userscript exports cookies on each YouTube page load
-- **Manual Cookie Upload** - Upload a cookies.txt file directly
-- **YouTube Data API** - Optional API key for faster, more reliable channel discovery and thumbnails
-- **Player Client Selection** - Choose which YouTube client yt-dlp uses, or leave on Default (automatic) so it picks a working client and adapts as YouTube changes
-- **In-App Help** - Hover tooltips throughout settings with setup guides for API keys, cookies, and configuration
-
-### Anti-Detection
-- **Configurable Download Delays**  - Set minimum and maximum delay between downloads
-- **Random Jitter**  - Adds 0–10 seconds of random delay to avoid predictable patterns
-- **User-Agent Rotation**  - Rotates browser user-agent strings between downloads
-
-### Monitoring & Diagnostics
-- **Error Classification**  - Categorizes failures (rate limited, geo-blocked, auth expired, etc.) with suggested fixes
-- **Test Download Tool**  - Multi-strategy diagnostic that tests metadata extraction across player clients (web, mweb, web_creator, without cookies)
-- **Diagnostic Report**  - One-click copy of full system report including app version, yt-dlp version, PO token status, cookie status, API key configuration, disk space, and download statistics
-- **System Logs**  - Searchable and filterable log viewer in the web UI
-
-### Notifications
-- **Telegram, Pushover & Discord**  - Push notifications with configurable events:
-  - Download complete
-  - Download failed
-  - Cookies expired / refreshed
-  - Channel health alerts
-  - Critical system alerts
-  - Long video review required
-
-### Infrastructure
-- **Single Container**  - Web server, download engine, PO token server, and scheduler all in one Docker container
-- **Dark Mode UI**  - Modern React-based interface with responsive layout
-- **Auto-Updating yt-dlp**  - Checks for yt-dlp updates daily and can be triggered manually
-- **Config Import/Export**  - Backup and restore all settings and channel subscriptions as JSON
+- **Multi-platform** - Subscribe to channels (or YouTube playlists) from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee by URL or @handle
+- **Automatic archiving** - Scheduled scans detect new videos and queue them, with per-channel quality (up to 4K), quality cutoff, title (keyword/regex) and duration filters, and per-channel storage paths
+- **Plex / Jellyfin / Emby ready** - TV Show-style naming (seasons by year, chronological episodes) with customizable templates, NFO metadata, and poster/season art
+- **Sonarr-style episode management** - Monitor/unmonitor, status icons, collapsible seasons, bulk actions, and per-episode retry, re-download, rename, and delete
+- **Robust downloads** - Sequential queue with rate limiting and live progress (speed/ETA) over WebSocket, standalone single-video downloads, import of existing files, subtitle and chapter support, and automatic Shorts / livestream filtering
+- **Smart authentication** - Cookies (auto-sync via Windows exporter or Tampermonkey, or manual upload) with PO token fallback, optional YouTube Data API key, and a selectable yt-dlp player client
+- **Anti-detection** - Configurable download delays, random jitter, and user-agent rotation
+- **Monitoring** - Error classification with suggested fixes, diagnostic reports, searchable logs, and Telegram / Pushover / Discord notifications
+- **Self-contained** - Single Docker container (web UI, download engine, PO token server, scheduler) with dark-mode UI, auto-updating yt-dlp, and config import/export
 
 ## Prerequisites
 
@@ -367,88 +297,7 @@ All settings are configurable through the **Settings** page:
 
 ## API
 
-All endpoints are under `/api/v1/`:
-
-### Channels
-- `GET /channels`  - List all channels (supports search)
-- `POST /channels`  - Add a new channel
-- `GET /channels/{id}`  - Get channel details
-- `PUT /channels/{id}`  - Update channel settings (quality, download dir, enabled)
-- `DELETE /channels/{id}`  - Delete a channel (optionally delete files)
-- `POST /channels/{id}/scan`  - Trigger a manual scan
-- `GET /channels/{id}/videos`  - List channel videos (filterable by status)
-- `POST /channels/{id}/download-all`  - Queue all pending videos
-- `POST /channels/{id}/videos/bulk-queue`  - Queue selected videos
-- `POST /channels/{id}/videos/bulk-skip`  - Skip selected videos
-- `POST /channels/{id}/videos/bulk-unskip`  - Unskip selected videos
-- `POST /channels/{id}/refresh-metadata`  - Re-fetch channel metadata from platform
-- `POST /channels/{id}/import/scan`  - Scan folder for existing video files
-- `POST /channels/{id}/import/confirm`  - Import matched files
-- `POST /channels/download-all-missing`  - Queue all pending/failed videos across all channels
-- `GET /channels/{id}/shorts`  - List videos identified as shorts
-- `POST /channels/{id}/shorts/detect`  - Scan existing videos and mark shorts
-- `POST /channels/{id}/shorts/detect-clean/preview`  - Preview detect and clean operation
-- `POST /channels/{id}/shorts/detect-clean/confirm`  - Detect shorts, delete files, renumber episodes
-- `POST /channels/{id}/shorts/delete`  - Delete downloaded shorts from disk
-- `POST /channels/{id}/download-subtitles`  - Download subtitles for all completed videos
-- `POST /channels/{id}/videos/{vid}/download-subtitles`  - Download subtitles for a single video
-- `POST /channels/{id}/move-files/preview`  - Preview file move operation
-- `POST /channels/{id}/force-rescan`  - Clear all video records and re-scan from scratch
-
-### Downloads
-- `GET /downloads/queue`  - Current download queue with progress
-- `POST /downloads/queue`  - Add video to queue
-- `DELETE /downloads/queue/{id}`  - Remove from queue
-- `POST /downloads/queue/bulk-remove`  - Remove multiple items from queue
-- `POST /downloads/queue/{id}/priority`  - Set queue item priority
-- `POST /downloads/queue/{id}/download-now`  - Start download immediately, bypassing queue
-- `POST /downloads/clear-queue`  - Clear all queued (non-active) downloads
-- `GET /downloads/active`  - Currently downloading
-- `GET /downloads/paused`  - Check if queue is paused
-- `POST /downloads/pause`  - Pause the download queue
-- `POST /downloads/resume`  - Resume the download queue
-- `GET /downloads/history`  - Filterable download history
-- `POST /downloads/retry/{id}`  - Retry a failed download
-- `POST /downloads/retry-all-failed`  - Retry all failed downloads
-- `POST /downloads/standalone`  - Download a standalone video by URL (auto-creates uploader channel)
-- `POST /downloads/standalone/reorganize`  - Migrate legacy standalone downloads to per-uploader channels
-
-### Dashboard
-- `GET /dashboard/stats`  - Aggregate statistics
-- `GET /dashboard/recent`  - Recent downloads
-- `GET /dashboard/storage`  - Storage breakdown by channel
-
-### Authentication
-- `POST /auth/cookies/upload`  - Upload cookies.txt file
-- `POST /auth/cookies/push`  - Push cookies as JSON (for browser extensions and scripts)
-- `GET /auth/cookies/status`  - Cookie file status
-- `POST /auth/cookies/validate`  - Force a cookie health check
-- `DELETE /auth/cookies`  - Remove cookies
-- `PUT /auth/api-key`  - Set YouTube API key
-- `PUT /auth/player-client`  - Set yt-dlp player client strategy
-- `GET /auth/status`  - Overall auth status
-
-### Settings
-- `GET /settings`  - Get all settings
-- `PUT /settings`  - Update settings
-- `GET /settings/userscript.user.js`  - Download pre-configured Tampermonkey script
-- `GET /settings/export`  - Export config backup (JSON)
-- `POST /settings/import`  - Import config backup
-- `POST /settings/webhook/test`  - Test notification delivery
-
-### System
-- `GET /system/health`  - Health check with version
-- `GET /system/diagnostics`  - Full diagnostic report
-- `GET /system/diagnostics/{video_id}`  - Per-video diagnostic report
-- `GET /system/logs`  - System logs with filtering
-- `GET /system/pot-server-log`  - PO token server logs and process status
-- `POST /system/test-download`  - Test download capability (multi-strategy)
-- `POST /system/scan-all`  - Scan all enabled channels
-- `GET /system/ytdlp/version`  - Current yt-dlp version
-- `POST /system/ytdlp/update`  - Update yt-dlp
-
-### WebSocket
-- `WS /ws/progress`  - Real-time download progress updates
+ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live progress. See [docs/API.md](docs/API.md) for the full endpoint list, or browse the interactive Swagger UI at `/docs` on a running instance.
 
 ## Known Limitations
 
