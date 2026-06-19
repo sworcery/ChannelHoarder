@@ -22,6 +22,7 @@ import argparse
 import configparser
 import json
 import logging
+import logging.handlers
 import os
 import shutil
 import sqlite3
@@ -40,6 +41,21 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("cookie_exporter")
+
+
+def _add_file_logging(log_path: str) -> None:
+    """Attach a rotating file handler so scheduled-task runs (which have no
+    console) leave a trace that can be inspected later."""
+    try:
+        handler = logging.handlers.RotatingFileHandler(
+            log_path, maxBytes=512 * 1024, backupCount=3, encoding="utf-8"
+        )
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        ))
+        logging.getLogger().addHandler(handler)
+    except Exception as e:
+        logger.warning("Could not open log file %s: %s", log_path, e)
 
 # Default config values
 DEFAULT_DOMAINS = ".youtube.com,.google.com"
@@ -365,6 +381,10 @@ def main():
     parser.add_argument("--output", help="Override output file path")
     parser.add_argument("--server", help="Override ChannelHoarder server URL")
     args = parser.parse_args()
+
+    # Write a rotating log next to the script so scheduled-task runs leave a trace
+    _add_file_logging(os.path.join(os.path.dirname(os.path.abspath(__file__)), "cookie_exporter.log"))
+    logger.info("=== cookie_exporter run started (dry_run=%s) ===", args.dry_run)
 
     if not os.path.exists(args.config):
         logger.error("Config file not found: %s", args.config)

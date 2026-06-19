@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.11] - 2026-06-19
+
+### Added
+- **Windows cookie exporter logging** - The `tools/cookie_exporter.py` script now writes a rotating log file (`cookie_exporter.log`, next to the script) on every run. Previously it only logged to the console, so scheduled-task runs left no trace and couldn't be diagnosed without rerunning by hand.
+
 ## [1.9.10] - 2026-06-18
 
 ### Fixed
