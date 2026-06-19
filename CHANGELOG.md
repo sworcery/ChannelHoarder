@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.10] - 2026-06-18
+
+### Fixed
+- **Queue not resuming after a cookie-expiry pause** - When the queue auto-paused on expired cookies, the only automatic recovery was the system health check, which runs every 6 hours - so the queue could sit paused for hours even after downloading worked again. Added a lightweight recovery check that runs every 5 minutes: when the queue is paused for expired cookies, it re-tests yt-dlp auth and resumes automatically if it passes. Manually uploading/pushing fresh cookies still resumes instantly as before.
+
 ## [1.9.9] - 2026-06-18
 
 ### Documentation

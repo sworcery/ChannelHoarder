@@ -47,6 +47,18 @@ class SchedulerService:
             name="Check system health",
         )
 
+        # Cookie recovery check (every 5 minutes) - quickly resumes the queue when
+        # it was paused for expired cookies and downloading works again, instead of
+        # waiting for the 6-hour health check.
+        from app.tasks.cookie_recovery import check_cookie_recovery
+        self.scheduler.add_job(
+            check_cookie_recovery,
+            IntervalTrigger(minutes=5),
+            id="cookie_recovery",
+            replace_existing=True,
+            name="Auto-resume queue when cookies recover",
+        )
+
         # yt-dlp update check (daily at 4 AM)
         self.scheduler.add_job(
             check_ytdlp_update,
