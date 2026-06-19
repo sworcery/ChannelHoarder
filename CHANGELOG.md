@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.12] - 2026-06-19
+
+### Fixed
+- **"Requested format is not available" caused by a stale bundled yt-dlp** - The Docker image's `pip install` layer was cached by CI, so every rebuild shipped the same frozen yt-dlp (2026.03.17) regardless of pulls, and that version is too old for YouTube's current DRM/SABR enforcement. Bumped the yt-dlp pin to `>=2026.6.9` so the cache is invalidated and a current yt-dlp is baked into the image. This is the real cause of the format errors that persisted even with the player client on Default.
+
 ## [1.9.11] - 2026-06-19
 
 ### Added
