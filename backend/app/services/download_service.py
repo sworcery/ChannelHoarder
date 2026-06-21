@@ -106,18 +106,23 @@ class DownloadService:
             import json
             feature_result = await db.execute(
                 select(AppSetting).where(
-                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "naming_template"])
+                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "naming_template", "sponsorblock_mode"])
                 )
             )
             feature_settings = {s.key: s.value for s in feature_result.scalars().all()}
             subtitles_enabled = False
             chapters_enabled = False
+            sponsorblock_mode = "off"
             try:
                 subtitles_enabled = bool(json.loads(feature_settings.get("subtitles_enabled", "false")))
             except Exception:
                 pass
             try:
                 chapters_enabled = bool(json.loads(feature_settings.get("chapters_enabled", "false")))
+            except Exception:
+                pass
+            try:
+                sponsorblock_mode = json.loads(feature_settings.get("sponsorblock_mode", '"off"'))
             except Exception:
                 pass
 
@@ -226,6 +231,7 @@ class DownloadService:
                         platform=cdata.platform,
                         subtitles_enabled=subtitles_enabled,
                         chapters_enabled=chapters_enabled,
+                        sponsorblock_mode=sponsorblock_mode,
                     )
                 )
                 while not download_task.done():

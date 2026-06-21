@@ -14,6 +14,11 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+# SponsorBlock segment categories to mark/remove. The default set covers the
+# least-controversial promotional segments; intro/outro/filler are left out so
+# wanted content isn't cut.
+_SPONSORBLOCK_CATEGORIES = ["sponsor", "selfpromo", "interaction"]
+
 _impersonate_target = None
 _impersonate_checked = False
 _impersonate_lock = threading.Lock()
@@ -282,6 +287,31 @@ class YtdlpService:
         finally:
             self._cleanup_cookie_tmp(opts)
 
+    @staticmethod
+    def _build_postprocessors(chapters_enabled: bool, sponsorblock_mode: str, platform: str) -> list[dict]:
+        """Build the yt-dlp postprocessor chain for a download. SponsorBlock only
+        has data for YouTube, so it is skipped on other platforms."""
+        sponsorblock = sponsorblock_mode in ("mark", "remove") and platform == "youtube"
+        pps: list[dict] = []
+        if sponsorblock:
+            pps.append({
+                "key": "SponsorBlock",
+                "categories": _SPONSORBLOCK_CATEGORIES,
+                "when": "after_filter",
+            })
+        pps += [
+            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
+            {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
+            {"key": "EmbedThumbnail", "already_have_thumbnail": True},
+        ]
+        if sponsorblock and sponsorblock_mode == "remove":
+            pps.append({"key": "ModifyChapters", "remove_sponsor_segments": _SPONSORBLOCK_CATEGORIES})
+        # Embed chapters when the user enabled them, or when SponsorBlock is marking
+        # segments so the marked segments are written into the file as chapters.
+        if chapters_enabled or (sponsorblock and sponsorblock_mode == "mark"):
+            pps.append({"key": "FFmpegMetadata", "add_chapters": True})
+        return pps
+
     def download_video(
         self,
         video_url: str,
@@ -292,16 +322,11 @@ class YtdlpService:
         platform: str = "youtube",
         subtitles_enabled: bool = False,
         chapters_enabled: bool = False,
+        sponsorblock_mode: str = "off",
     ) -> dict:
         """Download a single video. Returns info dict on success, raises on failure."""
         opts = self._base_opts(platform=platform)
-        postprocessors = [
-            {"key": "FFmpegVideoConvertor", "preferedformat": "mp4"},
-            {"key": "FFmpegThumbnailsConvertor", "format": "jpg"},
-            {"key": "EmbedThumbnail", "already_have_thumbnail": True},
-        ]
-        if chapters_enabled:
-            postprocessors.append({"key": "FFmpegMetadata", "add_chapters": True})
+        postprocessors = self._build_postprocessors(chapters_enabled, sponsorblock_mode, platform)
         opts.update({
             "format": self._quality_to_format(quality),
             "merge_output_format": "mp4",

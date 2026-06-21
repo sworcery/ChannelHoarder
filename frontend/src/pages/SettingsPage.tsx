@@ -717,6 +717,7 @@ function MediaManagementTab() {
   const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
   const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
   const [chaptersEnabled, setChaptersEnabled] = useState(false)
+  const [sponsorblockMode, setSponsorblockMode] = useState("off")
   const [setPermissions, setSetPermissions] = useState(false)
   const [chmodFolder, setChmodFolder] = useState("755")
   const [chmodFile, setChmodFile] = useState("644")
@@ -735,6 +736,7 @@ function MediaManagementTab() {
       if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
       if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
       if (settings.chapters_enabled != null) setChaptersEnabled(settings.chapters_enabled === true || settings.chapters_enabled === "true")
+      if (settings.sponsorblock_mode != null) setSponsorblockMode(String(settings.sponsorblock_mode))
       if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
       if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
       if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
@@ -751,6 +753,7 @@ function MediaManagementTab() {
         livestreams_enabled: livestreamsEnabled,
         subtitles_enabled: subtitlesEnabled,
         chapters_enabled: chaptersEnabled,
+        sponsorblock_mode: sponsorblockMode,
         set_permissions: setPermissions,
         chmod_folder: chmodFolder,
         chmod_file: chmodFile,
@@ -882,6 +885,32 @@ function MediaManagementTab() {
         </label>
         <p className="text-xs text-muted-foreground">
           Only applies to videos that have chapter markers set by the uploader.
+        </p>
+      </div>
+
+      {/* SponsorBlock */}
+      <div className="rounded-lg border bg-card p-4 space-y-3">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold">SponsorBlock</h3>
+          <HelpIcon text="Uses the crowdsourced SponsorBlock database to handle sponsor, self-promotion, and interaction-reminder segments. 'Mark' adds them as chapters you can skip; 'Remove' cuts them out of the file. YouTube only." anchor="episode-management" />
+        </div>
+        <div className="max-w-xs">
+          <select
+            value={sponsorblockMode}
+            onChange={(e) => setSponsorblockMode(e.target.value)}
+            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
+          >
+            <option value="off">Off</option>
+            <option value="mark">Mark segments as chapters</option>
+            <option value="remove">Remove segments from video</option>
+          </select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {sponsorblockMode === "remove"
+            ? "Sponsor, self-promo, and interaction-reminder segments will be cut out of downloaded YouTube videos."
+            : sponsorblockMode === "mark"
+            ? "Segments are added as skippable chapters; the video is left intact."
+            : "SponsorBlock is disabled."}
         </p>
       </div>
 

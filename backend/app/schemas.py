@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, date, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_serializer, model_validator
 
@@ -241,6 +241,7 @@ class SettingsUpdate(BaseModel):
     livestreams_enabled: Optional[bool] = None  # Global toggle to allow livestream downloading
     subtitles_enabled: Optional[bool] = None  # Download subtitles/captions with videos
     chapters_enabled: Optional[bool] = None  # Embed chapter markers in downloaded videos
+    sponsorblock_mode: Optional[Literal["off", "mark", "remove"]] = None  # SponsorBlock: off, mark as chapters, or remove segments
     # Notification providers
     discord_webhook_url: Optional[str] = None
     # File permissions
