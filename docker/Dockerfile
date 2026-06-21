@@ -31,6 +31,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Deno - the supported JS runtime yt-dlp's EJS solver needs to solve
+# YouTube's n-signature challenge. Node 20 is no longer a supported runtime for
+# the challenge solver, so without Deno, downloads for logged-in (cookie) sessions
+# fail with "No video formats found". Deno also enables the bgutil script-deno PO
+# token provider.
+RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o /tmp/deno.zip \
+    && unzip /tmp/deno.zip -d /usr/local/bin \
+    && rm /tmp/deno.zip \
+    && chmod +x /usr/local/bin/deno
+
 # Install Python dependencies
 WORKDIR /app
 COPY backend/requirements.txt .

@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.13] - 2026-06-20
+
+### Fixed
+- **"No video formats found" / "Requested format is not available" on logged-in (cookie) downloads** - This was the real root cause behind the persistent format errors. yt-dlp's current EJS challenge solver needs a supported JavaScript runtime to solve YouTube's n-signature challenge, but the image only shipped Node 20, which yt-dlp no longer accepts as a supported runtime. With no usable runtime, the challenge failed and all format URLs were dropped - especially for logged-in YouTube Premium accounts that YouTube places in the SABR-only streaming experiment. Installed Deno in the image, which yt-dlp uses to solve the challenge (verified: the same videos that returned zero formats now download at full resolution). Deno also enables the bgutil script-deno PO token provider.
+
 ## [1.9.12] - 2026-06-19
 
 ### Fixed
