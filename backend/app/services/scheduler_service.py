@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -17,7 +18,6 @@ class SchedulerService:
         from app.tasks.scan_channels import scan_due_channels
         from app.tasks.process_queue import process_download_queue
         from app.tasks.health_check import check_system_health
-        from app.tasks.ytdlp_update import check_ytdlp_update
 
         # Channel scan tick (every 10 minutes; each channel scans on its own
         # random schedule within the configured daily window)
@@ -38,13 +38,19 @@ class SchedulerService:
             name="Process download queue",
         )
 
-        # System health check (every 6 hours)
+        # Daily self-heal pass (every 24 hours, plus once ~60s after startup). This
+        # is the app's maintenance routine: it verifies the real download path
+        # (cookies + JS challenge), checks PO server and disk, auto-recovers a
+        # cookie-paused queue, and checks PyPI to auto-update + restart yt-dlp when
+        # behind. Running it shortly after startup surfaces a broken extraction
+        # stack (e.g. a missing JS runtime) within a minute instead of hours later.
         self.scheduler.add_job(
             check_system_health,
-            IntervalTrigger(hours=6),
+            IntervalTrigger(hours=24),
             id="health_check",
             replace_existing=True,
-            name="Check system health",
+            name="Daily self-heal / health check",
+            next_run_time=datetime.now() + timedelta(seconds=60),
         )
 
         # Cookie recovery check (every 5 minutes) - quickly resumes the queue when
@@ -57,15 +63,6 @@ class SchedulerService:
             id="cookie_recovery",
             replace_existing=True,
             name="Auto-resume queue when cookies recover",
-        )
-
-        # yt-dlp update check (daily at 4 AM)
-        self.scheduler.add_job(
-            check_ytdlp_update,
-            CronTrigger(hour=4, minute=0),
-            id="ytdlp_update",
-            replace_existing=True,
-            name="Check for yt-dlp updates",
         )
 
         # Quality upgrade check (daily at 5 AM)

@@ -108,4 +108,14 @@ async def check_system_health():
                 })
 
         await db.commit()
+
+        # yt-dlp version self-heal: compare against PyPI and auto-update + restart
+        # if behind. Runs last because, when an update is applied, it gracefully
+        # exits the process so the container restart policy loads the new version.
+        try:
+            from app.tasks.ytdlp_update import check_and_apply_ytdlp_update
+            await check_and_apply_ytdlp_update(db)
+        except Exception as e:
+            logger.error("yt-dlp version self-heal step failed: %s", e)
+
         logger.info("Health check complete")

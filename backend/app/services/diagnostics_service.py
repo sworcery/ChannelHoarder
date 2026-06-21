@@ -96,6 +96,7 @@ class DiagnosticsService:
             total_failed=failed_count or 0,
             recent_errors=recent_errors,
             system_info={
+                "js_runtime": ytdlp.get_js_runtime_status() or "MISSING (Deno/Bun not found)",
                 "config_dir": settings.CONFIG_DIR,
                 "download_dir": settings.DOWNLOAD_DIR,
                 "max_concurrent": settings.MAX_CONCURRENT_DOWNLOADS,

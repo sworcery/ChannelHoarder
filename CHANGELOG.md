@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.14] - 2026-06-20
+
+### Added
+- **Daily self-heal pass** - The health check is now a single daily routine (plus one run ~60s after startup) that keeps the app working on its own:
+  - **Representative download test** - It now resolves real video formats using the production config (cookies, PO tokens, JS runtime) instead of a flat anonymous metadata extract. This catches extraction-stack breakage - like a missing JS runtime or SABR-only formats - that the old check passed straight through. Running it shortly after startup surfaces such breakage within a minute instead of hours.
+  - **JS runtime detection** - Reports the available Deno/Bun runtime and calls out when none is found (the cause of the "No video formats found" failures). Surfaced in the diagnostics report and debug export.
+  - **yt-dlp auto-update** - Compares the running yt-dlp against PyPI daily and auto-upgrades when behind. Because the running process keeps the old module loaded, applying the new version requires a restart; when idle, the app restarts to apply it (relies on the container restart policy) with a loop guard so it can never restart repeatedly. Controlled by `YTDLP_AUTO_UPDATE` and `YTDLP_AUTO_RESTART` (both default on).
+
 ## [1.9.13] - 2026-06-20
 
 ### Fixed

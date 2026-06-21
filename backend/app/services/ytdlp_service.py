@@ -376,11 +376,43 @@ class YtdlpService:
             self._cleanup_cookie_tmp(opts)
 
     def get_version(self) -> str:
-        """Get current yt-dlp version."""
+        """Get current yt-dlp version (the one loaded in this process)."""
         try:
             return yt_dlp.version.__version__
         except Exception:
             return "unknown"
+
+    @staticmethod
+    def get_latest_pypi_version() -> str | None:
+        """Query PyPI for the latest published yt-dlp version, or None on failure."""
+        try:
+            resp = httpx.get("https://pypi.org/pypi/yt-dlp/json", timeout=10)
+            resp.raise_for_status()
+            return resp.json()["info"]["version"]
+        except Exception as e:
+            logger.warning("Could not fetch latest yt-dlp version from PyPI: %s", e)
+            return None
+
+    @staticmethod
+    def _version_tuple(v: str) -> tuple:
+        """Parse a yt-dlp version like '2026.06.09' or '2026.6.9' into an int
+        tuple so comparison ignores zero-padding differences between the loaded
+        module (e.g. '2026.06.09') and PyPI's normalized form (e.g. '2026.6.9')."""
+        parts = []
+        for p in str(v).split("."):
+            digits = "".join(ch for ch in p if ch.isdigit())
+            parts.append(int(digits) if digits else 0)
+        return tuple(parts)
+
+    @classmethod
+    def is_outdated(cls, current: str, latest: str) -> bool:
+        """True if `latest` is a newer yt-dlp version than `current`."""
+        if not current or not latest or current == "unknown":
+            return False
+        try:
+            return cls._version_tuple(latest) > cls._version_tuple(current)
+        except Exception:
+            return False
 
     def update(self) -> tuple[bool, str]:
         """Update yt-dlp to latest version. Returns (success, message)."""
@@ -395,20 +427,65 @@ class YtdlpService:
         except Exception as e:
             return False, str(e)
 
+    @staticmethod
+    def get_js_runtime_status() -> str | None:
+        """Return a description of an available supported JS runtime (Deno or Bun),
+        or None if none is found.
+
+        yt-dlp's challenge solver needs one of these to solve YouTube's
+        n-signature challenge; Node is no longer an accepted runtime. A missing
+        runtime is the difference between working downloads and "No video formats
+        found" for logged-in (cookie) sessions.
+        """
+        for name in ("deno", "bun"):
+            path = shutil.which(name)
+            if not path:
+                continue
+            try:
+                out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=10)
+                text = (out.stdout or out.stderr).strip()
+                return text.splitlines()[0] if text else name
+            except Exception:
+                return name  # present but version probe failed
+        return None
+
+    def _format_health_failure(self, msg: str) -> str:
+        """Annotate a health-check failure with JS-runtime context so the most
+        common cause (no supported runtime) is immediately obvious in logs,
+        notifications, and the dashboard."""
+        runtime = self.get_js_runtime_status()
+        if runtime is None:
+            return (f"{msg}. No supported JS runtime (Deno/Bun) found, so yt-dlp "
+                    f"cannot solve YouTube's signature challenge - verify Deno is "
+                    f"installed in the image.")
+        return f"{msg} [JS runtime: {runtime}]"
+
     def test_download_capability(self) -> tuple[bool, str]:
-        """Test if yt-dlp can successfully extract info (tests auth/PO tokens)."""
+        """Test whether yt-dlp can resolve real, downloadable video formats using
+        the production config (cookies, PO tokens, JS runtime).
+
+        Unlike a flat metadata extract, this exercises format resolution and
+        YouTube's signature challenge, so it catches extraction-stack breakage
+        (a missing/unsupported JS runtime, or SABR-only formats with no URLs)
+        that would otherwise stay invisible until real downloads start failing.
+        """
         test_url = "https://www.youtube.com/watch?v=jNQXAC9IVRw"  # "Me at the zoo" - first YouTube video
         opts = self._base_opts()
-        opts["extract_flat"] = True
+        opts.update({"skip_download": True, "quiet": True, "no_warnings": True})
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(test_url, download=False)
-                if info and info.get("title"):
-                    return True, "OK"
-                return False, "Could not extract video info"
+                if not info:
+                    return False, self._format_health_failure("Could not extract video info")
+                formats = info.get("formats") or ([info] if info.get("url") else [])
+                has_video = any(f.get("vcodec") not in (None, "none") for f in formats)
+                if not has_video:
+                    return False, self._format_health_failure("No downloadable video formats resolved")
+                runtime = self.get_js_runtime_status()
+                return True, f"OK [JS runtime: {runtime or 'none'}]"
         except Exception as e:
-            return False, str(e)
+            return False, self._format_health_failure(str(e))
         finally:
             self._cleanup_cookie_tmp(opts)
 

@@ -60,6 +60,7 @@ async def export_live_logs(db: AsyncSession = Depends(get_db)):
         f"Generated: {datetime.now(timezone.utc).isoformat()}",
         f"App Version: {settings.APP_VERSION}",
         f"yt-dlp Version: {report.ytdlp_version}",
+        f"JS Runtime: {report.system_info.get('js_runtime', 'unknown')}",
         f"PO Tokens: {report.pot_status}",
         f"Cookies: {report.cookies_status}",
         f"API Key: {'configured' if report.api_key_configured else 'not configured'}",

@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.9.13"
+    APP_VERSION: str = "1.9.14"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     POT_SERVER_URL: str = "http://127.0.0.1:4416"
     POT_SERVER_ENABLED: bool = True
     YTDLP_PLAYER_CLIENT: str = "default"
+    # Daily self-heal: check PyPI for a newer yt-dlp and pip-upgrade it. Applying
+    # the new version requires a process restart (the running process keeps the
+    # old module loaded), so AUTO_RESTART exits the container when idle to let the
+    # restart policy bring it back on the new version. Both default on.
+    YTDLP_AUTO_UPDATE: bool = True
+    YTDLP_AUTO_RESTART: bool = True
 
     DEFAULT_QUALITY: str = "best"
     DEFAULT_SCAN_CRON: str = "0 3 * * *"
