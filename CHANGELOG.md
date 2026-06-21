@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.17] - 2026-06-21
+
+### Added
+- **Automatic cleanup of private/deleted video listings** (#28) - The daily self-heal pass (which also runs ~60s after startup) now sweeps out leftover Video rows that are private, deleted, or unavailable placeholders (e.g. titled "[Private video]") stored before the scan-time filter existed. These phantom entries have no files, so they're removed safely; rows pointing at a real downloaded file are never touched. This proactively clears the clutter instead of leaving it for a manual re-scan.
+
 ## [1.9.16] - 2026-06-21
 
 ### Added

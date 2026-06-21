@@ -109,6 +109,19 @@ async def check_system_health():
 
         await db.commit()
 
+        # Housekeeping: sweep out leftover private/deleted/unavailable video
+        # listings from before the scan-time filter existed. Runs before the
+        # yt-dlp step below since that step may restart the process.
+        try:
+            from app.tasks.cleanup_unavailable import cleanup_unavailable_videos
+            removed = await cleanup_unavailable_videos(db)
+            if removed:
+                db.add(SystemHealthLog(component="cleanup", status="healthy",
+                                       message=f"Removed {removed} private/deleted video listing(s)"))
+                await db.commit()
+        except Exception as e:
+            logger.error("Unavailable-video cleanup failed: %s", e)
+
         # yt-dlp version self-heal: compare against PyPI and auto-update + restart
         # if behind. Runs last because, when an update is applied, it gracefully
         # exits the process so the container restart policy loads the new version.

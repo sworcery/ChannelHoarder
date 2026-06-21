@@ -1,4 +1,24 @@
-from app.services.channel_service import _is_unavailable_entry
+from app.services.channel_service import _is_unavailable_entry, is_unavailable_title
+
+
+class TestIsUnavailableTitle:
+    def test_private_marker(self):
+        assert is_unavailable_title("[Private video]") is True
+
+    def test_deleted_marker(self):
+        assert is_unavailable_title("[Deleted video]") is True
+
+    def test_case_and_whitespace_insensitive(self):
+        assert is_unavailable_title("  [PRIVATE video]  ") is True
+
+    def test_normal_title(self):
+        assert is_unavailable_title("My Real Video") is False
+
+    def test_word_private_in_title_kept(self):
+        assert is_unavailable_title("Private Server Tour") is False
+
+    def test_none_title(self):
+        assert is_unavailable_title(None) is False
 
 
 class TestUnavailableEntryByTitle:

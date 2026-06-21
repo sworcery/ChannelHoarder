@@ -33,10 +33,14 @@ _UNAVAILABLE_TITLES = {"[private video]", "[deleted video]", "[unavailable video
 _UNAVAILABLE_AVAILABILITY = {"private", "deleted"}
 
 
+def is_unavailable_title(title: str | None) -> bool:
+    """Return True if a title is one of yt-dlp's unavailable-video placeholders."""
+    return (title or "").strip().lower() in _UNAVAILABLE_TITLES
+
+
 def _is_unavailable_entry(entry: dict) -> bool:
     """Return True if a playlist entry is for a private/deleted/unavailable video."""
-    title = (entry.get("title") or "").strip().lower()
-    if title in _UNAVAILABLE_TITLES:
+    if is_unavailable_title(entry.get("title")):
         return True
     availability = (entry.get("availability") or "").strip().lower()
     return availability in _UNAVAILABLE_AVAILABILITY
