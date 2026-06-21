@@ -849,6 +849,68 @@ async def bulk_reclassify_videos(
     return {"message": f"Marked {count} videos as {label}", "count": count}
 
 
+class BulkRenameRequest(BaseModel):
+    video_ids: list[int] = Field(..., min_length=1, max_length=50000)
+
+
+@router.post("/{channel_id}/videos/bulk-rename")
+async def bulk_rename_videos(
+    channel_id: int,
+    body: BulkRenameRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Rename selected videos' files on disk to match the current naming template."""
+    from app.services.naming_service import build_output_path
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    result = await db.execute(
+        select(Video)
+        .where(Video.channel_id == channel_id)
+        .where(Video.id.in_(body.video_ids))
+    )
+    videos = result.scalars().all()
+
+    renamed = 0
+    skipped = 0
+    errors = 0
+    for video in videos:
+        if not video.file_path or not await asyncio.to_thread(os.path.exists, video.file_path):
+            skipped += 1
+            continue
+        new_path = build_output_path(
+            channel_name=channel.channel_name,
+            video_title=video.title,
+            video_id=video.video_id,
+            upload_date=video.upload_date,
+            season=video.season,
+            episode=video.episode,
+            naming_template=channel.naming_template,
+            base_dir=channel.download_dir,
+        ) + ".mp4"
+        if new_path == video.file_path:
+            skipped += 1
+            continue
+        try:
+            await asyncio.to_thread(move_video_files, video.file_path, new_path)
+            video.file_path = new_path
+            renamed += 1
+        except Exception as e:
+            logger.error("Bulk rename failed for video %s: %s", video.id, e)
+            errors += 1
+    await db.commit()
+
+    msg = f"Renamed {renamed} file(s)"
+    if skipped:
+        msg += f", {skipped} already correct or no file"
+    if errors:
+        msg += f", {errors} failed"
+    return {"message": msg, "renamed": renamed, "skipped": skipped, "errors": errors}
+
+
 @router.post("/{channel_id}/monitor-all")
 async def monitor_all_videos(
     channel_id: int,

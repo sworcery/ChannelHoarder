@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.16] - 2026-06-21
+
+### Added
+- **Bulk rename** (#27) - The video selection action bar now has a "Rename" button that re-applies the current naming template to all selected videos' files on disk at once (sidecar .nfo and thumbnails move too). Completes issue #27, whose other asks - shorts/type filter, duration column, and bulk reclassify - already shipped in the Sonarr-style overhaul.
+
 ## [1.9.15] - 2026-06-21
 
 ### Added

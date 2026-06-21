@@ -268,6 +268,16 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const bulkRenameMutation = useMutation({
+    mutationFn: () => api.bulkRenameVideos(channelId, Array.from(selectedVideoIds)),
+    onSuccess: (data: any) => {
+      invalidateVideos()
+      setSelectedVideoIds(new Set())
+      toast(data.message)
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const toggleVideoSelection = useCallback((videoId: number, idx: number, shiftKey: boolean) => {
     setSelectedVideoIds((prev) => {
       const next = new Set(prev)
@@ -318,7 +328,7 @@ export default function ChannelDetailPage() {
   }
 
   const selectedCount = selectedVideoIds.size
-  const isBulkLoading = bulkQueueMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending || bulkMonitorMutation.isPending || bulkDeleteMutation.isPending || bulkReclassifyMutation.isPending
+  const isBulkLoading = bulkQueueMutation.isPending || bulkSkipMutation.isPending || bulkUnskipMutation.isPending || bulkMonitorMutation.isPending || bulkDeleteMutation.isPending || bulkReclassifyMutation.isPending || bulkRenameMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -547,6 +557,10 @@ export default function ChannelDetailPage() {
             </button>
             <button onClick={() => bulkReclassifyMutation.mutate({ setShort: false, setLivestream: false })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
               Mark Regular
+            </button>
+            <div className="h-4 w-px bg-border" />
+            <button onClick={() => bulkRenameMutation.mutate()} disabled={isBulkLoading} title="Rename selected files on disk to match the current naming template" className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50">
+              <FileEdit className="h-3 w-3" /> Rename
             </button>
             <div className="h-4 w-px bg-border" />
             <button onClick={() => bulkDeleteMutation.mutate({ ids: [...selectedVideoIds], deleteFiles: true })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">

@@ -139,6 +139,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ video_ids: videoIds, set_short: setShort, set_livestream: setLivestream }),
     }),
+  bulkRenameVideos: (channelId: number, videoIds: number[]) =>
+    request<{ message: string; renamed: number; skipped: number; errors: number }>(`/channels/${channelId}/videos/bulk-rename`, {
+      method: "POST",
+      body: JSON.stringify({ video_ids: videoIds }),
+    }),
 
   // Video management
   deleteVideo: (channelId: number, videoId: number, deleteFiles = false) =>
