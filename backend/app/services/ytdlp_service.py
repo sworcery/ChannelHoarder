@@ -144,7 +144,14 @@ class YtdlpService:
                 # Non-YouTube: retry without extract_flat if flat extraction returned nothing
                 if not entries and platform != "youtube":
                     logger.info("Flat extraction returned 0 entries for %s, retrying with full extraction", target_url)
-                    return self._get_channel_video_list_full(target_url, platform, tab)
+                    full_entries = self._get_channel_video_list_full(target_url, platform, tab)
+                    # Some Rumble channels use a page layout yt-dlp's extractor can't
+                    # parse (it only matches the 'videostream__link' markup). Fall
+                    # back to scraping the channel page's embedded video list.
+                    if not full_entries and platform == "rumble":
+                        logger.info("Full extraction empty for Rumble; scraping channel page %s", channel_url)
+                        return self._scrape_rumble_channel(channel_url, tab)
+                    return full_entries
 
                 return entries
         except Exception as e:
@@ -186,6 +193,59 @@ class YtdlpService:
             return []
         finally:
             self._cleanup_cookie_tmp(opts)
+
+    @staticmethod
+    def _parse_rumble_video_hrefs(html: str) -> list[str]:
+        """Extract channel video hrefs (e.g. /v3pyn3g-title.html) from a Rumble
+        channel page. Uses the embedded JSON 'relative_url' field, which is scoped
+        to the channel's own videos (sidebar/recommended use different markup), and
+        preserves order while de-duplicating."""
+        import re
+        ordered = {}
+        for href in re.findall(r'"relative_url":"(/v[0-9a-z]+-[a-z0-9-]+\.html)"', html):
+            ordered.setdefault(href, None)
+        return list(ordered)
+
+    def _scrape_rumble_channel(self, channel_url: str, tab: str = "videos") -> list[dict]:
+        """Fallback for Rumble channels whose page layout yt-dlp's RumbleChannel
+        extractor returns 0 videos for. Pages through the channel and emits entries
+        in the same shape yt-dlp's flat extraction would (id derived from the URL
+        slug, ie_key 'Rumble'), so the rest of the scan pipeline is unchanged."""
+        try:
+            from curl_cffi import requests as cffi_requests
+        except ImportError:
+            logger.warning("curl_cffi unavailable; cannot scrape Rumble channel %s", channel_url)
+            return []
+
+        base = channel_url.split("?")[0].rstrip("/")
+        entries: list[dict] = []
+        seen: set[str] = set()
+        for page in range(1, 51):  # hard cap on pagination
+            try:
+                resp = cffi_requests.get(f"{base}?page={page}", impersonate="chrome", timeout=30)
+            except Exception as e:
+                logger.warning("Rumble scrape error on %s page %d: %s", base, page, e)
+                break
+            if resp.status_code == 404:
+                break
+            fresh = [h for h in self._parse_rumble_video_hrefs(resp.text) if h not in seen]
+            if not fresh:
+                break
+            for href in fresh:
+                seen.add(href)
+                full_url = "https://rumble.com" + href
+                slug = href.lstrip("/")
+                vid_id = slug.split(".")[0] if "." in slug else slug
+                entries.append({
+                    "id": vid_id,
+                    "url": full_url,
+                    "webpage_url": full_url,
+                    "ie_key": "Rumble",
+                    "_type": "url",
+                    "_source_tab": tab,
+                })
+        logger.info("Rumble channel scrape found %d videos for %s", len(entries), base)
+        return entries
 
     def get_channel_video_list_all_tabs(self, channel_url: str, platform: str = "youtube") -> list[dict]:
         """Fetch videos from /videos, /shorts, and /streams tabs (YouTube) and merge.

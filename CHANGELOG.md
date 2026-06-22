@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.18] - 2026-06-21
+
+### Fixed
+- **Rumble channels that find no videos** (#19) - Some Rumble channels use a page layout that yt-dlp's channel extractor returns 0 videos for (it only recognizes one of Rumble's two markup variants), even on the latest yt-dlp. When both flat and full extraction come back empty for a Rumble channel, the app now falls back to reading the channel's own video list from the page's embedded JSON and feeds those to the normal per-video pipeline. Verified against a channel that previously imported as empty.
+
 ## [1.9.17] - 2026-06-21
 
 ### Added
