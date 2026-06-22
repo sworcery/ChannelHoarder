@@ -289,10 +289,14 @@ class YtdlpService:
             src = re.search(r'src="([^"]+)"', img_tag.group(0))
             if src:
                 info["thumbnail"] = src.group(1)
+        banner = re.search(r'channel-header--backsplash[^>]*>\s*<img[^>]+src="([^"]+)"', html)
+        if banner:
+            info["banner_url"] = banner.group(1)
         title_tag = re.search(r'<title>(.*?)</title>', html, re.DOTALL)
         if title_tag:
             desc = re.sub(r'\s*-\s*Rumble\s*$', '', title_tag.group(1).strip())
-            if desc:
+            # Skip when the page title is just the channel name (no real tagline).
+            if desc and desc != info.get("title"):
                 info["description"] = desc
         return info
 
@@ -308,6 +312,8 @@ class YtdlpService:
             info["channel"] = scraped["title"]
         if not info.get("thumbnail") and scraped.get("thumbnail"):
             info["thumbnail"] = scraped["thumbnail"]
+        if not info.get("banner_url") and scraped.get("banner_url"):
+            info["banner_url"] = scraped["banner_url"]
         if not info.get("description") and scraped.get("description"):
             info["description"] = scraped["description"]
         return info

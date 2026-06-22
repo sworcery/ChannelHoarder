@@ -113,6 +113,9 @@ class ChannelService:
             if w >= 1200 and h > 0 and w / h > 2:
                 banner_url = thumb.get("url")
                 break
+        # Rumble has no thumbnails list; use the banner scraped from the page.
+        if not banner_url:
+            banner_url = info.get("banner_url")
 
         # Get thumbnail - prefer YouTube Data API (more reliable), fall back to yt-dlp
         thumbnail_url = None

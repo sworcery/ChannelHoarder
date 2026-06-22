@@ -31,15 +31,22 @@ class TestRumbleHrefParsing:
 class TestRumbleChannelInfoParsing:
     def test_extracts_name_art_and_description(self):
         html = (
-            '<html><head><title>Southern Adventures - Rumble</title></head>'
+            '<html><head><title>Southern Adventures - the outdoors - Rumble</title></head>'
             '<body><h1>Southern Adventures</h1>'
+            '<div class="channel-header--backsplash"><img src="https://cdn.rumble.cloud/banner.png"></div>'
             '<img class="channel-header--img rounded" '
             'src="https://hugh.cdn.rumble.cloud/video/z8/SouthernAdventures1.png"></body></html>'
         )
         info = YtdlpService._parse_rumble_channel_info(html)
         assert info["title"] == "Southern Adventures"
         assert info["thumbnail"].endswith("SouthernAdventures1.png")
-        assert info["description"] == "Southern Adventures"
+        assert info["banner_url"] == "https://cdn.rumble.cloud/banner.png"
+        assert info["description"] == "Southern Adventures - the outdoors"
+
+    def test_skips_description_when_title_is_just_the_name(self):
+        html = '<title>Southern Adventures - Rumble</title><h1>Southern Adventures</h1>'
+        info = YtdlpService._parse_rumble_channel_info(html)
+        assert "description" not in info
 
     def test_prefers_channel_header_title_class(self):
         html = '<span class="channel-header--title">Real Name</span><h1>Page Heading</h1>'
