@@ -93,9 +93,19 @@ class YtdlpService:
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
+                if platform == "rumble":
+                    info = self._augment_rumble_channel_info(info, url)
                 return info
         except Exception as e:
             logger.error("Failed to get channel info for %s: %s", url, e)
+            # Rumble's extractor often fails or returns nothing usable; fall back
+            # to scraping the channel page for name/art/description.
+            if platform == "rumble":
+                scraped = self._scrape_rumble_channel_info(url)
+                if scraped.get("title"):
+                    logger.info("Using scraped Rumble channel info for %s", url)
+                    scraped.setdefault("channel", scraped["title"])
+                    return scraped
             raise ValueError(f"yt-dlp could not extract channel info: {e}") from e
         finally:
             self._cleanup_cookie_tmp(opts)
@@ -125,6 +135,15 @@ class YtdlpService:
 
         logger.info("Fetching %s list from: %s", tab, target_url)
 
+        # Rumble's yt-dlp channel extractor is unreliable - depending on the
+        # channel's page layout it returns 0 videos, or a partial list with no IDs
+        # (which the scan then drops). Scrape the channel page directly first; it
+        # reliably returns the full list. Fall back to yt-dlp only if it fails.
+        if platform == "rumble":
+            scraped = self._scrape_rumble_channel(channel_url, tab)
+            if scraped:
+                return scraped
+
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
@@ -144,14 +163,7 @@ class YtdlpService:
                 # Non-YouTube: retry without extract_flat if flat extraction returned nothing
                 if not entries and platform != "youtube":
                     logger.info("Flat extraction returned 0 entries for %s, retrying with full extraction", target_url)
-                    full_entries = self._get_channel_video_list_full(target_url, platform, tab)
-                    # Some Rumble channels use a page layout yt-dlp's extractor can't
-                    # parse (it only matches the 'videostream__link' markup). Fall
-                    # back to scraping the channel page's embedded video list.
-                    if not full_entries and platform == "rumble":
-                        logger.info("Full extraction empty for Rumble; scraping channel page %s", channel_url)
-                        return self._scrape_rumble_channel(channel_url, tab)
-                    return full_entries
+                    return self._get_channel_video_list_full(target_url, platform, tab)
 
                 return entries
         except Exception as e:
@@ -246,6 +258,59 @@ class YtdlpService:
                 })
         logger.info("Rumble channel scrape found %d videos for %s", len(entries), base)
         return entries
+
+    def _scrape_rumble_channel_info(self, channel_url: str) -> dict:
+        """Scrape channel name, avatar/art, and description from a Rumble channel
+        page, for channels where yt-dlp returns no usable channel metadata."""
+        import re
+        try:
+            from curl_cffi import requests as cffi_requests
+        except ImportError:
+            return {}
+        try:
+            html = cffi_requests.get(channel_url.split("?")[0], impersonate="chrome", timeout=30).text
+        except Exception as e:
+            logger.warning("Rumble channel-info scrape failed for %s: %s", channel_url, e)
+            return {}
+        return self._parse_rumble_channel_info(html)
+
+    @staticmethod
+    def _parse_rumble_channel_info(html: str) -> dict:
+        """Extract channel name, avatar/art, and description from Rumble channel
+        page HTML."""
+        import re
+        info: dict = {}
+        name = (re.search(r'class="channel-header--title[^"]*"[^>]*>([^<]+)<', html)
+                or re.search(r'<h1[^>]*>\s*([^<]{2,80})\s*</h1>', html))
+        if name:
+            info["title"] = name.group(1).strip()
+        img_tag = re.search(r'<img[^>]*channel-header--img[^>]*>', html)
+        if img_tag:
+            src = re.search(r'src="([^"]+)"', img_tag.group(0))
+            if src:
+                info["thumbnail"] = src.group(1)
+        title_tag = re.search(r'<title>(.*?)</title>', html, re.DOTALL)
+        if title_tag:
+            desc = re.sub(r'\s*-\s*Rumble\s*$', '', title_tag.group(1).strip())
+            if desc:
+                info["description"] = desc
+        return info
+
+    def _augment_rumble_channel_info(self, info: dict | None, channel_url: str) -> dict:
+        """Fill in missing Rumble channel name/art/description by scraping the page."""
+        info = info or {}
+        if (info.get("channel") or info.get("uploader") or info.get("title")) and info.get("thumbnail"):
+            return info
+        scraped = self._scrape_rumble_channel_info(channel_url)
+        if not info.get("title") and scraped.get("title"):
+            info["title"] = scraped["title"]
+        if not info.get("channel") and scraped.get("title"):
+            info["channel"] = scraped["title"]
+        if not info.get("thumbnail") and scraped.get("thumbnail"):
+            info["thumbnail"] = scraped["thumbnail"]
+        if not info.get("description") and scraped.get("description"):
+            info["description"] = scraped["description"]
+        return info
 
     def get_channel_video_list_all_tabs(self, channel_url: str, platform: str = "youtube") -> list[dict]:
         """Fetch videos from /videos, /shorts, and /streams tabs (YouTube) and merge.

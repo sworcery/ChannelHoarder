@@ -381,17 +381,24 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
         pass
 
     if channel.last_scanned_at and cooldown_minutes > 0:
-        last_ts = channel.last_scanned_at
-        if last_ts.tzinfo is None:
-            last_ts = last_ts.replace(tzinfo=timezone.utc)
-        elapsed = datetime.now(timezone.utc) - last_ts
-        cooldown = timedelta(minutes=cooldown_minutes)
-        if elapsed < cooldown:
-            remaining_sec = int((cooldown - elapsed).total_seconds())
-            raise HTTPException(
-                status_code=429,
-                detail=f"This channel was scanned recently. Try again in {remaining_sec} seconds.",
-            )
+        # Exempt channels that haven't found any videos yet - a freshly added
+        # channel that came up empty should be re-scannable immediately rather
+        # than locked out by the anti-spam cooldown.
+        video_count = await db.scalar(
+            select(func.count(Video.id)).where(Video.channel_id == channel.id)
+        )
+        if video_count:
+            last_ts = channel.last_scanned_at
+            if last_ts.tzinfo is None:
+                last_ts = last_ts.replace(tzinfo=timezone.utc)
+            elapsed = datetime.now(timezone.utc) - last_ts
+            cooldown = timedelta(minutes=cooldown_minutes)
+            if elapsed < cooldown:
+                remaining_sec = int((cooldown - elapsed).total_seconds())
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"This channel was scanned recently. Try again in {remaining_sec} seconds.",
+                )
 
     service = ChannelService(db)
     try:

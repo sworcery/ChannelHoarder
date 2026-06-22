@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.19] - 2026-06-22
+
+### Fixed
+- **Rumble channels: missing videos and no name/art** (#19) - yt-dlp's Rumble channel extractor is unreliable across the board: depending on the channel it returns no videos, or a partial list with no IDs (which the scan silently dropped), and no channel name, art, or description. The app now scrapes the Rumble channel page directly as the primary source for both the video list and the channel metadata (name, avatar, description), falling back to yt-dlp only if the scrape fails. Verified a channel that previously imported empty now returns all of its videos plus name and art.
+- **Manual scan cooldown locking out empty channels** - The anti-spam cooldown on "Scan Now" no longer applies to a channel that hasn't found any videos yet, so a freshly added channel that came up empty can be re-scanned immediately instead of waiting out the cooldown. (The cooldown is still configurable in Settings > Anti-Detection, or set to 0 to disable.)
+
 ## [1.9.18] - 2026-06-21
 
 ### Fixed

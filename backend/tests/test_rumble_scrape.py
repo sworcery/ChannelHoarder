@@ -28,6 +28,27 @@ class TestRumbleHrefParsing:
         assert YtdlpService._parse_rumble_video_hrefs("<html>nothing here</html>") == []
 
 
+class TestRumbleChannelInfoParsing:
+    def test_extracts_name_art_and_description(self):
+        html = (
+            '<html><head><title>Southern Adventures - Rumble</title></head>'
+            '<body><h1>Southern Adventures</h1>'
+            '<img class="channel-header--img rounded" '
+            'src="https://hugh.cdn.rumble.cloud/video/z8/SouthernAdventures1.png"></body></html>'
+        )
+        info = YtdlpService._parse_rumble_channel_info(html)
+        assert info["title"] == "Southern Adventures"
+        assert info["thumbnail"].endswith("SouthernAdventures1.png")
+        assert info["description"] == "Southern Adventures"
+
+    def test_prefers_channel_header_title_class(self):
+        html = '<span class="channel-header--title">Real Name</span><h1>Page Heading</h1>'
+        assert YtdlpService._parse_rumble_channel_info(html)["title"] == "Real Name"
+
+    def test_empty_when_nothing_present(self):
+        assert YtdlpService._parse_rumble_channel_info("<html></html>") == {}
+
+
 class TestRumbleScrapeEntryShape:
     def test_id_derived_from_slug_without_html(self):
         # Mirror the id-derivation the scan relies on: slug minus the .html suffix.
