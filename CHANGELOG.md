@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.21] - 2026-06-22
+
+### Added
+- **Rumble authentication for premium content** - The same `cookies.txt` now authenticates Rumble as well as YouTube. The Rumble channel scrape uses your cookies (so premium/authenticated listings and metadata work, matching the download path, which already used cookies for all platforms), and the Windows cookie exporter now also exports `.rumble.com` cookies by default. Log into Rumble in Firefox and the exporter picks them up; or include `.rumble.com` cookies in a manually uploaded `cookies.txt`.
+
 ## [1.9.20] - 2026-06-22
 
 ### Improved

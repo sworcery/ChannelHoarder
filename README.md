@@ -224,7 +224,7 @@ The free tier provides 10,000 quota units per day, which is enough for most pers
 
 ### Cookie Authentication (Optional)
 
-Cookies are optional but can help if you have YouTube Premium or need to access region-specific content. There are three ways to provide cookies:
+Cookies are optional but can help if you have YouTube Premium, need to access region-specific content, or want to download **premium/authenticated Rumble** content. The same `cookies.txt` covers all platforms - cookies are matched per-domain, so you can include YouTube and Rumble cookies in one file. There are three ways to provide cookies:
 
 **Option 1: Automatic Cookie Sync (Recommended)**
 
@@ -236,7 +236,7 @@ The Windows cookie exporter reads cookies directly from Firefox's database, incl
 4. Edit `cookie_exporter.ini`:
    - Set `server_url` to your ChannelHoarder address (e.g., `http://your-server:8587`)
    - Optionally set `profile` if using a non-default Firefox profile
-   - Optionally set `domains` to customize which cookie domains to export (default: `.youtube.com, .google.com`)
+   - Optionally set `domains` to customize which cookie domains to export (default: `.youtube.com, .google.com, .rumble.com` - log into Rumble in Firefox too if you want premium Rumble content)
    - Optionally set `refresh_url` to change the page loaded before export (default: `https://www.youtube.com`)
    - Optionally set `refresh_wait` to change seconds to wait for page load (default: `20`)
 5. Run `python cookie_exporter.py --dry-run` to test

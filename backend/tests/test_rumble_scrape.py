@@ -1,4 +1,28 @@
+from app.services import ytdlp_service
 from app.services.ytdlp_service import YtdlpService
+
+
+class TestLoadCookiesForDomain:
+    def _write_cookies(self, path):
+        path.write_text(
+            "# Netscape HTTP Cookie File\n"
+            ".rumble.com\tTRUE\t/\tTRUE\t9999999999\tsess\tabc123\n"
+            ".youtube.com\tTRUE\t/\tTRUE\t9999999999\tSID\tyt456\n"
+        )
+
+    def test_filters_by_domain(self, tmp_path, monkeypatch):
+        cookie_file = tmp_path / "cookies.txt"
+        self._write_cookies(cookie_file)
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: cookie_file))
+        assert YtdlpService._load_cookies_for_domain("rumble") == {"sess": "abc123"}
+        assert YtdlpService._load_cookies_for_domain("youtube") == {"SID": "yt456"}
+
+    def test_empty_when_no_cookie_file(self, tmp_path, monkeypatch):
+        missing = tmp_path / "nope.txt"
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: missing))
+        assert YtdlpService._load_cookies_for_domain("rumble") == {}
 
 
 class TestRumbleHrefParsing:

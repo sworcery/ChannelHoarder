@@ -207,6 +207,22 @@ class YtdlpService:
             self._cleanup_cookie_tmp(opts)
 
     @staticmethod
+    def _load_cookies_for_domain(domain_substr: str) -> dict:
+        """Load cookies for a domain from the app's cookies.txt (Netscape format)
+        as a name->value dict for curl_cffi, so the Rumble scrape uses the same
+        authentication as downloads (e.g. for premium content). Empty if none."""
+        if not settings.has_cookies:
+            return {}
+        import http.cookiejar
+        try:
+            jar = http.cookiejar.MozillaCookieJar(str(settings.cookies_path))
+            jar.load(ignore_discard=True, ignore_expires=True)
+            return {c.name: c.value for c in jar if domain_substr in (c.domain or "")}
+        except Exception as e:
+            logger.warning("Could not load %s cookies for scrape: %s", domain_substr, e)
+            return {}
+
+    @staticmethod
     def _parse_rumble_video_hrefs(html: str) -> list[str]:
         """Extract channel video hrefs (e.g. /v3pyn3g-title.html) from a Rumble
         channel page. Uses the embedded JSON 'relative_url' field, which is scoped
@@ -230,11 +246,12 @@ class YtdlpService:
             return []
 
         base = channel_url.split("?")[0].rstrip("/")
+        cookies = self._load_cookies_for_domain("rumble")
         entries: list[dict] = []
         seen: set[str] = set()
         for page in range(1, 51):  # hard cap on pagination
             try:
-                resp = cffi_requests.get(f"{base}?page={page}", impersonate="chrome", timeout=30)
+                resp = cffi_requests.get(f"{base}?page={page}", impersonate="chrome", timeout=30, cookies=cookies)
             except Exception as e:
                 logger.warning("Rumble scrape error on %s page %d: %s", base, page, e)
                 break
@@ -268,7 +285,10 @@ class YtdlpService:
         except ImportError:
             return {}
         try:
-            html = cffi_requests.get(channel_url.split("?")[0], impersonate="chrome", timeout=30).text
+            html = cffi_requests.get(
+                channel_url.split("?")[0], impersonate="chrome", timeout=30,
+                cookies=self._load_cookies_for_domain("rumble"),
+            ).text
         except Exception as e:
             logger.warning("Rumble channel-info scrape failed for %s: %s", channel_url, e)
             return {}

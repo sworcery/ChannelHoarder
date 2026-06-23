@@ -58,7 +58,7 @@ def _add_file_logging(log_path: str) -> None:
         logger.warning("Could not open log file %s: %s", log_path, e)
 
 # Default config values
-DEFAULT_DOMAINS = ".youtube.com,.google.com"
+DEFAULT_DOMAINS = ".youtube.com,.google.com,.rumble.com"
 
 
 def _find_firefox_profile(profile_name: str = "") -> str:
