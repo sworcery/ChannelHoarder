@@ -145,6 +145,34 @@ def _find_firefox_profile(profile_name: str = "") -> str:
     sys.exit(1)
 
 
+def _detect_firefox_user_agent(profile_dir: str) -> str:
+    """Build the exact User-Agent string this Firefox sends, so the backend can replay
+    it. A Cloudflare cf_clearance cookie is bound to the UA that solved the challenge,
+    so the container must send the same UA when reusing these cookies.
+
+    Firefox freezes its UA to a predictable form; only the major version varies, read
+    here from the profile's compatibility.ini. Returns "" if it can't be determined.
+    """
+    compat = os.path.join(profile_dir, "compatibility.ini")
+    try:
+        config = configparser.ConfigParser()
+        config.read(compat)
+        last_version = config.get("Compatibility", "LastVersion", fallback="")
+    except (configparser.Error, OSError) as e:
+        logger.warning("Could not read Firefox version from %s: %s", compat, e)
+        return ""
+    # LastVersion looks like "140.0.1_20250610..." or "128.11.0_..."; Firefox's UA
+    # always uses "<major>.0" for both the rv: and Firefox/ tokens.
+    major = last_version.split("_")[0].split(".")[0].strip()
+    if not major.isdigit():
+        logger.warning("Unexpected Firefox LastVersion %r; skipping UA capture", last_version)
+        return ""
+    ua = (f"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:{major}.0) "
+          f"Gecko/20100101 Firefox/{major}.0")
+    logger.info("Detected Firefox UA: %s", ua)
+    return ua
+
+
 def _find_firefox_exe() -> str:
     """Find Firefox executable path."""
     candidates = [
@@ -192,6 +220,7 @@ def _refresh_cookies(firefox_exe: str, url: str, wait_seconds: int):
 def extract_cookies(
     profile_dir: str,
     domains: list[str],
+    user_agent: str = "",
 ) -> tuple[str, int]:
     """Extract cookies from Firefox's cookies.sqlite.
 
@@ -266,8 +295,12 @@ def extract_cookies(
         lines = [
             "# Netscape HTTP Cookie File",
             "# Exported by ChannelHoarder cookie_exporter (Firefox)",
-            "",
         ]
+        # Embed the browser UA as a comment so it travels with the cookies through both
+        # delivery methods; ChannelHoarder replays it to validate Cloudflare cf_clearance.
+        if user_agent:
+            lines.append(f"# User-Agent: {user_agent}")
+        lines.append("")
         count = 0
 
         for host, name, value, path, expiry, is_secure, is_http_only in rows:
@@ -419,9 +452,10 @@ def main():
         time.sleep(2)
         _refresh_cookies(firefox_exe, refresh_url, refresh_wait)
 
-    # Step 2: Extract cookies from Firefox DB
+    # Step 2: Extract cookies from Firefox DB (with this Firefox's UA for cf_clearance)
+    user_agent = _detect_firefox_user_agent(profile_dir)
     try:
-        cookies_txt, count = extract_cookies(profile_dir, cfg["domains"])
+        cookies_txt, count = extract_cookies(profile_dir, cfg["domains"], user_agent)
     except Exception as e:
         logger.error("Failed to extract cookies: %s", e)
         sys.exit(1)

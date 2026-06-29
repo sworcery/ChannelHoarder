@@ -87,3 +87,84 @@ class TestRumbleScrapeEntryShape:
         slug = href.lstrip("/")
         vid_id = slug.split(".")[0] if "." in slug else slug
         assert vid_id == "v3pyn3g-brush-creek-bridge-ducktown-tn"
+
+
+class TestCookieUserAgent:
+    """The exporter embeds the browser UA as a '# User-Agent:' comment so a
+    cf_clearance token (bound to that UA) can be replayed. Verify parsing."""
+
+    def _use_cookie_file(self, tmp_path, monkeypatch, text):
+        cookie_file = tmp_path / "cookies.txt"
+        cookie_file.write_text(text)
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: cookie_file))
+
+    def test_reads_embedded_user_agent(self, tmp_path, monkeypatch):
+        self._use_cookie_file(tmp_path, monkeypatch,
+            "# Netscape HTTP Cookie File\n"
+            "# User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0\n"
+            "\n.rumble.com\tTRUE\t/\tTRUE\t9999999999\tsess\tabc\n")
+        assert YtdlpService._get_cookie_user_agent() == (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0")
+
+    def test_none_when_no_ua_comment(self, tmp_path, monkeypatch):
+        self._use_cookie_file(tmp_path, monkeypatch,
+            "# Netscape HTTP Cookie File\n.rumble.com\tTRUE\t/\tTRUE\t9999999999\tsess\tabc\n")
+        assert YtdlpService._get_cookie_user_agent() is None
+
+    def test_none_when_no_cookie_file(self, tmp_path, monkeypatch):
+        missing = tmp_path / "nope.txt"
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: missing))
+        assert YtdlpService._get_cookie_user_agent() is None
+
+
+class TestRumbleScrapeImpersonation:
+    """The cookie exporter only reads Firefox, and a cf_clearance token is bound to
+    the UA that solved the challenge - so the scrape must impersonate Firefox AND
+    replay the captured UA for exported cookies to validate. Lock both in."""
+
+    class _Resp:
+        def __init__(self):
+            self.status_code = 200
+            self.text = "<html>no videos</html>"
+
+    def _capture_requests(self, monkeypatch):
+        from curl_cffi import requests as cffi_requests
+        calls = []
+
+        def fake_get(*args, **kwargs):
+            calls.append(kwargs)
+            return self._Resp()
+
+        monkeypatch.setattr(cffi_requests, "get", fake_get)
+        return calls
+
+    def test_channel_scrape_impersonates_firefox(self, monkeypatch):
+        calls = self._capture_requests(monkeypatch)
+        YtdlpService()._scrape_rumble_channel("https://rumble.com/c/Test")
+        assert calls and all(c.get("impersonate") == "firefox" for c in calls)
+
+    def test_channel_info_scrape_impersonates_firefox(self, monkeypatch):
+        calls = self._capture_requests(monkeypatch)
+        YtdlpService()._scrape_rumble_channel_info("https://rumble.com/c/Test")
+        assert [c.get("impersonate") for c in calls] == ["firefox"]
+
+    def test_scrape_replays_captured_user_agent(self, tmp_path, monkeypatch):
+        cookie_file = tmp_path / "cookies.txt"
+        cookie_file.write_text(
+            "# Netscape HTTP Cookie File\n# User-Agent: FF-UA-140\n"
+            "\n.rumble.com\tTRUE\t/\tTRUE\t9999999999\tsess\tabc\n")
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: cookie_file))
+        calls = self._capture_requests(monkeypatch)
+        YtdlpService()._scrape_rumble_channel("https://rumble.com/c/Test")
+        assert calls and all(c.get("headers") == {"User-Agent": "FF-UA-140"} for c in calls)
+
+    def test_scrape_sends_no_ua_header_without_cookies(self, tmp_path, monkeypatch):
+        missing = tmp_path / "nope.txt"
+        monkeypatch.setattr(type(ytdlp_service.settings), "cookies_path",
+                            property(lambda self: missing))
+        calls = self._capture_requests(monkeypatch)
+        YtdlpService()._scrape_rumble_channel("https://rumble.com/c/Test")
+        assert calls and all(c.get("headers") is None for c in calls)

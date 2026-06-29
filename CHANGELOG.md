@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.22] - 2026-06-30
+
+### Fixed
+- **Rumble cookies now validate against Cloudflare's `cf_clearance`** (#19) - On IPs that Cloudflare challenges, Rumble requests were rejected with 403 even with valid cookies, because a `cf_clearance` token is bound to the exact browser **and version** (User-Agent) that solved the challenge. Two mismatches caused this: the scrape and download paths impersonated Chrome while the cookie exporter only reads Firefox, and neither replayed the browser's actual UA. Now the cookie exporter captures the real Firefox User-Agent and embeds it with the cookies, and both the Rumble channel scrape and the yt-dlp download path impersonate Firefox and send that captured UA - so exported cookies validate on challenged IPs.
+
 ## [1.9.21] - 2026-06-22
 
 ### Added

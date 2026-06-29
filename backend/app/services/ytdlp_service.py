@@ -25,7 +25,13 @@ _impersonate_lock = threading.Lock()
 
 
 def _get_impersonate_target():
-    """Return an ImpersonateTarget for Chrome if curl_cffi is available and compatible, else None."""
+    """Return an ImpersonateTarget for Firefox if curl_cffi is available and compatible, else None.
+
+    Firefox (not Chrome) to match the cookie exporter, which only reads Firefox: a
+    Cloudflare cf_clearance token is bound to the browser that solved the challenge,
+    so the impersonated TLS fingerprint and the exported cookies must be the same
+    browser family for authenticated (e.g. Rumble) requests to validate.
+    """
     global _impersonate_target, _impersonate_checked
     if _impersonate_checked:
         return _impersonate_target
@@ -36,7 +42,7 @@ def _get_impersonate_target():
         try:
             from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
             from yt_dlp.networking.impersonate import ImpersonateTarget
-            _impersonate_target = ImpersonateTarget.from_str("chrome")
+            _impersonate_target = ImpersonateTarget.from_str("firefox")
             logger.info("Browser impersonation available (curl_cffi)")
         except (ImportError, ValueError, TypeError) as e:
             logger.warning("Browser impersonation unavailable: %s", e)
@@ -223,6 +229,27 @@ class YtdlpService:
             return {}
 
     @staticmethod
+    def _get_cookie_user_agent() -> str | None:
+        """Return the browser User-Agent captured at cookie-export time, embedded as a
+        '# User-Agent:' comment near the top of cookies.txt. A Cloudflare cf_clearance
+        token is bound to the exact UA (browser and version) that solved the challenge,
+        so requests replaying those cookies must send this UA verbatim. None if absent.
+        """
+        if not settings.has_cookies:
+            return None
+        try:
+            with open(settings.cookies_path, encoding="utf-8") as f:
+                for line in f:
+                    if line.startswith("# User-Agent:"):
+                        return line.split(":", 1)[1].strip() or None
+                    # The comment sits above the cookie rows; stop at the first real one.
+                    if line.strip() and not line.startswith("#"):
+                        break
+        except OSError:
+            return None
+        return None
+
+    @staticmethod
     def _parse_rumble_video_hrefs(html: str) -> list[str]:
         """Extract channel video hrefs (e.g. /v3pyn3g-title.html) from a Rumble
         channel page. Uses the embedded JSON 'relative_url' field, which is scoped
@@ -247,11 +274,16 @@ class YtdlpService:
 
         base = channel_url.split("?")[0].rstrip("/")
         cookies = self._load_cookies_for_domain("rumble")
+        # Impersonate Firefox and replay the exact UA captured at cookie-export time,
+        # so a Firefox-issued cf_clearance token (bound to browser + version) validates.
+        ua = self._get_cookie_user_agent()
+        headers = {"User-Agent": ua} if ua else None
         entries: list[dict] = []
         seen: set[str] = set()
         for page in range(1, 51):  # hard cap on pagination
             try:
-                resp = cffi_requests.get(f"{base}?page={page}", impersonate="chrome", timeout=30, cookies=cookies)
+                resp = cffi_requests.get(f"{base}?page={page}", impersonate="firefox",
+                                         timeout=30, cookies=cookies, headers=headers)
             except Exception as e:
                 logger.warning("Rumble scrape error on %s page %d: %s", base, page, e)
                 break
@@ -284,10 +316,12 @@ class YtdlpService:
             from curl_cffi import requests as cffi_requests
         except ImportError:
             return {}
+        ua = self._get_cookie_user_agent()
         try:
             html = cffi_requests.get(
-                channel_url.split("?")[0], impersonate="chrome", timeout=30,
+                channel_url.split("?")[0], impersonate="firefox", timeout=30,
                 cookies=self._load_cookies_for_domain("rumble"),
+                headers={"User-Agent": ua} if ua else None,
             ).text
         except Exception as e:
             logger.warning("Rumble channel-info scrape failed for %s: %s", channel_url, e)
@@ -738,8 +772,13 @@ class YtdlpService:
         else:
             logger.info("No cookies file found at %s", settings.cookies_path)
 
-        # User-agent rotation
-        if settings.USER_AGENT_ROTATION:
+        # User-Agent. For impersonated (non-YouTube) sites, replay the exact UA captured
+        # at cookie-export time so a Cloudflare cf_clearance token validates - this must
+        # win over UA rotation. Elsewhere, keep the optional rotation behaviour.
+        cookie_ua = self._get_cookie_user_agent() if platform != "youtube" else None
+        if cookie_ua:
+            opts["http_headers"] = {"User-Agent": cookie_ua}
+        elif settings.USER_AGENT_ROTATION:
             from app.utils.user_agents import get_random_user_agent
             opts["http_headers"] = {"User-Agent": get_random_user_agent()}
 
