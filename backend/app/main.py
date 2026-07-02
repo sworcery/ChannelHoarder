@@ -129,14 +129,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_cors_origins = (
-    [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
-    if settings.CORS_ORIGINS
-    else []
-)
+_cors_origins = settings.cors_origins_list
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins or ["*"],
+    # Same-origin only by default (the web UI is served from this same app). Cross-origin
+    # browser access must be opted into via CORS_ORIGINS; defaulting to "*" let any page
+    # drive the unauthenticated cookie-write endpoints (CSRF).
+    allow_origins=_cors_origins,
     allow_credentials=bool(_cors_origins),
     allow_methods=["*"],
     allow_headers=["*"],

@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.9.22"
+    APP_VERSION: str = "1.9.23"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     TZ: str = "America/New_York"
 
     model_config = {"env_prefix": "", "case_sensitive": True}
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
     def allowed_download_roots(self) -> list[str]:

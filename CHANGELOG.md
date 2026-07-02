@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.23] - 2026-07-01
+
+### Security
+- **Cookie endpoints hardened against cross-site request forgery** - CORS no longer defaults to `*`; the API now allows same-origin requests only unless you explicitly set `CORS_ORIGINS`. The web UI (served from the same app) is unaffected, as are the cookie exporter and Tampermonkey userscript (neither relies on CORS). The cookie file-upload endpoint additionally rejects cross-origin browser requests. Previously a malicious page opened in a browser that could reach the server could overwrite the stored cookies. No configuration change is needed for normal use; reverse-proxy setups that rewrite the `Host` header should set `CORS_ORIGINS` (or forward `X-Forwarded-Host`) to their public URL.
+
 ## [1.9.22] - 2026-06-30
 
 ### Fixed

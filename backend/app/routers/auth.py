@@ -2,8 +2,10 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request, Depends
+
 from pydantic import BaseModel, Field
 
 from sqlalchemy import select
@@ -17,7 +19,32 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/cookies/upload")
+def reject_cross_origin(request: Request) -> None:
+    """Block cross-origin browser requests (CSRF) to state-changing endpoints.
+
+    A multipart form upload is a "simple" request that skips the CORS preflight, so
+    tightened CORS config alone can't stop a malicious page from POSTing to it. Compare
+    the browser-set Origin against the host the browser addressed. Non-browser clients
+    (the cookie exporter, curl) send no Origin header and are unaffected.
+
+    A present-but-non-matching Origin - including the opaque "null" a sandboxed iframe
+    sends - is rejected. Behind a reverse proxy that rewrites Host, X-Forwarded-Host
+    (set by the proxy, not forgeable by a browser) and CORS_ORIGINS cover the public host.
+    """
+    origin = request.headers.get("origin")
+    if not origin:
+        return
+    origin_host = urlparse(origin).netloc
+    allowed = {request.headers.get("host", "")}
+    allowed |= {h.strip() for h in request.headers.get("x-forwarded-host", "").split(",")}
+    allowed |= {urlparse(o).netloc for o in settings.cors_origins_list}
+    allowed.discard("")
+    if origin_host not in allowed:
+        logger.warning("Rejected cross-origin request from %s", origin)
+        raise HTTPException(status_code=403, detail="Cross-origin request rejected")
+
+
+@router.post("/cookies/upload", dependencies=[Depends(reject_cross_origin)])
 async def upload_cookies(file: UploadFile = File(...)):
     """Upload a cookies.txt file for YouTube authentication."""
     if not file.filename or not file.filename.endswith(".txt"):
