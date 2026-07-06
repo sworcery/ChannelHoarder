@@ -859,21 +859,6 @@ class ChannelService:
             min_offset_hours=min_offset_hours,
         )
 
-    async def _get_max_duration(self) -> int | None:
-        """Read max_video_duration from AppSettings. Returns seconds or None."""
-        try:
-            result = await self.db.execute(
-                select(AppSetting).where(AppSetting.key == "max_video_duration")
-            )
-            setting = result.scalar_one_or_none()
-            if setting:
-                import json
-                val = json.loads(setting.value)
-                return int(val) if val else None
-        except Exception:
-            pass
-        return None
-
     async def _get_setting_bool(self, key: str, default: bool = False) -> bool:
         """Read a boolean AppSetting."""
         try:

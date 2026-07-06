@@ -108,21 +108,3 @@ async def scan_due_channels():
         "channels_scanned": len(due_channels),
         "new_videos": total_new,
     })
-
-
-# Keep the old name as an alias so any external references (including the
-# system router's manual "scan all" trigger) continue to work.
-async def scan_all_channels():
-    """Backwards-compat alias that forces all enabled channels to scan now."""
-    async with async_session() as db:
-        now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-        result = await db.execute(
-            select(Channel)
-            .where(Channel.enabled == True)
-            .where(Channel.channel_id != "__standalone__")
-        )
-        channels = result.scalars().all()
-        for channel in channels:
-            channel.next_scan_at = now_utc
-        await db.commit()
-    await scan_due_channels()

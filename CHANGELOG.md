@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.26] - 2026-07-06
+
+### Removed
+- **Internal dead-code cleanup** - Removed unused code with no user-facing effect: two never-wired livestream `detect-clean` API endpoints (the UI only ever exposed detect-clean for Shorts), a leftover `scan_all_channels` alias, and two unreferenced helper methods (`_subtitles_enabled`, `_get_max_duration`). Reduces confusion for future maintenance.
+
 ## [1.9.25] - 2026-07-06
 
 ### Fixed

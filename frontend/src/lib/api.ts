@@ -102,10 +102,6 @@ export const api = {
     request<{ deleted: number; message: string }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
   detectChannelLivestreams: (channelId: number) =>
     request<{ detected: number; message: string }>(`/channels/${channelId}/livestreams/detect`, { method: "POST" }),
-  detectCleanLivestreamsPreview: (channelId: number) =>
-    request<DetectCleanPreview>(`/channels/${channelId}/livestreams/detect-clean/preview`, { method: "POST" }),
-  detectCleanLivestreamsConfirm: (channelId: number) =>
-    request<{ message: string; detected: number; deleted: number; renamed: number }>(`/channels/${channelId}/livestreams/detect-clean/confirm`, { method: "POST" }),
   toggleVideoLivestream: (channelId: number, videoId: number, isLivestream: boolean) =>
     request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/livestream`, { method: "PATCH", body: JSON.stringify({ is_livestream: isLivestream }) }),
 
