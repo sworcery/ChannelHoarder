@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.24] - 2026-07-06
+
+### Fixed
+- **Container restart loop from yt-dlp auto-update removed** - In-container `pip install --upgrade yt-dlp` never persists across a Docker restart (the container is recreated from the image), so the daily self-heal update kept "upgrading" and restarting on every boot. A loop guard was meant to stop this but was defeated by the startup corrupt-settings pass re-encoding its flag, producing an endless restart loop that made the UI unreachable. The runtime yt-dlp auto-update/restart mechanism and the manual "Update yt-dlp" button have been removed entirely.
+
+### Changed
+- **yt-dlp now ships with the image and updates on rebuild** - Every image build (including a new weekly scheduled build) pulls the latest yt-dlp, so downloads stay current via normal image updates instead of runtime self-modification. The Settings page still shows the bundled yt-dlp version.
+
 ## [1.9.23] - 2026-07-01
 
 ### Security

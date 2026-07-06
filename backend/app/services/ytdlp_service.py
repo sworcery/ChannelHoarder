@@ -593,51 +593,6 @@ class YtdlpService:
             return "unknown"
 
     @staticmethod
-    def get_latest_pypi_version() -> str | None:
-        """Query PyPI for the latest published yt-dlp version, or None on failure."""
-        try:
-            resp = httpx.get("https://pypi.org/pypi/yt-dlp/json", timeout=10)
-            resp.raise_for_status()
-            return resp.json()["info"]["version"]
-        except Exception as e:
-            logger.warning("Could not fetch latest yt-dlp version from PyPI: %s", e)
-            return None
-
-    @staticmethod
-    def _version_tuple(v: str) -> tuple:
-        """Parse a yt-dlp version like '2026.06.09' or '2026.6.9' into an int
-        tuple so comparison ignores zero-padding differences between the loaded
-        module (e.g. '2026.06.09') and PyPI's normalized form (e.g. '2026.6.9')."""
-        parts = []
-        for p in str(v).split("."):
-            digits = "".join(ch for ch in p if ch.isdigit())
-            parts.append(int(digits) if digits else 0)
-        return tuple(parts)
-
-    @classmethod
-    def is_outdated(cls, current: str, latest: str) -> bool:
-        """True if `latest` is a newer yt-dlp version than `current`."""
-        if not current or not latest or current == "unknown":
-            return False
-        try:
-            return cls._version_tuple(latest) > cls._version_tuple(current)
-        except Exception:
-            return False
-
-    def update(self) -> tuple[bool, str]:
-        """Update yt-dlp to latest version. Returns (success, message)."""
-        try:
-            result = subprocess.run(
-                ["pip", "install", "--upgrade", "yt-dlp"],
-                capture_output=True, text=True, timeout=120,
-            )
-            if result.returncode == 0:
-                return True, result.stdout
-            return False, result.stderr
-        except Exception as e:
-            return False, str(e)
-
-    @staticmethod
     def get_js_runtime_status() -> str | None:
         """Return a description of an available supported JS runtime (Deno or Bun),
         or None if none is found.

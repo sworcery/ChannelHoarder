@@ -201,8 +201,6 @@ If you already added channels to an existing TV library, move them to the new li
 | `DOWNLOAD_DELAY_MAX` | `30` | Maximum delay between downloads (seconds) |
 | `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads |
 | `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings |
-| `YTDLP_AUTO_UPDATE` | `true` | Daily check of PyPI for a newer yt-dlp and auto-upgrade when behind |
-| `YTDLP_AUTO_RESTART` | `true` | After an auto-update, restart the container when idle to apply it (requires a restart policy, e.g. `restart: unless-stopped`) |
 
 ### YouTube Data API Key (Optional)
 

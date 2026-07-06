@@ -56,6 +56,13 @@ RUN git clone --single-branch --depth 1 https://github.com/Brainicism/bgutil-ytd
     && npx tsc \
     && ln -s /opt/pot-provider /opt/bgutil-ytdlp-pot-provider
 
+# Always pull the newest yt-dlp on every build (scheduled or push). CACHEBUST changes
+# each CI run so this single layer is never served from cache, keeping the image current
+# with yt-dlp releases without editing requirements.txt. Placed after the heavy bgutil /
+# git-clone steps so only this layer re-runs on a scheduled rebuild, not those.
+ARG CACHEBUST=0
+RUN echo "yt-dlp refresh ${CACHEBUST}" && pip install --no-cache-dir --upgrade yt-dlp
+
 # Copy backend code
 COPY backend/app/ ./app/
 COPY backend/alembic.ini .

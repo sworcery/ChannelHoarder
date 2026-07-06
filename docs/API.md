@@ -78,7 +78,6 @@ All endpoints are under `/api/v1/`. An interactive, always-current version is av
 - `POST /system/test-download`  - Test download capability (multi-strategy)
 - `POST /system/scan-all`  - Scan all enabled channels
 - `GET /system/ytdlp/version`  - Current yt-dlp version
-- `POST /system/ytdlp/update`  - Update yt-dlp
 
 ### WebSocket
 - `WS /ws/progress`  - Real-time download progress updates

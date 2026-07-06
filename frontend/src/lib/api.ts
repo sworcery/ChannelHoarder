@@ -306,7 +306,6 @@ export const api = {
     URL.revokeObjectURL(url)
   },
   getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
-  updateYtdlp: () => request<MessageResponse>("/system/ytdlp/update", { method: "POST" }),
   getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
   getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),
   getLogs: (params?: { skip?: number; limit?: number; error_code?: string; event?: string; search?: string }) => {

@@ -92,15 +92,6 @@ async def get_ytdlp_version():
     return {"version": ytdlp.get_version()}
 
 
-@router.post("/ytdlp/update")
-async def update_ytdlp():
-    import asyncio
-    ytdlp = YtdlpService()
-    success, message = await asyncio.to_thread(ytdlp.update)
-    version = await asyncio.to_thread(ytdlp.get_version)
-    return {"success": success, "message": message, "version": version}
-
-
 @router.get("/diagnostics", response_model=DiagnosticReport)
 async def get_diagnostics(db: AsyncSession = Depends(get_db)):
     service = DiagnosticsService(db)

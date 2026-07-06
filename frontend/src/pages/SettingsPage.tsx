@@ -90,17 +90,9 @@ function GeneralTab() {
   const queryClient = useQueryClient()
   const importRef = useRef<HTMLInputElement>(null)
   const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: api.getStats })
-  const { data: ytdlpVersion, refetch: refetchYtdlp } = useQuery({
+  const { data: ytdlpVersion } = useQuery({
     queryKey: ["ytdlp-version"],
     queryFn: api.getYtdlpVersion,
-  })
-  const ytdlpUpdateMutation = useMutation({
-    mutationFn: api.updateYtdlp,
-    onSuccess: (data: any) => {
-      refetchYtdlp()
-      toast(data.success ? `Updated to ${data.version}` : data.message, data.success ? "success" : "warning")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
   })
 
   // Settings state
@@ -335,21 +327,11 @@ function GeneralTab() {
           <h3 className="font-semibold">yt-dlp</h3>
           <HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm">Current version: <span className="font-mono">{ytdlpVersion?.version || "unknown"}</span></p>
-            <p className="text-xs text-muted-foreground">
-              yt-dlp is checked for updates daily at 4 AM
-            </p>
-          </div>
-          <button
-            onClick={() => ytdlpUpdateMutation.mutate()}
-            disabled={ytdlpUpdateMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {ytdlpUpdateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            Update Now
-          </button>
+        <div>
+          <p className="text-sm">Current version: <span className="font-mono">{ytdlpVersion?.version || "unknown"}</span></p>
+          <p className="text-xs text-muted-foreground">
+            yt-dlp is bundled with the app and updated with each release
+          </p>
         </div>
       </div>
 

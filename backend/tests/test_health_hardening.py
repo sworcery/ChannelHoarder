@@ -43,29 +43,3 @@ class TestHealthFailureMessage:
         monkeypatch.setattr(YtdlpService, "get_js_runtime_status", staticmethod(lambda: "deno 2.8.3"))
         msg = YtdlpService()._format_health_failure("boom")
         assert "deno 2.8.3" in msg
-
-
-class TestVersionComparison:
-    def test_zero_padding_treated_equal(self):
-        # Loaded module form ('2026.06.09') vs PyPI's normalized form ('2026.6.9')
-        # must NOT be seen as outdated, or the updater would loop forever.
-        assert YtdlpService.is_outdated("2026.06.09", "2026.6.9") is False
-
-    def test_identical_not_outdated(self):
-        assert YtdlpService.is_outdated("2026.06.09", "2026.06.09") is False
-
-    def test_newer_patch_is_outdated(self):
-        # String comparison would wrongly call "2026.6.20" < "2026.6.9"; tuple compare is correct.
-        assert YtdlpService.is_outdated("2026.6.9", "2026.6.20") is True
-
-    def test_newer_month_is_outdated(self):
-        assert YtdlpService.is_outdated("2026.06.09", "2026.7.1") is True
-
-    def test_current_ahead_not_outdated(self):
-        assert YtdlpService.is_outdated("2026.6.20", "2026.6.9") is False
-
-    def test_unknown_current_not_outdated(self):
-        assert YtdlpService.is_outdated("unknown", "2026.6.9") is False
-
-    def test_empty_latest_not_outdated(self):
-        assert YtdlpService.is_outdated("2026.6.9", "") is False

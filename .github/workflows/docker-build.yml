@@ -3,6 +3,9 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [main]
+  schedule:
+    # Weekly rebuild so the image picks up the latest yt-dlp even without a code push.
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 
 env:
@@ -82,6 +85,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            CACHEBUST=${{ github.run_id }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

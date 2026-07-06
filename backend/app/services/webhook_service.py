@@ -23,7 +23,6 @@ EVENT_TITLES: dict[str, str] = {
     "cookies_expired": "🔑 Cookies Expired",
     "cookies_refreshed": "🔑 Cookies Refreshed",
     "health_alert": "⚠️ Health Alert",
-    "ytdlp_updated": "🔄 yt-dlp Updated",
     "critical_alert": "🚨 Critical Alert",
     "review_required": "👀 Review Required",
     "move_complete": "📁 Files Moved",
