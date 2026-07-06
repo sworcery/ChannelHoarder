@@ -23,6 +23,12 @@ from app.utils.file_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
+# YouTube Shorts are <= 60s. This is the shorts-classification cutoff and is kept
+# separate from Channel.min_video_duration, which is a download length filter - reusing
+# the filter as the shorts threshold caused already-downloaded videos to be reclassified
+# as shorts and auto-deleted when a large min_video_duration was set.
+SHORTS_MAX_DURATION = 60
+
 # Track channels currently being scanned to prevent concurrent scan races
 _scanning_channels: set[int] = set()
 
@@ -429,7 +435,6 @@ class ChannelService:
         # Third pass: assign episode numbers and insert into DB
         # Shorts are excluded from episode numbering
         new_count = 0
-        shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
         for entry in enriched_entries:
             vid_id = entry["vid_id"]
             upload_date = entry["upload_date"]
@@ -449,7 +454,7 @@ class ChannelService:
 
             # Fallback heuristics for API-based or single-tab scans
             if not is_short_entry and not is_livestream_entry:
-                if duration and duration <= shorts_threshold:
+                if duration and duration <= SHORTS_MAX_DURATION:
                     is_short_entry = True
                 elif title and ("#shorts" in title.lower() or "#short" in title.lower()):
                     is_short_entry = True
@@ -724,7 +729,6 @@ class ChannelService:
                 tab_map[vid_id] = entry.get("_source_tab", "videos")
                 live_status_map[vid_id] = entry.get("live_status")
 
-        shorts_threshold = channel.min_video_duration if channel.min_video_duration else 30
         # Read settings from cache if available, otherwise fall back to DB
         shorts_globally_enabled = bool(self._settings_cache.get("shorts_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("shorts_enabled", False)
         livestreams_globally_enabled = bool(self._settings_cache.get("livestreams_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("livestreams_enabled", False)
@@ -751,11 +755,14 @@ class ChannelService:
             should_be_short = source_tab == "shorts"
             should_be_livestream = source_tab == "streams"
 
-            # Secondary heuristics (only apply if not already classified by tab)
+            # Secondary heuristics (only apply if not already classified by tab).
+            # Deliberately NOT using a duration cutoff here: this path deletes the
+            # downloaded files of anything it flips to a short, so it only acts on
+            # reliable signals (the shorts tab above, an explicit #shorts title, or
+            # live status) - never on duration alone, which would delete legitimate
+            # short-but-regular videos.
             if not should_be_short and not should_be_livestream:
                 if video.title and ("#shorts" in video.title.lower() or "#short" in video.title.lower()):
-                    should_be_short = True
-                elif video.duration and video.duration <= shorts_threshold:
                     should_be_short = True
                 elif live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
                     should_be_livestream = True

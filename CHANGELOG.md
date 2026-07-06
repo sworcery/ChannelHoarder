@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.25] - 2026-07-06
+
+### Fixed
+- **Shorts detection no longer deletes downloaded videos when a minimum-duration filter is set** - The Shorts-classification cutoff was reusing each channel's `min_video_duration` (a download length filter). Setting `min_video_duration` to e.g. 300s caused already-downloaded videos shorter than that to be reclassified as Shorts and, when Shorts were disabled, auto-deleted from disk. Shorts detection now uses a fixed 60s cutoff (YouTube's definition), independent of `min_video_duration`. The scan-time reclassification that deletes files now acts only on reliable signals (the YouTube Shorts/live tab or an explicit `#shorts` title), never on duration alone.
+
 ## [1.9.24] - 2026-07-06
 
 ### Fixed

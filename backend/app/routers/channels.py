@@ -17,7 +17,7 @@ from app.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, VideoResponse,
     ImportScanRequest, ImportConfirmRequest,
 )
-from app.services.channel_service import ChannelService
+from app.services.channel_service import ChannelService, SHORTS_MAX_DURATION
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -1525,8 +1525,8 @@ async def detect_channel_shorts(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Use channel-specific threshold if set, otherwise default 30s
-    threshold = channel.min_video_duration if channel.min_video_duration else 30
+    # YouTube Shorts are <= 60s (separate from the min_video_duration download filter)
+    threshold = SHORTS_MAX_DURATION
 
     result = await db.execute(
         select(Video)
@@ -1557,12 +1557,6 @@ def _is_likely_short(video, threshold: int) -> bool:
         if "#shorts" in title_lower or "#short" in title_lower:
             return True
 
-    # Very small file size (< 20MB) combined with known short duration
-    # Only apply when duration is actually known to avoid false positives
-    if video.file_size and video.file_size < 20 * 1024 * 1024:
-        if video.duration and video.duration <= threshold:
-            return True
-
     return False
 
 
@@ -1577,7 +1571,7 @@ async def detect_clean_shorts_preview(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    threshold = channel.min_video_duration if channel.min_video_duration else 30
+    threshold = SHORTS_MAX_DURATION
 
     # Find videos that would be newly classified as shorts
     result = await db.execute(
@@ -1637,7 +1631,7 @@ async def detect_clean_shorts_confirm(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    threshold = channel.min_video_duration if channel.min_video_duration else 30
+    threshold = SHORTS_MAX_DURATION
 
     # Step 1: Detect new shorts
     result = await db.execute(
