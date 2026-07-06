@@ -5,6 +5,14 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.28] - 2026-07-06
+
+### Fixed
+- **Removed the redundant `--init` from the Unraid template** - the image already runs `tini` as its init, so Unraid's `--init` layered a second init and produced the "Tini is not running as PID 1" log warning. New installs from the template no longer add it. (Existing containers can remove `--init` from Extra Parameters to clear the warning.)
+
+### Changed
+- **Deterministic frontend builds** - the image build now uses `npm ci` (requiring the committed lockfile) instead of falling back to `npm install`, so builds can't silently resolve different frontend dependency versions.
+
 ## [1.9.27] - 2026-07-06
 
 ### Performance
