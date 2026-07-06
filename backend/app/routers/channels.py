@@ -4,7 +4,7 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -930,13 +930,9 @@ async def monitor_all_videos(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     result = await db.execute(
-        select(Video).where(Video.channel_id == channel_id)
+        update(Video).where(Video.channel_id == channel_id).values(monitored=body.monitored)
     )
-    videos = result.scalars().all()
-    count = 0
-    for video in videos:
-        video.monitored = body.monitored
-        count += 1
+    count = result.rowcount
     await db.commit()
     return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
 
@@ -950,13 +946,11 @@ async def monitor_season(
 ):
     """Set monitored state for all videos in a season."""
     result = await db.execute(
-        select(Video).where(Video.channel_id == channel_id, Video.season == season)
+        update(Video)
+        .where(Video.channel_id == channel_id, Video.season == season)
+        .values(monitored=body.monitored)
     )
-    videos = result.scalars().all()
-    count = 0
-    for video in videos:
-        video.monitored = body.monitored
-        count += 1
+    count = result.rowcount
     await db.commit()
     return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos in Season {season}", "count": count}
 

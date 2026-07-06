@@ -823,41 +823,37 @@ class ChannelService:
 
     async def _compute_next_scan_at(self) -> datetime:
         """Compute the next scan timestamp for a channel based on configured window."""
-        import json
         from app.utils.scan_window import compute_next_scan_at
 
-        start_hour = None
-        end_hour = None
-        min_offset_hours = 12
-        try:
-            result = await self.db.execute(
-                select(AppSetting).where(AppSetting.key == "scan_window_start_hour")
-            )
-            setting = result.scalar_one_or_none()
-            if setting:
-                start_hour = int(json.loads(setting.value))
-
-            result = await self.db.execute(
-                select(AppSetting).where(AppSetting.key == "scan_window_end_hour")
-            )
-            setting = result.scalar_one_or_none()
-            if setting:
-                end_hour = int(json.loads(setting.value))
-
-            result = await self.db.execute(
-                select(AppSetting).where(AppSetting.key == "scan_min_interval_hours")
-            )
-            setting = result.scalar_one_or_none()
-            if setting:
-                min_offset_hours = int(json.loads(setting.value))
-        except Exception:
-            pass
+        start_hour = await self._scan_window_int("scan_window_start_hour", None)
+        end_hour = await self._scan_window_int("scan_window_end_hour", None)
+        min_offset_hours = await self._scan_window_int("scan_min_interval_hours", 12)
 
         return compute_next_scan_at(
             start_hour=start_hour,
             end_hour=end_hour,
             min_offset_hours=min_offset_hours,
         )
+
+    async def _scan_window_int(self, key: str, default):
+        """Read an int AppSetting. During a scan the full settings cache is
+        authoritative (no query); outside a scan, fall back to a single DB read."""
+        import json
+        cache = getattr(self, "_settings_cache", None)
+        if cache is not None:
+            val = cache.get(key)
+            try:
+                return int(val) if val is not None else default
+            except (TypeError, ValueError):
+                return default
+        try:
+            result = await self.db.execute(select(AppSetting).where(AppSetting.key == key))
+            setting = result.scalar_one_or_none()
+            if setting:
+                return int(json.loads(setting.value))
+        except Exception:
+            pass
+        return default
 
     async def _get_setting_bool(self, key: str, default: bool = False) -> bool:
         """Read a boolean AppSetting."""

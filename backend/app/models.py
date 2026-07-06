@@ -64,6 +64,9 @@ class Video(Base):
         Index("ix_videos_channel_season", "channel_id", "season"),
         Index("ix_videos_status_downloaded_at", "status", "downloaded_at"),
         Index("ix_videos_channel_status_monitored", "channel_id", "status", "monitored"),
+        # History page orders by downloaded_at with no status filter, so the composite
+        # (status, downloaded_at) index above can't serve it; this standalone one can.
+        Index("ix_videos_downloaded_at", "downloaded_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

@@ -122,6 +122,11 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN is_livestream BOOLEAN DEFAULT 0 NOT NULL")
             )
+        # Index for the history page (ORDER BY downloaded_at with no status filter).
+        # create_all adds it on fresh installs; this covers existing databases.
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_videos_downloaded_at ON videos (downloaded_at)"
+        ))
 
         # Add target_quality and estimated_size to download_queue
         result3 = await conn.execute(text("PRAGMA table_info(download_queue)"))
