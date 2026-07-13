@@ -14,8 +14,6 @@ env:
 
 jobs:
   lint:
-    # Skip when running on Gitea Actions (which reads both .github/ and .gitea/)
-    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -41,7 +39,6 @@ jobs:
         run: cd frontend && npx tsc --noEmit
 
   build-and-push:
-    if: ${{ github.server_url == 'https://github.com' }}
     needs: lint
     runs-on: ubuntu-latest
     permissions:
