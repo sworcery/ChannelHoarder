@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.34] - 2026-07-13
+
+### Changed
+- **README reworked into collapsible sections** for easier scanning, with a quick-nav bar. Corrected a few stale notes (yt-dlp now ships current with each image build rather than auto-updating in place; Shorts are detected at ≤60s).
+- Removed a sample internal IP address from the cookie exporter config template.
+
 ## [1.9.33] - 2026-07-13
 
 ### Fixed

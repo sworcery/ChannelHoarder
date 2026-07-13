@@ -21,17 +21,16 @@
 - **Smart authentication** - Cookies (auto-sync via Windows exporter or Tampermonkey, or manual upload) with PO token fallback, optional YouTube Data API key, and a selectable yt-dlp player client
 - **Anti-detection** - Configurable download delays, random jitter, and user-agent rotation
 - **Monitoring** - Error classification with suggested fixes, diagnostic reports, searchable logs, and Telegram / Pushover / Discord notifications
-- **Self-contained** - Single Docker container (web UI, download engine, PO token server, scheduler) with dark-mode UI, auto-updating yt-dlp, and config import/export
+- **Self-contained** - Single Docker container (web UI, download engine, PO token server, scheduler) with dark-mode UI, current yt-dlp on every image build, and config import/export
 
-## Prerequisites
+## Contents
 
-- **Docker & Docker Compose**  - [Install Docker](https://docs.docker.com/get-docker/)
-- **Disk space**  - Plan 500 MB–1 GB per video at best quality; minimum 50 GB recommended
-- **Platform**  - Linux, macOS, Windows (via Docker Desktop), Unraid, TrueNAS
+[Quick Start](#quick-start) · [How It Works](#how-it-works) · [File Organization](#file-organization) · [Configuration](#configuration) · [Cookie Authentication](#cookie-authentication) · [Supported Platforms](#supported-platforms) · [Reference](#reference) · [Troubleshooting](#troubleshooting)
 
 ## Quick Start
 
-### Docker Compose
+<details open>
+<summary><b>Docker Compose</b></summary>
 
 ```yaml
 services:
@@ -53,11 +52,14 @@ services:
 
 > **Note:** Set `PUID`/`PGID` to match your media server user so downloaded files have the correct ownership. On Unraid, this is typically `PUID=99` (nobody).
 
-### Access the Web UI
+Then open `http://your-server-ip:8587` in your browser. Update later with `docker compose pull && docker compose up -d`.
 
-Open `http://your-server-ip:8587` in your browser.
+**Requirements:** Docker & Docker Compose; ~500 MB–1 GB disk per video at best quality (50 GB+ recommended); runs on Linux, macOS, Windows (Docker Desktop), Unraid, or TrueNAS.
 
-### First Steps
+</details>
+
+<details>
+<summary><b>First steps</b></summary>
 
 1. Go to **Settings → Authentication** and verify the PO Token Server shows **Running**
 2. *(Optional)* Add a YouTube Data API key for faster channel discovery
@@ -65,42 +67,40 @@ Open `http://your-server-ip:8587` in your browser.
 4. Go to **Channels** → **Add Channel** and paste a channel URL
 5. Videos will be scanned immediately and queued for download
 
-> **Security note:** ChannelHoarder has no built-in authentication  - it is designed for trusted local networks. If exposing to the internet, place it behind a reverse proxy with authentication (e.g. Authelia, Nginx Proxy Manager).
+> **Security note:** ChannelHoarder has no built-in authentication - it is designed for trusted local networks. If exposing to the internet, place it behind a reverse proxy with authentication (e.g. Authelia, Nginx Proxy Manager).
 
-### Updating
-
-```bash
-docker compose pull && docker compose up -d
-```
+</details>
 
 ## How It Works
 
-### Adding Channels
+<details>
+<summary><b>Adding channels & automatic scanning</b></summary>
 
-1. Go to the **Channels** page and click **Add Channel**
-2. Paste a channel URL or @handle (e.g., `https://www.youtube.com/@ChannelName`)
-3. ChannelHoarder fetches the channel metadata (name, description, thumbnail) and adds it to your subscription list
-4. Set per-channel options: download quality, custom download directory, enabled/disabled
-5. Optionally auto-scan immediately after adding
+**Adding channels:** Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set per-channel options (quality, custom download directory, enabled/disabled). It can auto-scan immediately after adding.
 
-### Automatic Scanning
+**Automatic scanning:**
 
 - The scheduler runs a channel scan on a configurable schedule (default: daily at 3:00 AM, changeable in Settings)
-- Each scan checks for new videos that haven't been downloaded yet
-- New videos are added to the download queue with `pending` status
-- If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise, yt-dlp handles discovery directly
+- Each scan checks for new videos that haven't been downloaded yet and adds them to the download queue with `pending` status
+- If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise yt-dlp handles discovery directly
 - Manual scans can be triggered per-channel or for all channels at once
 
-### Download Pipeline
+</details>
 
-1. **Queue Processing**  - Every 30 seconds, the next queued video is picked up
-2. **Rate Limiting**  - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
-3. **Download**  - yt-dlp downloads the video with PO tokens, plus thumbnail and metadata. By default yt-dlp auto-selects a working player client; a specific client can be forced in Settings → Authentication
-4. **Naming**  - Files are renamed to the Plex-compatible format with season/episode numbering
-5. **Verification**  - Output files are verified to exist and the database is updated
-6. **Progress**  - Real-time progress (speed, ETA, percentage) is broadcast via WebSocket to connected browsers
+<details>
+<summary><b>Download pipeline</b></summary>
 
-### Importing Existing Videos
+1. **Queue Processing** - Every 30 seconds, the next queued video is picked up
+2. **Rate Limiting** - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
+3. **Download** - yt-dlp downloads the video with PO tokens, plus thumbnail and metadata. By default yt-dlp auto-selects a working player client; a specific client can be forced in Settings → Authentication
+4. **Naming** - Files are renamed to the Plex-compatible format with season/episode numbering
+5. **Verification** - Output files are verified to exist and the database is updated
+6. **Progress** - Real-time progress (speed, ETA, percentage) is broadcast via WebSocket to connected browsers
+
+</details>
+
+<details>
+<summary><b>Importing existing videos</b></summary>
 
 If you already have downloaded videos from a channel, you can import them instead of re-downloading:
 
@@ -112,7 +112,10 @@ If you already have downloaded videos from a channel, you can import them instea
 
 **Important:** Video filenames must contain the original video title for matching to work. Files named with only dates or generic names won't match.
 
-### Error Handling
+</details>
+
+<details>
+<summary><b>Error handling & channel health</b></summary>
 
 When a download fails, ChannelHoarder classifies the error and provides actionable information:
 
@@ -123,20 +126,20 @@ When a download fails, ChannelHoarder classifies the error and provides actionab
 | `VIDEO_UNAVAILABLE` | Video was deleted or made private | No |
 | `FORMAT_UNAVAILABLE` | No downloadable format (player client hit a DRM/SABR restriction) | Retries; set player client to Default (automatic) if persistent |
 | `PO_TOKEN_FAILURE` | PO token server is not responding | Retries after health check |
-| `YTDLP_OUTDATED` | yt-dlp needs an update | Auto-updates daily |
+| `YTDLP_OUTDATED` | yt-dlp needs an update | Update the image; each build ships current yt-dlp |
 | `FFMPEG_ERROR` | Post-processing failed | Retries up to 3 times |
 | `DISK_FULL` | Not enough storage space | No |
 | `NETWORK_ERROR` | Connection issue | Retries with backoff |
 | `AUTH_EXPIRED` | Authentication needs refresh | Retries with new token |
 
-### Channel Health
+Each channel also shows a health indicator: **Green** (recent downloads succeeded), **Yellow** (some recent failures), or **Red** (most/all recent downloads failing, with the specific error reason shown).
 
-Each channel shows a health indicator:
-- **Green**  - All recent downloads succeeded
-- **Yellow**  - Some downloads failed recently
-- **Red**  - Most or all recent downloads are failing, with the specific error reason shown
+</details>
 
 ## File Organization
+
+<details>
+<summary><b>Directory layout & naming template</b></summary>
 
 Videos are saved in Plex TV Show format. Each channel becomes a "show", each year becomes a "season", and videos are numbered as episodes in upload order:
 
@@ -163,7 +166,10 @@ The default naming template is:
 
 Available template variables: `{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`
 
-### Plex Library Setup
+</details>
+
+<details>
+<summary><b>Plex library setup</b></summary>
 
 Create a **separate Plex library** for your YouTube channels - do not mix them with your regular TV shows library.
 
@@ -178,9 +184,12 @@ Create a **separate Plex library** for your YouTube channels - do not mix them w
 
 If you already added channels to an existing TV library, move them to the new library and unmatch each show for the NFO data to take effect.
 
+</details>
+
 ## Configuration
 
-### Environment Variables
+<details>
+<summary><b>Environment variables</b></summary>
 
 | Variable | Default | Description |
 |---|---|---|
@@ -202,7 +211,10 @@ If you already added channels to an existing TV library, move them to the new li
 | `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads |
 | `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings |
 
-### YouTube Data API Key (Optional)
+</details>
+
+<details>
+<summary><b>YouTube Data API key (optional)</b></summary>
 
 A YouTube Data API key improves channel scanning reliability and speed. Without it, yt-dlp handles discovery directly, which works but can be slower.
 
@@ -220,7 +232,27 @@ To get a free API key:
 
 The free tier provides 10,000 quota units per day, which is enough for most personal use. No billing account is required.
 
-### Cookie Authentication (Optional)
+</details>
+
+<details>
+<summary><b>Settings (via Web UI)</b></summary>
+
+All settings are configurable through the **Settings** page:
+
+- **General** - Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
+- **Authentication** - PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
+- **Naming** - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
+- **yt-dlp** - Version info (yt-dlp ships current on every image build)
+- **Anti-Detection** - Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
+- **Media Management** - Subtitle downloads, chapter embedding toggle
+- **Notifications** - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
+
+</details>
+
+## Cookie Authentication
+
+<details>
+<summary><b>Cookie authentication (optional) - three methods</b></summary>
 
 Cookies are optional but can help if you have YouTube Premium, need to access region-specific content, or want to download **premium/authenticated Rumble** content. The same `cookies.txt` covers all platforms - cookies are matched per-domain, so you can include YouTube and Rumble cookies in one file. There are three ways to provide cookies:
 
@@ -246,7 +278,7 @@ The Windows cookie exporter reads cookies directly from Firefox's database, incl
 1. Install the [Tampermonkey](https://www.tampermonkey.net/) browser extension
 2. Go to **Settings > Authentication** in ChannelHoarder and click **Install Tampermonkey Script**
 3. The script comes pre-configured with your server address and exports cookies each time you load a YouTube page (with a 5-minute cooldown between exports)
-4. Note: Cannot access HttpOnly cookies (SID, HSID, SSID)  - Option 1 is more complete
+4. Note: Cannot access HttpOnly cookies (SID, HSID, SSID) - Option 1 is more complete
 
 **Option 3: Manual Upload**
 
@@ -256,17 +288,7 @@ The Windows cookie exporter reads cookies directly from Firefox's database, incl
 
 Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
-### Settings (via Web UI)
-
-All settings are configurable through the **Settings** page:
-
-- **General**  - Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
-- **Authentication**  - PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
-- **Naming**  - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
-- **yt-dlp**  - Version info, manual update trigger
-- **Anti-Detection**  - Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
-- **Media Management**  - Subtitle downloads, chapter embedding toggle
-- **Notifications**  - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
+</details>
 
 ## Supported Platforms
 
@@ -279,15 +301,20 @@ All settings are configurable through the **Settings** page:
 | Vimeo | yt-dlp | yt-dlp | No |
 | Odysee | yt-dlp | yt-dlp | No |
 
-## Tech Stack
+## Reference
+
+<details>
+<summary><b>Tech stack & volumes</b></summary>
+
+**Tech stack:**
 
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), APScheduler, yt-dlp
 - **Frontend**: React 18, TypeScript, Tailwind CSS, TanStack Query, React Router
 - **Database**: SQLite (WAL mode)
 - **Auth**: bgutil-ytdlp-pot-provider (PO tokens), optional cookies.txt
-- **Docker**: Multi-stage build with Python, Node.js, ffmpeg, and PO token provider
+- **Docker**: Multi-stage build with Python, Node.js, ffmpeg, Deno, and the PO token provider
 
-## Volumes
+**Volumes:**
 
 | Path | Purpose |
 |---|---|
@@ -295,20 +322,31 @@ All settings are configurable through the **Settings** page:
 | `/downloads` | Downloaded videos, thumbnails, and metadata (point Plex here) |
 | `/cookies` | Optional: watched directory for cookie file updates |
 
-## API
+</details>
+
+<details>
+<summary><b>API</b></summary>
 
 ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live progress. See [docs/API.md](docs/API.md) for the full endpoint list, or browse the interactive Swagger UI at `/docs` on a running instance.
 
-## Known Limitations
+</details>
 
-- **YouTube Shorts**  - Videos ≤30 seconds are skipped by default (configurable per channel)
-- **Livestreams / long videos**  - Videos over the max duration setting are skipped by default
-- **Geo-blocked content**  - Cannot download region-restricted videos
-- **Private / deleted videos**  - Automatically skipped if no longer available
-- **No built-in auth**  - Designed for trusted local networks; use a reverse proxy if internet-facing
-- **Rate limiting**  - YouTube may throttle requests; the PO token server and configurable delays help mitigate this
+<details>
+<summary><b>Known limitations</b></summary>
+
+- **YouTube Shorts** - Videos ≤60 seconds are treated as Shorts and skipped by default (toggleable per channel)
+- **Livestreams / long videos** - Videos over the max duration setting are skipped by default
+- **Geo-blocked content** - Cannot download region-restricted videos
+- **Private / deleted videos** - Automatically skipped if no longer available
+- **No built-in auth** - Designed for trusted local networks; use a reverse proxy if internet-facing
+- **Rate limiting** - YouTube may throttle requests; the PO token server and configurable delays help mitigate this
+
+</details>
 
 ## Troubleshooting
+
+<details>
+<summary><b>Common issues & fixes</b></summary>
 
 **Queue not downloading / stuck**
 - Check Settings → Authentication: PO Token Server must show **Running**
@@ -316,7 +354,7 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 - If cookies expired, upload fresh ones via Settings → Authentication
 
 **"Sign in to confirm you're not a bot"**
-- Your session has been flagged  - try uploading fresh cookies
+- Your session has been flagged - try uploading fresh cookies
 - Adding a YouTube Data API key improves reliability
 - Wait 1–2 hours if recently rate-limited
 
@@ -324,7 +362,7 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 - YouTube restricts certain player clients (DRM-protected or URL-less SABR formats), leaving nothing downloadable
 - Set the player client to **Default (automatic)** in Settings → Authentication so yt-dlp picks a working client and adapts to YouTube's changes
 - If a specific video still fails, try `ios` or `web_safari` from the same dropdown
-- Make sure yt-dlp is up to date (Settings → yt-dlp)
+- Make sure the image is up to date (each build ships current yt-dlp)
 
 **Plex not showing downloaded videos**
 - Ensure your `/downloads` path is added as a **TV Shows** library in Plex
@@ -332,11 +370,13 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 - Check that `PUID`/`PGID` match your Plex user so files are readable
 
 **Port conflict on 8587**
-- Change the host-side port: `"8590:8000"`  - then access via `:8590`
+- Change the host-side port: `"8590:8000"` - then access via `:8590`
 
 **Container writes files as root**
 - Ensure `PUID` and `PGID` are set correctly in your compose/template
 - The internal port is always `8000`; the host port is configurable
+
+</details>
 
 ## Support
 
@@ -344,4 +384,4 @@ For bugs or feature requests, open a GitHub issue and include the diagnostic rep
 
 ## License
 
-MIT License  - free to use, modify, and distribute with attribution. See [LICENSE](LICENSE) for details.
+MIT License - free to use, modify, and distribute with attribution. See [LICENSE](LICENSE) for details.
