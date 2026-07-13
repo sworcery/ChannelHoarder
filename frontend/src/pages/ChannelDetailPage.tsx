@@ -769,7 +769,9 @@ export default function ChannelDetailPage() {
                                 <Circle className="h-3.5 w-3.5" /> {video.is_livestream ? "Unmark as Livestream" : "Mark as Livestream"}
                               </DropdownItem>
                               {video.status !== "downloading" && (
-                                <DropdownItem onClick={() => deleteVideoMutation.mutate({ videoId: video.id, deleteFiles: !!video.file_path })} variant="danger">
+                                // Skip keeps any downloaded file on disk; "Delete File" above
+                                // is the explicit, separate action for removing it.
+                                <DropdownItem onClick={() => deleteVideoMutation.mutate({ videoId: video.id, deleteFiles: false })} variant="danger">
                                   <Trash2 className="h-3.5 w-3.5" /> Skip Episode
                                 </DropdownItem>
                               )}

@@ -5,6 +5,20 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.33] - 2026-07-13
+
+### Fixed
+- **Imported files are no longer mass re-downloaded** - Files brought in via folder import weren't recording their quality, so the daily quality-upgrade job treated them as below-cutoff and re-downloaded entire libraries (turning some completed videos into failures). Imports now record the channel's quality, and an unknown quality no longer counts as "needs upgrade".
+- **Backups now preserve the per-channel minimum-quality setting** - `min_quality` was dropped from config export, so restoring a backup silently reset it and channels resumed downloading below the configured floor.
+- **Episode renumbering can no longer overwrite another episode's file** - Moving a file onto an existing different file is now refused instead of silently replacing it (possible with a custom naming template lacking unique tokens); the affected episode is skipped and logged.
+- **No more false "cookies expired" alerts on startup** - The health check's test download is skipped while a real download is running, so a second concurrent request to YouTube can't trip bot detection and falsely pause the queue.
+- **Queue no longer double-dispatches a long-running download** - After the 4-hour stale-entry reset, a download still in progress is no longer picked up a second time in the same tick.
+- **"Skip Episode" keeps the downloaded file** - It previously deleted the file with no confirmation; deletion is still available via the explicit "Delete File" action.
+- Fixed a crash when shift-selecting queue rows after filtering/paginating the queue, and corrected the dashboard's "+N more in queue" count (it capped at +5).
+
+### Changed
+- Numerous background failures that were previously swallowed silently (settings load, scan-status update, cookie age, file-rename commit, auto-import errors) are now logged, and a failed settings read now skips shorts/livestream reclassification entirely rather than risk deleting files under wrong defaults.
+
 ## [1.9.32] - 2026-07-12
 
 ### Changed

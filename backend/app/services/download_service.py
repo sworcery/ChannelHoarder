@@ -538,8 +538,11 @@ class DownloadService:
                     if settings.cookies_path.exists():
                         cookie_age_seconds = (datetime.now(timezone.utc).timestamp()
                                               - os.path.getmtime(settings.cookies_path))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(
+                        "Could not read cookies mtime (%s); treating age as unknown, "
+                        "cookie-expiry guard may not fire", e,
+                    )
 
                 if cookie_age_seconds > 120:  # Only invalidate if cookies are older than 2 minutes
                     from app.utils.cookie_utils import flag_cookies_expired

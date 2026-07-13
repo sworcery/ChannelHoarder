@@ -159,6 +159,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "platform": ch.platform,
             "quality": ch.quality,
             "quality_cutoff": ch.quality_cutoff,
+            "min_quality": ch.min_quality,
             "min_video_duration": ch.min_video_duration,
             "download_from_year": ch.download_from_year,
             "naming_template": ch.naming_template,

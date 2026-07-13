@@ -49,9 +49,16 @@ def renumber_channel_episodes(videos: list, channel) -> int:
                 ) + ".mp4"
 
                 if old_path != new_path:
-                    move_video_files(old_path, new_path)
-                    video.file_path = new_path
-                    renamed += 1
+                    try:
+                        move_video_files(old_path, new_path)
+                        video.file_path = new_path
+                        renamed += 1
+                    except FileExistsError as e:
+                        # A different video already occupies the target path (custom
+                        # naming template without unique tokens). Skip this one rather
+                        # than overwrite it or abort the whole renumber pass.
+                        logger.warning("Skipping renumber move: %s", e)
+                        video.file_path = old_path
 
             _regenerate_nfo(video, channel)
 

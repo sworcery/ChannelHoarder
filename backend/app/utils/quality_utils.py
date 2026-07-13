@@ -16,11 +16,15 @@ def quality_met(downloaded: str | None, cutoff: str | None) -> bool:
     """Check if downloaded quality meets or exceeds the cutoff.
 
     Returns True if no cutoff is set, or if downloaded quality >= cutoff.
+    An unknown downloaded quality (None - e.g. imported files or records from
+    before the column existed) counts as met: both callers use this to decide
+    whether to RE-download a completed video, and silently re-downloading
+    whole libraries is far worse than skipping an upgrade for unknowns.
     """
     if not cutoff:
         return True  # No cutoff means quality is always met
     if not downloaded:
-        return False
+        return True
     return quality_rank(downloaded) >= quality_rank(cutoff)
 
 

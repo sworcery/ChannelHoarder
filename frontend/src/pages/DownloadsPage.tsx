@@ -329,7 +329,8 @@ export default function DownloadsPage() {
         const start = Math.min(lastSelectedIdx, idx)
         const end = Math.max(lastSelectedIdx, idx)
         for (let i = start; i <= end; i++) {
-          next.add(queue[i].id)
+          // Guard: the list may have shrunk (search/pagination) since lastSelectedIdx was set.
+          if (queue[i]) next.add(queue[i].id)
         }
       } else {
         if (next.has(entryId)) next.delete(entryId)

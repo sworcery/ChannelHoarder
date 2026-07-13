@@ -238,6 +238,7 @@ class ChannelService:
         # Batch-read all settings once at scan start (avoids per-video DB queries)
         import json
         self._settings_cache: dict = {}
+        self._settings_cache_loaded = False
         try:
             result = await self.db.execute(select(AppSetting))
             for s in result.scalars().all():
@@ -245,8 +246,15 @@ class ChannelService:
                     self._settings_cache[s.key] = json.loads(s.value)
                 except (json.JSONDecodeError, TypeError):
                     self._settings_cache[s.key] = s.value
+            self._settings_cache_loaded = True
         except Exception:
-            pass
+            # If this fails the cache is empty, which would make feature flags like
+            # shorts_enabled default to False - and the reclassify pass deletes files
+            # for excluded categories. Log it and let reclassify skip deletions.
+            logger.exception(
+                "Failed to load settings cache for %s; feature flags will use safe defaults",
+                channel.channel_name,
+            )
 
         platform = getattr(channel, "platform", "youtube")
         is_playlist = is_playlist_url(channel.channel_url)
@@ -720,6 +728,16 @@ class ChannelService:
         Returns the number of videos whose classification changed.
         """
 
+        # If the settings cache failed to load, the *_enabled flags below would
+        # default to False and this pass would DELETE files for any video it flips to
+        # short/livestream. Skip reclassification entirely rather than risk that.
+        if hasattr(self, "_settings_cache_loaded") and not self._settings_cache_loaded:
+            logger.warning(
+                "Skipping reclassification for %s: settings did not load, cannot safely "
+                "decide shorts/livestream deletions", channel.channel_name,
+            )
+            return 0
+
         # Build tab map from the fetched video list
         tab_map: dict[str, str] = {}
         live_status_map: dict[str, str | None] = {}
@@ -851,8 +869,8 @@ class ChannelService:
             setting = result.scalar_one_or_none()
             if setting:
                 return int(json.loads(setting.value))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to read scan-window setting '%s', using default %s: %s", key, default, e)
         return default
 
     async def _get_setting_bool(self, key: str, default: bool = False) -> bool:
@@ -866,8 +884,8 @@ class ChannelService:
                 import json
                 val = json.loads(setting.value)
                 return bool(val)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to read setting '%s', using default %s: %s", key, default, e)
         return default
 
     async def _rename_existing_files(self, channel: Channel) -> int:
@@ -923,7 +941,17 @@ class ChannelService:
                 logger.warning("Failed to rename %s: %s", old_path, e)
 
         if renamed_count > 0:
-            await self.db.commit()
+            try:
+                await self.db.commit()
+            except Exception:
+                # The files are already moved to their new paths on disk, but the DB
+                # still records the old paths. Surface enough context to fix it by hand.
+                logger.error(
+                    "Renamed %d file(s) on disk for %s but the DB update failed - the "
+                    "database still records the OLD paths; manual correction needed",
+                    renamed_count, channel.channel_name, exc_info=True,
+                )
+                raise
         return renamed_count
 
     async def _auto_import_existing(self, channel: Channel) -> int:
@@ -948,6 +976,11 @@ class ChannelService:
                         self.db, channel.id, matches,
                     )
                     total_imported += result["imported"]
+                    if result.get("errors"):
+                        logger.warning(
+                            "Auto-import in %s had %d error(s): %s",
+                            scan_dir, len(result["errors"]), "; ".join(result["errors"]),
+                        )
             except Exception as e:
                 logger.warning("Auto-import scan of %s failed: %s", scan_dir, e)
 

@@ -81,7 +81,15 @@ def move_video_files(old_path: str, new_path: str, overwrite: bool = False) -> i
     moved = 0
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
 
-    if overwrite and os.path.exists(new_path):
+    # shutil.move falls through to os.rename on POSIX, which silently overwrites
+    # an existing destination. Without overwrite, refuse rather than destroy a
+    # different video that already occupies new_path (possible with a custom
+    # naming template that lacks unique tokens like {video_id}).
+    if os.path.exists(new_path) and os.path.abspath(old_path) != os.path.abspath(new_path):
+        if not overwrite:
+            raise FileExistsError(
+                f"Refusing to move {old_path} onto existing file {new_path}"
+            )
         os.remove(new_path)
     shutil.move(old_path, new_path)
     moved += 1

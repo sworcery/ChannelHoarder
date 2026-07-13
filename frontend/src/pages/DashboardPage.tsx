@@ -125,8 +125,8 @@ export default function DashboardPage() {
                   </div>
                 )
               })}
-              {queue.length > 5 && (
-                <p className="text-sm text-muted-foreground">+{queue.length - 5} more in queue</p>
+              {(stats?.queue_length ?? queue.length) > 5 && (
+                <p className="text-sm text-muted-foreground">+{(stats?.queue_length ?? queue.length) - 5} more in queue</p>
               )}
             </div>
           ) : (

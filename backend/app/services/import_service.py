@@ -207,10 +207,14 @@ async def import_matched_files(
                     base_dir=channel.download_dir,
                 )
 
-            # Update video record
+            # Update video record. quality_downloaded must be set or the daily
+            # quality-upgrade job would treat the import as below-cutoff and
+            # re-download every imported file; the channel's configured quality
+            # is the best available assumption for a pre-existing file.
             video.status = "completed"
             video.file_path = target_path
             video.file_size = os.path.getsize(target_path)
+            video.quality_downloaded = channel.quality
             video.downloaded_at = datetime.now(timezone.utc)
             video.error_code = None
             video.error_message = None

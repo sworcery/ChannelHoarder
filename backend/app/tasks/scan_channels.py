@@ -100,7 +100,13 @@ async def scan_due_channels():
                         channel.next_scan_at = await service._compute_next_scan_at()
                         await db.commit()
             except Exception:
-                pass
+                # next_scan_at wasn't updated, so scan_due_channels (which treats
+                # NULL as due) will retry this channel every 10-minute tick until the
+                # DB recovers - a real rate-limit risk. Surface it.
+                logger.warning(
+                    "Could not update scan status after failure for %s; it will be "
+                    "retried every tick until this clears", channel_name, exc_info=True,
+                )
 
     logger.info("Scan tick complete: scanned %d channels, found %d new videos", len(due_channels), total_new)
 

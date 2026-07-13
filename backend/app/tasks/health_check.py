@@ -61,8 +61,17 @@ async def check_system_health():
         except Exception as e:
             logger.error("Failed to check disk space: %s", e)
 
-        # Check yt-dlp functionality (blocking call  - run in thread to avoid blocking event loop)
+        # Check yt-dlp functionality (blocking call  - run in thread to avoid blocking event loop).
+        # Skip when a real download is in flight: a second concurrent yt-dlp session to
+        # YouTube can trip bot detection, and a "Sign in to confirm you're not a bot"
+        # message here would falsely flag cookies expired and pause the queue while a
+        # download is actively proving the cookies work. (Same guard the PO watchdog uses.)
         import asyncio
+        from app.services.download_service import is_download_active
+        if is_download_active():
+            logger.info("Skipping yt-dlp health test - a download is in progress")
+            await db.commit()
+            return
         ytdlp = YtdlpService()
         success, message = await asyncio.to_thread(ytdlp.test_download_capability)
 

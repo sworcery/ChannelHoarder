@@ -78,15 +78,28 @@ async def process_download_queue():
         if slots <= 0:
             return  # At capacity
 
-        # Get next queued videos (fill all available slots)
+        # Video IDs whose download task is still alive. The 4h stale-entry reset above
+        # clears started_at, which would otherwise let the slot-fill below re-dispatch a
+        # download that is still running (its long-lived task hasn't finished) - a second
+        # concurrent yt-dlp for the same video. Exclude those.
+        running_video_ids = {
+            t.get_name().removeprefix("download-") for t in _active_tasks if not t.done()
+        }
+
+        # Get next queued videos (fill all available slots). Over-fetch so we can drop
+        # any still-running ones and still fill the slots.
         result = await db.execute(
             select(DownloadQueue)
             .options(joinedload(DownloadQueue.video))
             .where(DownloadQueue.started_at.is_(None))
             .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
-            .limit(slots)
+            .limit(slots + len(running_video_ids))
         )
-        queue_entries = result.scalars().unique().all()
+        candidates = result.scalars().unique().all()
+        queue_entries = [
+            qe for qe in candidates
+            if not (qe.video and qe.video.video_id in running_video_ids)
+        ][:slots]
         if not queue_entries:
             return  # Nothing to download
 
