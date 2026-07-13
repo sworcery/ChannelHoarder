@@ -284,7 +284,13 @@ class DownloadService:
             # yt-dlp thread may still be writing there; the sweeper reclaims it.
             final_parent = os.path.dirname(output_path)
             for f in os.listdir(temp_dir):
-                os.replace(os.path.join(temp_dir, f), os.path.join(final_parent, f))
+                src, dst = os.path.join(temp_dir, f), os.path.join(final_parent, f)
+                try:
+                    os.replace(src, dst)
+                except OSError:
+                    # Different filesystem (EXDEV) or metadata quirk - fall back to a
+                    # copy+delete so a successful download isn't misreported as failed.
+                    shutil.move(src, dst)
             shutil.rmtree(temp_dir, ignore_errors=True)
 
             # Verify output file
@@ -344,6 +350,13 @@ class DownloadService:
 
         except Exception as e:
             # ── Phase 3 (error): record failure ──────────────────────────
+            # Reclaim the temp dir only if it's empty: a non-empty dir may belong to a
+            # stalled orphan thread still writing, so leave that for the 6h sweeper.
+            try:
+                if os.path.isdir(temp_dir) and not os.listdir(temp_dir):
+                    os.rmdir(temp_dir)
+            except OSError:
+                pass
             await self._record_failure(video_id, channel_id, queue_id, e, vdata)
             return False
 

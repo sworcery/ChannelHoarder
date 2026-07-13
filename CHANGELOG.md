@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.35] - 2026-07-13
+
+### Fixed
+- **A successful download can't be misreported as failed during the final move** - Moving finished files from the per-attempt work directory to their final location now falls back to a copy when the two happen to be on different filesystems, instead of raising and recording a spurious failure. Empty work directories left by an early failure are cleaned up immediately rather than waiting for the periodic sweeper.
+
 ## [1.9.34] - 2026-07-13
 
 ### Changed
