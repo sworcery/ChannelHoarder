@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.29] - 2026-07-12
+
+### Fixed
+- **App crash ("double free or corruption") when the network drops during a Rumble scan** - A `curl_cffi` request that fails to reach the host (e.g. a DNS blip: "Could not resolve host") can leave libcurl's heap corrupted, and the next `curl_cffi` use in the process then aborts the whole app. Both the Rumble page scrape and yt-dlp's impersonated extractor use `curl_cffi`, so a single network hiccup mid-scan could take ChannelHoarder down (it then relied on the container restart policy to recover). Now, when a `curl_cffi` request hits a connection/DNS error, the app briefly stops re-entering `curl_cffi` (across the Rumble scrape, channel-info, and per-video extraction paths) and lets the scan retry on the next tick instead of crashing.
+
 ## [1.9.28] - 2026-07-06
 
 ### Fixed

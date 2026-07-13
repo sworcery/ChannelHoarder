@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -48,6 +49,44 @@ def _get_impersonate_target():
             logger.warning("Browser impersonation unavailable: %s", e)
             _impersonate_target = None
     return _impersonate_target
+
+
+# A curl_cffi request that fails to reach the host (DNS/connection error) can leave
+# libcurl's heap state corrupted; the NEXT curl_cffi use in the process then aborts
+# with "double free or corruption". Both our Rumble page scrape and yt-dlp's
+# impersonated (non-YouTube) extractor use curl_cffi, so after a curl_cffi network
+# failure we briefly stop re-entering curl_cffi and let the scan retry next tick.
+_curlcffi_cooldown_until = 0.0
+_CURLCFFI_COOLDOWN_SECONDS = 120
+
+
+def _curlcffi_cooling_down() -> bool:
+    return time.monotonic() < _curlcffi_cooldown_until
+
+
+def _trip_curlcffi_cooldown(reason: str) -> None:
+    global _curlcffi_cooldown_until
+    _curlcffi_cooldown_until = time.monotonic() + _CURLCFFI_COOLDOWN_SECONDS
+    logger.warning(
+        "curl_cffi network failure (%s); pausing curl_cffi use for %ds to avoid a "
+        "native heap-corruption crash", reason, _CURLCFFI_COOLDOWN_SECONDS,
+    )
+
+
+def _is_curlcffi_connection_error(e: Exception) -> bool:
+    """True when a request never reached the host (DNS/connect/timeout/SSL-connect).
+    curl_cffi errors carry the libcurl error code; also match on the message."""
+    code = getattr(e, "code", None)
+    try:
+        if code is not None and int(code) in (5, 6, 7, 28, 35):
+            return True
+    except (TypeError, ValueError):
+        pass
+    msg = str(e).lower()
+    return any(s in msg for s in (
+        "could not resolve host", "couldn't resolve", "failed to connect",
+        "could not connect", "connection refused", "connection reset",
+    ))
 
 
 _cookie_cache_path: str | None = None
@@ -96,6 +135,12 @@ class YtdlpService:
                 "playlistend": 1,
             })
 
+        # Non-YouTube extraction uses curl_cffi (impersonate). Skip it while cooling
+        # down from a network failure so we don't re-enter curl_cffi on a corrupted heap.
+        if platform != "youtube" and _curlcffi_cooling_down():
+            logger.info("Skipping channel-info extraction for %s (curl_cffi network cooldown)", url)
+            return None
+
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
@@ -104,6 +149,10 @@ class YtdlpService:
                 return info
         except Exception as e:
             logger.error("Failed to get channel info for %s: %s", url, e)
+            # A network failure here can corrupt curl_cffi's heap; trip the cooldown so
+            # the scrape fallback below (also curl_cffi) is skipped rather than crashing.
+            if _is_curlcffi_connection_error(e):
+                _trip_curlcffi_cooldown(str(e))
             # Rumble's extractor often fails or returns nothing usable; fall back
             # to scraping the channel page for name/art/description.
             if platform == "rumble":
@@ -149,6 +198,12 @@ class YtdlpService:
             scraped = self._scrape_rumble_channel(channel_url, tab)
             if scraped:
                 return scraped
+
+        # Non-YouTube extraction uses curl_cffi (impersonate). Skip it while cooling
+        # down from a network failure so we don't re-enter curl_cffi on a corrupted heap.
+        if platform != "youtube" and _curlcffi_cooling_down():
+            logger.info("Skipping yt-dlp extraction for %s (curl_cffi network cooldown)", target_url)
+            return []
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
@@ -266,6 +321,9 @@ class YtdlpService:
         extractor returns 0 videos for. Pages through the channel and emits entries
         in the same shape yt-dlp's flat extraction would (id derived from the URL
         slug, ie_key 'Rumble'), so the rest of the scan pipeline is unchanged."""
+        if _curlcffi_cooling_down():
+            logger.info("Skipping Rumble scrape for %s (curl_cffi network cooldown)", channel_url)
+            return []
         try:
             from curl_cffi import requests as cffi_requests
         except ImportError:
@@ -285,7 +343,10 @@ class YtdlpService:
                 resp = cffi_requests.get(f"{base}?page={page}", impersonate="firefox",
                                          timeout=30, cookies=cookies, headers=headers)
             except Exception as e:
-                logger.warning("Rumble scrape error on %s page %d: %s", base, page, e)
+                if _is_curlcffi_connection_error(e):
+                    _trip_curlcffi_cooldown(str(e))
+                else:
+                    logger.warning("Rumble scrape error on %s page %d: %s", base, page, e)
                 break
             if resp.status_code == 404:
                 break
@@ -312,6 +373,9 @@ class YtdlpService:
         """Scrape channel name, avatar/art, and description from a Rumble channel
         page, for channels where yt-dlp returns no usable channel metadata."""
         import re
+        if _curlcffi_cooling_down():
+            logger.info("Skipping Rumble channel-info scrape for %s (curl_cffi network cooldown)", channel_url)
+            return {}
         try:
             from curl_cffi import requests as cffi_requests
         except ImportError:
@@ -324,7 +388,10 @@ class YtdlpService:
                 headers={"User-Agent": ua} if ua else None,
             ).text
         except Exception as e:
-            logger.warning("Rumble channel-info scrape failed for %s: %s", channel_url, e)
+            if _is_curlcffi_connection_error(e):
+                _trip_curlcffi_cooldown(str(e))
+            else:
+                logger.warning("Rumble channel-info scrape failed for %s: %s", channel_url, e)
             return {}
         return self._parse_rumble_channel_info(html)
 
@@ -445,12 +512,20 @@ class YtdlpService:
             "skip_download": True,
             "ignoreerrors": True,
         })
+        # Non-YouTube extraction uses curl_cffi (impersonate). This runs per-video in
+        # the scan loop, so skip it while cooling down to avoid re-entering curl_cffi
+        # on a corrupted heap (the double-free crash).
+        if platform != "youtube" and _curlcffi_cooling_down():
+            logger.info("Skipping video-info extraction for %s (curl_cffi network cooldown)", url)
+            return None
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
                 return info
         except Exception as e:
             logger.error("Failed to get video info for %s: %s", video_id, e)
+            if platform != "youtube" and _is_curlcffi_connection_error(e):
+                _trip_curlcffi_cooldown(str(e))
             return None
         finally:
             self._cleanup_cookie_tmp(opts)
