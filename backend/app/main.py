@@ -116,6 +116,18 @@ async def lifespan(app: FastAPI):
     await scheduler.start()
     app.state.scheduler = scheduler
 
+    # Prewarm the storage-usage cache in the background so the first dashboard
+    # request doesn't pay for the full library walk (20s+ on large libraries).
+    import asyncio as _asyncio
+    from app.models import Channel as _Chan
+    from app.services.storage_service import get_storage_usage as _warm_storage
+    async with async_session() as db:
+        result = await db.execute(
+            select(_Chan.download_dir).where(_Chan.download_dir.isnot(None)).distinct()
+        )
+        _custom_dirs = [r for (r,) in result.all() if r]
+    _asyncio.get_running_loop().run_in_executor(None, _warm_storage, _custom_dirs)
+
     yield
 
     # Shutdown scheduler

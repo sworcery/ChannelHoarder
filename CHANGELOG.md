@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.31] - 2026-07-12
+
+### Fixed
+- **Dashboard no longer hangs on large libraries** - The dashboard stats and storage endpoints walked every file in the library on every request to compute per-channel disk usage, which took 20+ seconds on big libraries (especially on Unraid user shares) and made the dashboard appear to hang. The walk result is now cached: requests return instantly, the cache refreshes in the background every 10 minutes, and it's pre-warmed at startup. Disk free/total figures are always live. Internal download work directories are excluded from the per-channel storage breakdown.
+
 ## [1.9.30] - 2026-07-12
 
 ### Fixed
