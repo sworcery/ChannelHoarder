@@ -2,8 +2,10 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,11 +24,15 @@ from app.utils.rate_limiter import wait_for_rate_limit
 
 logger = logging.getLogger(__name__)
 
-_download_active = False
+# Video IDs of downloads currently running. A set (not a bool) so that with
+# max_concurrent_downloads > 1 the first download to finish doesn't make
+# is_download_active() report False while others are still running (which let the
+# PO-token watchdog probe/restart the PO server under a live download).
+_active_downloads: set[str] = set()
 
 
 def is_download_active() -> bool:
-    return _download_active
+    return bool(_active_downloads)
 
 
 class DownloadService:
@@ -149,6 +155,17 @@ class DownloadService:
         # ── Phase 2: actual download  - no DB session held ────────────────
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+        # Per-attempt isolated working directory. A stalled download's yt-dlp thread
+        # cannot be killed (asyncio.to_thread cancellation doesn't stop the OS thread),
+        # so the orphan may keep writing while the retry runs. Giving every attempt its
+        # own directory means they can never write over each other; finished files are
+        # moved to output_path on success. Rooted under the channel's own download root
+        # so the final move is an atomic same-filesystem rename. Orphaned dirs are
+        # reclaimed by the cleanup_download_temp task.
+        download_root = cdata.download_dir or settings.DOWNLOAD_DIR
+        temp_dir = os.path.join(download_root, ".channelhoarder-tmp", uuid4().hex)
+        os.makedirs(temp_dir, exist_ok=True)
+
         _loop = asyncio.get_running_loop()
         import time
         _download_start = time.monotonic()
@@ -215,11 +232,10 @@ class DownloadService:
                 settings.has_cookies, settings.POT_SERVER_ENABLED,
             )
 
-            global _download_active
-            _download_active = True
             stall_timeout = 600  # 10 min with no progress from yt-dlp
             _last_progress_time = time.monotonic()
             try:
+                _active_downloads.add(vdata.video_id)
                 download_task = asyncio.ensure_future(
                     asyncio.to_thread(
                         self.ytdlp.download_video,
@@ -232,6 +248,7 @@ class DownloadService:
                         subtitles_enabled=subtitles_enabled,
                         chapters_enabled=chapters_enabled,
                         sponsorblock_mode=sponsorblock_mode,
+                        temp_dir=temp_dir,
                     )
                 )
                 while not download_task.done():
@@ -259,12 +276,21 @@ class DownloadService:
                     + "Retry this download."
                 )
             finally:
-                _download_active = False
+                _active_downloads.discard(vdata.video_id)
+
+            # Move the finished files from the per-attempt temp dir to the final
+            # location (atomic same-filesystem renames), then remove the temp dir.
+            # On failure/stall we deliberately do NOT touch temp_dir - the orphaned
+            # yt-dlp thread may still be writing there; the sweeper reclaims it.
+            final_parent = os.path.dirname(output_path)
+            for f in os.listdir(temp_dir):
+                os.replace(os.path.join(temp_dir, f), os.path.join(final_parent, f))
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
             # Verify output file
             mp4_path = output_path + ".mp4"
             if not os.path.exists(mp4_path):
-                parent = os.path.dirname(output_path)
+                parent = final_parent
                 base = os.path.basename(output_path)
                 for f in os.listdir(parent):
                     if f.startswith(base) and f.endswith(".mp4"):

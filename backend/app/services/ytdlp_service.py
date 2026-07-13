@@ -583,14 +583,26 @@ class YtdlpService:
         subtitles_enabled: bool = False,
         chapters_enabled: bool = False,
         sponsorblock_mode: str = "off",
+        temp_dir: str | None = None,
     ) -> dict:
-        """Download a single video. Returns info dict on success, raises on failure."""
+        """Download a single video. Returns info dict on success, raises on failure.
+
+        When temp_dir is given, ALL produced files (video, .part/fragment
+        intermediates, sidecars) are written inside it under output_path's basename;
+        the caller moves them to the final location afterwards. This isolates each
+        attempt so an orphaned stalled attempt can never write over a retry's files.
+        """
         opts = self._base_opts(platform=platform)
         postprocessors = self._build_postprocessors(chapters_enabled, sponsorblock_mode, platform)
+        if temp_dir:
+            outtmpl = str(Path(temp_dir) / Path(output_path).name) + ".%(ext)s"
+            opts["paths"] = {"home": temp_dir, "temp": temp_dir}
+        else:
+            outtmpl = output_path + ".%(ext)s"
         opts.update({
             "format": self._quality_to_format(quality),
             "merge_output_format": "mp4",
-            "outtmpl": output_path + ".%(ext)s",
+            "outtmpl": outtmpl,
             "writethumbnail": True,
             "writeinfojson": True,
             "writesubtitles": subtitles_enabled,

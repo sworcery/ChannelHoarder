@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.30] - 2026-07-12
+
+### Fixed
+- **Stalled-download retries can no longer corrupt the output file** - When a download stalls (no progress for 10 minutes), the underlying yt-dlp thread cannot actually be killed and could keep writing to the output path while the automatic retry re-downloaded the same video to the same path, risking a corrupt file. Every attempt now works inside its own isolated directory (`.channelhoarder-tmp/<id>` under the channel's download root) and finished files are moved into place atomically, so an abandoned attempt can never write over a retry. Abandoned attempt directories are cleaned up automatically after 6 hours.
+- **PO-token watchdog no longer disrupts concurrent downloads** - With more than one concurrent download, the watchdog could think all downloads had finished as soon as the first one did, and probe or restart the PO token server underneath the ones still running. It now tracks every active download individually.
+
 ## [1.9.29] - 2026-07-12
 
 ### Fixed

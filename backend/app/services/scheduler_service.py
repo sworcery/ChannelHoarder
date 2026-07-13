@@ -115,6 +115,16 @@ class SchedulerService:
             name="Clean up expired quick-download files",
         )
 
+        # Abandoned per-attempt download temp dirs (every 6 hours)
+        from app.tasks.temp_cleanup import cleanup_download_temp
+        self.scheduler.add_job(
+            cleanup_download_temp,
+            IntervalTrigger(hours=6),
+            id="download_temp_cleanup",
+            replace_existing=True,
+            name="Clean up abandoned download temp directories",
+        )
+
         self.scheduler.start()
         logger.info("Scheduler started with %d jobs", len(self.scheduler.get_jobs()))
 
