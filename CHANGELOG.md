@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.32] - 2026-07-12
+
+### Changed
+- **Much smaller Docker image** - The native-module build toolchain (compilers, dev headers, git, unzip) is no longer shipped in the runtime image. The bgutil PO-token server is now compiled in a separate build stage and only the finished artifacts plus the runtime shared libraries are copied into the final image, cutting roughly 200-280 MB from every pull. No functional changes.
+
 ## [1.9.31] - 2026-07-12
 
 ### Fixed

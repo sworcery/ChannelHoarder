@@ -6,18 +6,17 @@ RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
-# Stage 2: Runtime
-FROM python:3.12-slim-bookworm
+# Stage 2: Build the bgutil PO-token server (compiles the native canvas module)
+# and fetch Deno. Same Debian base as the runtime stage so the compiled
+# canvas.node links against matching glibc/shared-lib versions.
+FROM python:3.12-slim-bookworm AS bgutil-builder
 
-# Install system dependencies, Node.js, and canvas native libs (for bgutil PO token server)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
     curl \
     unzip \
     ca-certificates \
     git \
     gnupg \
-    gosu \
     build-essential \
     libcairo2-dev \
     libpango1.0-dev \
@@ -25,21 +24,50 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgif-dev \
     librsvg2-dev \
     pkg-config \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Deno - the supported JS runtime yt-dlp's EJS solver needs to solve YouTube's
+# n-signature challenge. Node 20 is no longer a supported runtime for the
+# challenge solver, so without Deno, downloads for logged-in (cookie) sessions
+# fail with "No video formats found". Deno also enables the bgutil script-deno
+# PO token provider.
+RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o /tmp/deno.zip \
+    && unzip /tmp/deno.zip -d /usr/local/bin \
+    && rm /tmp/deno.zip \
+    && chmod +x /usr/local/bin/deno
+
+RUN git clone --single-branch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/pot-provider \
+    && cd /opt/pot-provider/server \
+    && npm ci --no-audit --no-fund \
+    && npx tsc
+
+# Stage 3: Runtime - no compilers, headers, git, or unzip. Only the shared
+# libraries the compiled canvas.node needs at runtime.
+FROM python:3.12-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    curl \
+    ca-certificates \
+    gnupg \
+    gosu \
+    libcairo2 \
+    libpango-1.0-0 \
+    libjpeg62-turbo \
+    libgif7 \
+    librsvg2-2 \
     python3 \
     tini \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Deno - the supported JS runtime yt-dlp's EJS solver needs to solve
-# YouTube's n-signature challenge. Node 20 is no longer a supported runtime for
-# the challenge solver, so without Deno, downloads for logged-in (cookie) sessions
-# fail with "No video formats found". Deno also enables the bgutil script-deno PO
-# token provider.
-RUN curl -fsSL https://github.com/denoland/deno/releases/latest/download/deno-x86_64-unknown-linux-gnu.zip -o /tmp/deno.zip \
-    && unzip /tmp/deno.zip -d /usr/local/bin \
-    && rm /tmp/deno.zip \
-    && chmod +x /usr/local/bin/deno
+# Compiled bgutil server (with its node_modules incl. canvas.node) and Deno
+COPY --from=bgutil-builder /opt/pot-provider /opt/pot-provider
+COPY --from=bgutil-builder /usr/local/bin/deno /usr/local/bin/deno
+RUN ln -s /opt/pot-provider /opt/bgutil-ytdlp-pot-provider
 
 # Install Python dependencies
 WORKDIR /app
@@ -49,17 +77,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install PO token provider plugin (yt-dlp already in requirements.txt)
 RUN pip install --no-cache-dir bgutil-ytdlp-pot-provider
 
-# Set up bgutil POT provider server
-RUN git clone --single-branch --depth 1 https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /opt/pot-provider \
-    && cd /opt/pot-provider/server \
-    && npm ci --no-audit --no-fund \
-    && npx tsc \
-    && ln -s /opt/pot-provider /opt/bgutil-ytdlp-pot-provider
-
 # Always pull the newest yt-dlp on every build (scheduled or push). CACHEBUST changes
 # each CI run so this single layer is never served from cache, keeping the image current
-# with yt-dlp releases without editing requirements.txt. Placed after the heavy bgutil /
-# git-clone steps so only this layer re-runs on a scheduled rebuild, not those.
+# with yt-dlp releases without editing requirements.txt. Placed after the heavy layers
+# so only this layer re-runs on a scheduled rebuild.
 ARG CACHEBUST=0
 RUN echo "yt-dlp refresh ${CACHEBUST}" && pip install --no-cache-dir --upgrade yt-dlp
 
