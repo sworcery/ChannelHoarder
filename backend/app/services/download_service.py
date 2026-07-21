@@ -339,14 +339,17 @@ class DownloadService:
             perm_settings = await get_all_settings()
             apply_permissions(mp4_path, perm_settings)
 
-            # Create season poster if it doesn't exist
-            from app.services.metadata_service import write_season_poster
-            write_season_poster(
-                channel_name=cdata.channel_name,
-                season=vdata.season,
-                thumbnail_url=cdata.thumbnail_url,
-                base_dir=cdata.download_dir,
-            )
+            # Create season poster only when the template organizes videos into
+            # season folders - a flat template must not spawn empty Season folders.
+            from app.services.naming_service import template_uses_season_folder
+            if template_uses_season_folder(effective_template):
+                from app.services.metadata_service import write_season_poster
+                write_season_poster(
+                    channel_name=cdata.channel_name,
+                    season=vdata.season,
+                    thumbnail_url=cdata.thumbnail_url,
+                    base_dir=cdata.download_dir,
+                )
 
         except Exception as e:
             # ── Phase 3 (error): record failure ──────────────────────────

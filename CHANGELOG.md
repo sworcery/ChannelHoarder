@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.37] - 2026-07-20
+
+### Fixed
+- **Custom naming templates no longer create empty `Season YYYY` folders.** The Plex season poster was written to a `Season {year}` folder on every download regardless of the naming template, so a flat template (e.g. `{channel_name}/{upload_date}_{title}_[{video_id}]`) still spawned unwanted season folders. The poster is now written only when the template actually organizes videos into season folders.
+- **Stopped the PO-token log spam** (`NotCapable: Requires read access to "…default-stylesheet.css"`). The container now runs only the bgutil PO-token HTTP server and no longer activates the redundant Deno script provider that produced the harmless-but-noisy error on every download.
+
+### Changed
+- **Clearer livestream setup guidance.** After enabling livestream downloading globally in Settings, the hint now directs you to turn on "Include livestreams when downloading" on each channel's page.
+
 ## [1.9.36] - 2026-07-13
 
 ### Removed

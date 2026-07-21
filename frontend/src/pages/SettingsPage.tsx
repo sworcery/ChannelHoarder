@@ -825,7 +825,7 @@ function MediaManagementTab() {
         </label>
         <p className="text-xs text-muted-foreground">
           {livestreamsEnabled
-            ? "Channels can individually enable livestream downloading in their settings."
+            ? "Now open a channel's page and turn on \"Include livestreams when downloading\" in its Livestreams section - livestreams stay excluded until you opt in per channel."
             : "Livestreams are excluded from all channel downloads."}
         </p>
       </div>

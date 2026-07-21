@@ -9,6 +9,21 @@ DEFAULT_TEMPLATE = "{channel_name}/Season {season}/S{season}E{episode} - {title}
 
 ALLOWED_TEMPLATE_VARS = {"channel_name", "season", "episode", "title", "upload_date", "video_id"}
 
+# Matches a {season} field (with optional format spec) inside a template
+_SEASON_FIELD_RE = re.compile(r"\{season(?::[^}]*)?\}")
+
+
+def template_uses_season_folder(template: str | None) -> bool:
+    """True if the template places videos inside a season-based directory.
+
+    A Plex 'Season XX/poster.jpg' artwork file only makes sense when videos live
+    in season folders. Users with a flat template (e.g.
+    '{channel_name}/{upload_date}_{title}') must not get empty 'Season YYYY'
+    folders created solely to hold a poster.
+    """
+    directory = (template or DEFAULT_TEMPLATE).rpartition("/")[0]
+    return bool(_SEASON_FIELD_RE.search(directory))
+
 
 def validate_template(template: str) -> None:
     """Reject templates with attribute access, indexing, or unknown variables."""

@@ -28,8 +28,12 @@ chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chow
 chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?)  - continuing"
 chown -R appuser:appuser /tmp/quick-downloads 2>/dev/null || true
 
-# Set up bgutil symlink in user's home so the yt-dlp plugin can find its files
-ln -sf /opt/bgutil-ytdlp-pot-provider /home/appuser/bgutil-ytdlp-pot-provider
+# We run the bgutil PO-token HTTP server (below), so the yt-dlp plugin only needs
+# its base_url - not the on-disk script. Deliberately NOT creating the
+# ~/bgutil-ytdlp-pot-provider symlink: its presence makes the plugin also activate
+# the redundant script provider, which spawns Deno and spams the logs with a
+# jsdom "--allow-read" NotCapable error on every download (harmless but noisy).
+rm -f /home/appuser/bgutil-ytdlp-pot-provider
 
 # Initialize database (create tables)
 cd /app
