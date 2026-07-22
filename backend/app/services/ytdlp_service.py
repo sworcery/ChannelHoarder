@@ -309,10 +309,18 @@ class YtdlpService:
         """Extract channel video hrefs (e.g. /v3pyn3g-title.html) from a Rumble
         channel page. Uses the embedded JSON 'relative_url' field, which is scoped
         to the channel's own videos (sidebar/recommended use different markup), and
-        preserves order while de-duplicating."""
+        preserves order while de-duplicating.
+
+        The slug is matched as "anything up to .html" rather than a restricted
+        character class: Rumble derives slugs from titles, so any title containing
+        a period (an ellipsis, an abbreviation, a decimal) yields a dotted slug
+        like /v7d2q7k-i-was-not-prepared-for-this...html. A [a-z0-9-]+ slug pattern
+        silently skipped those, dropping the majority of a channel's videos.
+        The /v<id>- prefix still excludes non-video links such as /c/<channel>.
+        """
         import re
         ordered = {}
-        for href in re.findall(r'"relative_url":"(/v[0-9a-z]+-[a-z0-9-]+\.html)"', html):
+        for href in re.findall(r'"relative_url":"(/v[0-9a-z]+-[^"]*?\.html)"', html):
             ordered.setdefault(href, None)
         return list(ordered)
 
@@ -338,7 +346,10 @@ class YtdlpService:
         headers = {"User-Agent": ua} if ua else None
         entries: list[dict] = []
         seen: set[str] = set()
-        for page in range(1, 51):  # hard cap on pagination
+        # Pagination normally ends naturally (404, or a page with no new hrefs).
+        # This cap is only a runaway backstop: at ~25 videos/page it allows ~5000
+        # videos, since large channels legitimately run past 100 pages.
+        for page in range(1, 201):
             try:
                 resp = cffi_requests.get(f"{base}?page={page}", impersonate="firefox",
                                          timeout=30, cookies=cookies, headers=headers)

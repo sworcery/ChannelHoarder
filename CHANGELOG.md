@@ -5,7 +5,13 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.37] - 2026-07-20
+## [1.9.38] - 2026-07-22
+
+### Fixed
+- **Rumble channels now scan their full video list** (#34). The channel-page scraper matched video slugs with a restricted `[a-z0-9-]+` pattern, so any video whose title contained a period - an ellipsis, an abbreviation, a decimal - produced a dotted slug (`/v7d2q7k-i-was-not-prepared-for-this...html`) that was silently skipped. On a real channel this dropped roughly 80% of videos, capturing as few as 1 of 25 per page.
+- **Large Rumble channels are no longer truncated.** Pagination was capped at 50 pages (~1250 videos); channels legitimately run past 100 pages. The backstop is now 200 pages, with pagination still ending naturally when a page returns nothing new.
+
+## [1.9.37] - 2026-07-22
 
 ### Fixed
 - **Custom naming templates no longer create empty `Season YYYY` folders.** The Plex season poster was written to a `Season {year}` folder on every download regardless of the naming template, so a flat template (e.g. `{channel_name}/{upload_date}_{title}_[{video_id}]`) still spawned unwanted season folders. The poster is now written only when the template actually organizes videos into season folders.
