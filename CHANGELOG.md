@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.39] - 2026-07-25
+
+### Fixed
+- **The Unraid template's "Extra Media Path" now works out of the box.** The template mapped a `/media` volume but never added it to the download-directory allowlist, so pointing a channel at `/media` failed with "not under any allowed download directory." Added an "Extra Download Dirs" variable (defaulting to `/media`) so the mapped path is allowed by default. For any other custom volume (e.g. `/playlists`), add its container path to this variable.
+- **Extra download roots that aren't actually mounted are now ignored.** An allowlisted path with no host volume behind it (e.g. the `/media` default when the Extra Media Path is left unmapped) is no longer accepted as a destination - previously it would have let a download write into the container's ephemeral layer and be lost on recreation. Only paths that exist in the container are honored.
+
+### Changed
+- **The "not under any allowed download directory" error now explains how to fix it** - it lists the currently allowed roots and tells you to map the folder as a volume and add its path to `EXTRA_DOWNLOAD_DIRS`, instead of just rejecting the path.
+
 ## [1.9.38] - 2026-07-22
 
 ### Fixed

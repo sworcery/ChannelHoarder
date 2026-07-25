@@ -29,7 +29,13 @@ def validate_download_path(path: str, allowed_roots: list[str] | None = None) ->
         raise ValueError(f"Path traversal not allowed: {path}")
     if allowed_roots:
         if not any(resolved.is_relative_to(Path(root).resolve()) for root in allowed_roots):
-            raise ValueError(f"Path {path} is not under any allowed download directory")
+            allowed = ", ".join(allowed_roots)
+            raise ValueError(
+                f"Path {path} is not under an allowed download directory "
+                f"(currently allowed: {allowed}). To use another location, map it as a "
+                f"volume in your container and add its container path to the "
+                f"EXTRA_DOWNLOAD_DIRS environment variable (comma-separated for multiple)."
+            )
     return resolved
 
 

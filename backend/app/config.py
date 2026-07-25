@@ -6,7 +6,7 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.9.38"
+    APP_VERSION: str = "1.9.39"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
@@ -45,7 +45,15 @@ class Settings(BaseSettings):
     def allowed_download_roots(self) -> list[str]:
         roots = [self.DOWNLOAD_DIR]
         if self.EXTRA_DOWNLOAD_DIRS:
-            roots.extend(d.strip() for d in self.EXTRA_DOWNLOAD_DIRS.split(",") if d.strip())
+            for d in self.EXTRA_DOWNLOAD_DIRS.split(","):
+                d = d.strip()
+                # Only honor an extra root that is actually mounted. An unmapped
+                # volume target (e.g. the template's /media default with no host
+                # path behind it) must not become a valid destination, or a
+                # download would land in the container's ephemeral layer and be
+                # lost on recreation. A mapped path exists; an unmapped one doesn't.
+                if d and os.path.isdir(d):
+                    roots.append(d)
         return roots
 
     @property
