@@ -660,7 +660,9 @@ class ChannelService:
                 .order_by(Video.upload_date.asc(), Video.id.asc())
             )
             all_videos = result.scalars().all()
-            renamed = await asyncio.to_thread(renumber_channel_episodes, all_videos, channel)
+            from app.services.naming_service import resolve_naming_template
+            template = await resolve_naming_template(self.db, channel.naming_template)
+            renamed = await asyncio.to_thread(renumber_channel_episodes, all_videos, channel, template)
             await self.db.commit()
             if renamed > 0:
                 logger.info("Renumbered %d episodes for %s after reclassification", renamed, channel.channel_name)
@@ -898,6 +900,10 @@ class ChannelService:
         )
         videos = result.scalars().all()
 
+        # Resolve once: per-channel override, else the global default template.
+        from app.services.naming_service import resolve_naming_template
+        effective_template = await resolve_naming_template(self.db, channel.naming_template)
+
         renamed_count = 0
         for video in videos:
             old_path = Path(video.file_path)
@@ -912,7 +918,7 @@ class ChannelService:
                 upload_date=video.upload_date,
                 season=video.season,
                 episode=video.episode,
-                naming_template=channel.naming_template,
+                naming_template=effective_template,
                 base_dir=channel.download_dir,
             )
             expected_path = Path(expected_base + old_path.suffix)

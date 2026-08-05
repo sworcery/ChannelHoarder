@@ -1189,8 +1189,9 @@ export default function ChannelDetailPage() {
                 </div>
               )}
 
-              {/* Livestreams Management */}
-              {showAdvanced && channel.platform === "youtube" && (
+              {/* Livestreams Management  - all platforms: scans skip livestreams on any
+                  channel that hasn't opted in, so the toggle must be reachable everywhere */}
+              {showAdvanced && (
                 <div>
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
                   <div className="space-y-3">

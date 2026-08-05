@@ -66,6 +66,16 @@ async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSessi
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    # Reject a malformed naming template at the door. It is applied by every
+    # rename/renumber path, not just downloads, so saving a broken one would
+    # otherwise surface as repeated scan failures long after the fact.
+    if update_data.get("naming_template"):
+        from app.services.naming_service import validate_template
+        try:
+            validate_template(update_data["naming_template"])
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid naming template: {e}")
+
     logger.info("Saving settings: %s", list(update_data.keys()))
     for key, value in update_data.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))

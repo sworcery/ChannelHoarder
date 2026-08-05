@@ -1,9 +1,12 @@
+import logging
 import os
 import re
 from datetime import date
 
 from app.config import settings
 from app.utils.file_utils import sanitize_filename
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TEMPLATE = "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
 
@@ -25,6 +28,43 @@ def template_uses_season_folder(template: str | None) -> bool:
     return bool(_SEASON_FIELD_RE.search(directory))
 
 
+async def resolve_naming_template(db, channel_template: str | None) -> str | None:
+    """Resolve which naming template applies to a channel's files.
+
+    Precedence: the channel's own override, then the global "Default Naming
+    Template" setting, then None (meaning DEFAULT_TEMPLATE).
+
+    Every path that builds or moves a video file must resolve the template this
+    way. Reading only the per-channel value silently falls back to
+    DEFAULT_TEMPLATE for anyone who set just the global template, so a scan
+    would keep moving finished downloads into a Season folder they were never
+    downloaded into.
+    """
+    if channel_template:
+        return channel_template
+
+    import json
+
+    from sqlalchemy import select
+
+    from app.models import AppSetting
+
+    try:
+        result = await db.execute(select(AppSetting).where(AppSetting.key == "naming_template"))
+        setting = result.scalar_one_or_none()
+        if setting is not None:
+            value = json.loads(setting.value)
+            if isinstance(value, str) and value:
+                # A template saved by an older build was never validated. Falling back
+                # to the default beats letting it raise, which would fail every scan's
+                # rename pass and mark otherwise-healthy channels as unhealthy.
+                validate_template(value)
+                return value
+    except Exception as e:
+        logger.warning("Ignoring global naming template, using default layout: %s", e)
+    return None
+
+
 def validate_template(template: str) -> None:
     """Reject templates with attribute access, indexing, or unknown variables."""
     # Find all {field_name} references, allowing optional format specs like {:03d}
@@ -38,6 +78,18 @@ def validate_template(template: str) -> None:
             raise ValueError(f"Template variable '{var_name}' contains unsafe attribute access or indexing")
         if var_name not in ALLOWED_TEMPLATE_VARS:
             raise ValueError(f"Unknown template variable '{var_name}'. Allowed: {', '.join(sorted(ALLOWED_TEMPLATE_VARS))}")
+
+    # The scan above only sees balanced {...} pairs, so a stray brace ("{title")
+    # or a bad format spec would slip through and raise from str.format() later -
+    # during a rename pass, far from the settings screen that accepted it.
+    # Formatting once with placeholder values proves the template is usable.
+    try:
+        template.format(
+            channel_name="x", season=1, episode="001",
+            title="x", upload_date="20240101", video_id="x",
+        )
+    except (KeyError, IndexError, ValueError) as e:
+        raise ValueError(f"Template is not a valid format string: {e}")
 
 
 def build_output_path(

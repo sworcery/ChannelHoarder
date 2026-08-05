@@ -112,7 +112,7 @@ class DownloadService:
             import json
             feature_result = await db.execute(
                 select(AppSetting).where(
-                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "naming_template", "sponsorblock_mode"])
+                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "sponsorblock_mode"])
                 )
             )
             feature_settings = {s.key: s.value for s in feature_result.scalars().all()}
@@ -132,13 +132,11 @@ class DownloadService:
             except Exception:
                 pass
 
-            # Per-channel naming_template takes priority; fall back to global setting
-            effective_template = cdata.naming_template
-            if not effective_template:
-                try:
-                    effective_template = json.loads(feature_settings.get("naming_template", "null"))
-                except (json.JSONDecodeError, TypeError):
-                    effective_template = None
+            # Per-channel naming_template takes priority; fall back to global setting.
+            # Shared with every rename/renumber path so a later scan can't compute a
+            # different path than the one this download writes to.
+            from app.services.naming_service import resolve_naming_template
+            effective_template = await resolve_naming_template(db, cdata.naming_template)
 
             output_path = build_output_path(
                 channel_name=cdata.channel_name,

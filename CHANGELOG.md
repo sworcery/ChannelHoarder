@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.40] - 2026-08-05
+
+### Fixed
+- **Downloads no longer get moved back into `Season YYYY` folders after a scan** (#32). The global "Default Naming Template" was honored only when downloading. Every other path that builds or moves a file - the post-scan rename pass, episode renumbering, bulk/single rename, and importing existing files - read the per-channel template directly, so anyone who set only the *global* template silently fell back to the built-in `Season {season}/S{season}E{episode}` layout. The end-of-scan rename pass then saw a "mismatch" and moved correctly-named files into a Season folder, roughly every 10 minutes. Template resolution (channel override, then global, then built-in default) now lives in one shared helper used by every path, so the layout a download writes is the layout a rescan expects.
+- **Renumbering no longer leaves stray `.nfo` files in `Season YYYY` folders.** Episode NFOs were regenerated for every video, including ones with no file on disk. With no file path to sit beside, the NFO fell back to the built-in template and recreated a Season folder even for channels using a flat layout. Videos without a file on disk are now skipped, matching what the periodic NFO maintenance task already did.
+- **Renaming no longer relabels `.mkv`/`.webm` files as `.mp4`.** Renumber, single rename, and bulk rename all appended a hardcoded `.mp4`, so a file imported in another container was renamed to an `.mp4` name without being transcoded - leaving it mislabeled for players and Plex. The real extension is now preserved, and the renumber preview shows the same result the rename will produce.
+- **A malformed naming template can no longer break channel scans.** Templates are validated when saved (rejected with a clear message instead of silently stored), and an invalid template saved by an earlier build is now ignored in favor of the default layout rather than raising mid-scan and marking healthy channels as unhealthy. Validation also catches stray braces and unusable format specs, which previously passed the check and failed later during a rename.
+- **The per-channel livestream toggle is now reachable on non-YouTube channels** (#35). Scans skip livestreams on any channel that hasn't opted in regardless of platform, but the toggle was only rendered for YouTube channels - leaving Rumble, Twitch, and other channels permanently opted out with no way to change it.
+
 ## [1.9.39] - 2026-07-25
 
 ### Fixed

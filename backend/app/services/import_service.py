@@ -133,6 +133,8 @@ async def import_matched_files(
     errors = []
 
     from app.config import settings as app_settings
+    from app.services.naming_service import resolve_naming_template
+    effective_template = await resolve_naming_template(db, channel.naming_template)
 
     for match in matches:
         file_path = match["file_path"]
@@ -165,7 +167,7 @@ async def import_matched_files(
                 upload_date=video.upload_date,
                 season=video.season,
                 episode=video.episode,
-                naming_template=channel.naming_template,
+                naming_template=effective_template,
                 base_dir=channel.download_dir,
             )
             target_path = target_base + ext

@@ -255,6 +255,9 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
+    from app.services.naming_service import resolve_naming_template
+    effective_template = await resolve_naming_template(db, channel.naming_template)
+
     season_counts: dict[int, int] = {}
     changes = []
 
@@ -295,9 +298,10 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
                     upload_date=video.upload_date,
                     season=season,
                     episode=new_episode,
-                    naming_template=channel.naming_template,
+                    naming_template=effective_template,
                     base_dir=channel.download_dir,
-                ) + ".mp4"
+                # Match what the renumber itself will do, so the preview is accurate
+                ) + (os.path.splitext(video.file_path)[1] or ".mp4")
 
             changes.append({
                 "video_id": video.id,
@@ -347,7 +351,9 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
         if video.season != season or video.episode != season_counts_pre[season]:
             updated += 1
 
-    renamed = await asyncio.to_thread(_renumber_channel_episodes, videos, channel)
+    from app.services.naming_service import resolve_naming_template
+    template = await resolve_naming_template(db, channel.naming_template)
+    renamed = await asyncio.to_thread(_renumber_channel_episodes, videos, channel, template)
 
     await db.commit()
     return {
@@ -688,6 +694,7 @@ async def rename_video_file(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    from app.services.naming_service import resolve_naming_template
     new_path = build_output_path(
         channel_name=channel.channel_name,
         video_title=video.title,
@@ -695,9 +702,10 @@ async def rename_video_file(
         upload_date=video.upload_date,
         season=video.season,
         episode=video.episode,
-        naming_template=channel.naming_template,
+        naming_template=await resolve_naming_template(db, channel.naming_template),
         base_dir=channel.download_dir,
-    ) + ".mp4"
+    # Preserve the real container - imported files aren't always .mp4
+    ) + (os.path.splitext(video.file_path)[1] or ".mp4")
 
     old_path = video.file_path
     if old_path == new_path:
@@ -881,6 +889,9 @@ async def bulk_rename_videos(
     )
     videos = result.scalars().all()
 
+    from app.services.naming_service import resolve_naming_template
+    effective_template = await resolve_naming_template(db, channel.naming_template)
+
     renamed = 0
     skipped = 0
     errors = 0
@@ -895,9 +906,10 @@ async def bulk_rename_videos(
             upload_date=video.upload_date,
             season=video.season,
             episode=video.episode,
-            naming_template=channel.naming_template,
+            naming_template=effective_template,
             base_dir=channel.download_dir,
-        ) + ".mp4"
+        # Preserve the real container - imported files aren't always .mp4
+        ) + (os.path.splitext(video.file_path)[1] or ".mp4")
         if new_path == video.file_path:
             skipped += 1
             continue
@@ -1663,7 +1675,9 @@ async def detect_clean_shorts_confirm(
         .order_by(Video.upload_date.asc(), Video.id.asc())
     )
     all_videos = result.scalars().all()
-    renamed = await asyncio.to_thread(_renumber_channel_episodes, all_videos, channel)
+    from app.services.naming_service import resolve_naming_template
+    template = await resolve_naming_template(db, channel.naming_template)
+    renamed = await asyncio.to_thread(_renumber_channel_episodes, all_videos, channel, template)
 
     await db.commit()
     return {
