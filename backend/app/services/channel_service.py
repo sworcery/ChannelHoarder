@@ -336,7 +336,7 @@ class ChannelService:
 
         # Fetch upload dates from RSS feed (free, no auth, covers ~15 recent videos  - YouTube only)
         rss_dates = await asyncio.to_thread(
-            self.ytdlp.get_rss_upload_dates, channel.channel_id, platform
+            self.ytdlp.get_rss_upload_dates, channel.channel_id, platform, is_playlist
         )
 
         # Pre-fetch episode counts per season to avoid per-video COUNT queries
@@ -542,7 +542,13 @@ class ChannelService:
                     self.db.add(video)
                     await self.db.flush()
             except IntegrityError:
-                self.db.expunge(video)
+                # The savepoint rollback already detaches a pending instance, and `video`
+                # may be an existing persistent row we reused rather than a new one.
+                # expunge() on an object the session no longer holds raises
+                # "Instance ... is not present in this Session", which aborted the whole
+                # scan for the channel instead of just skipping this duplicate.
+                if video in self.db:
+                    self.db.expunge(video)
                 logger.debug("Skipping duplicate video %s after IntegrityError", vid_id)
                 continue
 

@@ -23,10 +23,18 @@ import {
 
 type ViewMode = "grid" | "list"
 type CardSize = "small" | "medium" | "large"
-type SortBy = "name_asc" | "name_desc" | "recent" | "videos" | "health"
+type SortBy = "name_asc" | "name_desc" | "recent" | "videos" | "health" | "completion_asc" | "completion_desc"
 
 function getStored<T extends string>(key: string, fallback: T): T {
   try { return (localStorage.getItem(key) as T) || fallback } catch { return fallback }
+}
+
+// Fraction of a channel's known videos that are downloaded. A channel with no
+// videos yet has nothing missing, so it counts as complete rather than 0% -
+// otherwise every empty channel would crowd the top of "Least Complete".
+function completionPct(c: Channel): number {
+  if (!c.total_videos) return 1
+  return Math.min(1, c.downloaded_count / c.total_videos)
 }
 
 function sortChannels(channels: Channel[], sort: SortBy): Channel[] {
@@ -36,6 +44,14 @@ function sortChannels(channels: Channel[], sort: SortBy): Channel[] {
     case "name_desc": return sorted.sort((a, b) => b.channel_name.localeCompare(a.channel_name))
     case "recent": return sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     case "videos": return sorted.sort((a, b) => b.total_videos - a.total_videos)
+    case "completion_asc":
+      // Least complete first, so channels still missing videos surface at the top.
+      // Ties break on the larger absolute gap.
+      return sorted.sort((a, b) =>
+        completionPct(a) - completionPct(b) ||
+        (b.total_videos - b.downloaded_count) - (a.total_videos - a.downloaded_count))
+    case "completion_desc":
+      return sorted.sort((a, b) => completionPct(b) - completionPct(a))
     case "health": {
       const order: Record<string, number> = { unhealthy: 0, warning: 1, unknown: 2, healthy: 3 }
       return sorted.sort((a, b) => (order[a.health_status] ?? 2) - (order[b.health_status] ?? 2))
@@ -188,6 +204,8 @@ export default function ChannelsPage() {
             <option value="name_desc">Name (Z-A)</option>
             <option value="recent">Recently Added</option>
             <option value="videos">Most Videos</option>
+            <option value="completion_asc">Least Complete</option>
+            <option value="completion_desc">Most Complete</option>
             <option value="health">Health Status</option>
           </select>
         </div>

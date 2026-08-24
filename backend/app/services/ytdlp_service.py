@@ -487,16 +487,22 @@ class YtdlpService:
         return list(merged.values())
 
     @staticmethod
-    def get_rss_upload_dates(channel_id: str, platform: str = "youtube") -> dict[str, str]:
+    def get_rss_upload_dates(channel_id: str, platform: str = "youtube",
+                             is_playlist: bool = False) -> dict[str, str]:
         """Fetch upload dates from YouTube's public RSS feed (no auth needed).
 
         Returns a dict mapping video_id -> upload_date (YYYYMMDD format).
         The RSS feed covers the ~15 most recent videos.
         Only works for YouTube  - returns empty dict for other platforms.
+
+        Playlists must be requested with playlist_id, not channel_id: a playlist
+        ID passed as channel_id returns 404, so every playlist scan logged a
+        warning and silently lost the free upload dates the feed provides.
         """
         if platform != "youtube":
             return {}
-        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={channel_id}"
+        param = "playlist_id" if is_playlist else "channel_id"
+        url = f"https://www.youtube.com/feeds/videos.xml?{param}={channel_id}"
         dates: dict[str, str] = {}
         try:
             resp = httpx.get(url, timeout=15)
@@ -509,9 +515,11 @@ class YtdlpService:
                 if vid_el is not None and pub_el is not None and vid_el.text and pub_el.text:
                     # published is ISO format like "2024-01-15T12:00:00+00:00"
                     dates[vid_el.text] = pub_el.text[:10].replace("-", "")
-            logger.info("RSS feed returned dates for %d videos from channel %s", len(dates), channel_id)
+            logger.info("RSS feed returned dates for %d videos from %s %s",
+                        len(dates), "playlist" if is_playlist else "channel", channel_id)
         except Exception as e:
-            logger.warning("Failed to fetch RSS feed for channel %s: %s", channel_id, e)
+            logger.warning("Failed to fetch RSS feed for %s %s: %s",
+                           "playlist" if is_playlist else "channel", channel_id, e)
         return dates
 
     def get_video_info(self, video_id: str, platform: str = "youtube") -> dict | None:

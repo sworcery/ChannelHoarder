@@ -5,6 +5,15 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.41] - 2026-08-24
+
+### Fixed
+- **Playlist scans no longer fail to fetch upload dates** (#38). YouTube's RSS feed was always requested with `channel_id=`, but a playlist must be requested with `playlist_id=`. Passing a playlist ID as a channel ID returns 404, so every playlist scan logged a warning and silently lost the free upload dates the feed provides for the ~15 most recent videos. Playlists now use the correct parameter.
+- **A duplicate video no longer aborts the entire channel scan** (#38). When adding a video hit a uniqueness conflict, the handler called `expunge()` on it - but the savepoint rollback has already detached that instance, so `expunge()` raised "Instance ... is not present in this Session" and the exception propagated out, failing the whole scan instead of skipping the one duplicate. The object is now only expunged when the session still holds it.
+
+### Added
+- **Sort channels by completion** (#37). Two new sort options, "Least Complete" and "Most Complete", order channels by the fraction of their known videos that are downloaded. "Least Complete" floats channels that are still missing videos to the top, breaking ties on the larger absolute gap. Channels with no videos yet count as complete so they don't crowd the top.
+
 ## [1.9.40] - 2026-08-05
 
 ### Fixed
