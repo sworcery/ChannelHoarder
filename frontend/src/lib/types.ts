@@ -16,6 +16,7 @@ export interface Channel {
   auto_download: boolean
   quality_cutoff: string | null
   min_quality: string | null
+  preferred_codec: string | null
   min_video_duration: number | null
   download_from_year: number | null
   title_filter: string | null

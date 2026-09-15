@@ -171,6 +171,7 @@ class ChannelService:
             description=info.get("description"),
             quality=data.quality,
             quality_cutoff=data.quality_cutoff,
+            preferred_codec=data.preferred_codec,
             min_video_duration=data.min_video_duration,
             download_from_year=data.download_from_year,
             title_filter=data.title_filter,

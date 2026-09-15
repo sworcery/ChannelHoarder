@@ -874,6 +874,18 @@ export default function ChannelDetailPage() {
                       <option value="480p">480p</option>
                     </select>
                   </div>
+                  <div>
+                    <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Preferred Codec <HelpIcon text="Preferred video codec for this channel. H.264 is the most compatible option for devices like Apple TV, but on YouTube it is usually capped at 1080p, so choosing it can limit a 4K channel to 1080p. If the preferred codec is not available for a video, the best available format is downloaded instead. Nothing is re-encoded." anchor="channel-management" /></label>
+                    <select
+                      value={channel.preferred_codec || ""}
+                      onChange={(e) => updateMutation.mutate({ preferred_codec: e.target.value || null })}
+                      className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                    >
+                      <option value="">Any (best quality)</option>
+                      <option value="h264">H.264 / AVC (compatibility)</option>
+                      <option value="vp9">VP9</option>
+                    </select>
+                  </div>
                   <div className="sm:col-span-2">
                     <label className="block text-xs text-muted-foreground mb-1">Download Directory</label>
                     <div className="flex gap-1">
@@ -928,7 +940,7 @@ export default function ChannelDetailPage() {
 
               {/* Year Filter */}
               <div>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans — already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans. Already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
                 <div className="flex gap-1 max-w-xs">
                   <input
                     type="number"

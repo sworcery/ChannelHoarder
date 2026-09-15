@@ -104,6 +104,7 @@ class DownloadService:
                 thumbnail_url=channel.thumbnail_url,
                 quality=channel.quality,
                 min_quality=channel.min_quality,
+                preferred_codec=channel.preferred_codec,
                 naming_template=channel.naming_template,
                 download_dir=channel.download_dir,
             )
@@ -240,6 +241,7 @@ class DownloadService:
                         video_url,
                         output_path,
                         quality=cdata.quality,
+                        codec=cdata.preferred_codec,
                         progress_hook=progress_hook,
                         pp_hook=pp_hook,
                         platform=cdata.platform,
@@ -623,7 +625,7 @@ class _ChannelData:
     __slots__ = (
         "pk", "channel_id", "channel_name", "channel_url", "platform",
         "description", "thumbnail_url", "quality", "min_quality",
-        "naming_template", "download_dir",
+        "preferred_codec", "naming_template", "download_dir",
     )
 
     def __init__(self, **kw):

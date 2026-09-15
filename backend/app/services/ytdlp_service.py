@@ -607,6 +607,7 @@ class YtdlpService:
         video_url: str,
         output_path: str,
         quality: str = "best",
+        codec: str | None = None,
         progress_hook=None,
         pp_hook=None,
         platform: str = "youtube",
@@ -630,7 +631,7 @@ class YtdlpService:
         else:
             outtmpl = output_path + ".%(ext)s"
         opts.update({
-            "format": self._quality_to_format(quality),
+            "format": self._quality_to_format(quality, codec),
             "merge_output_format": "mp4",
             "outtmpl": outtmpl,
             "writethumbnail": True,
@@ -894,12 +895,17 @@ class YtdlpService:
         """No-op: cookie temp files are now managed by the module-level cache."""
         pass
 
+    _CODEC_FILTERS = {"h264": "[vcodec^=avc1]", "vp9": "[vcodec~='^vp0?9']"}
+
     @staticmethod
-    def _quality_to_format(quality: str) -> str:
+    def _quality_to_format(quality: str, codec: str | None = None) -> str:
         """Convert quality setting to yt-dlp format string.
 
         Uses multiple fallbacks to handle player clients (e.g. mweb) that may
         only provide muxed streams instead of separate video+audio tracks.
+        When codec is set, preferred-codec selectors are tried first and the
+        unchanged chain is appended so a video without that codec still
+        downloads at best available quality.
         """
         formats = {
             "best": "bestvideo*+bestaudio/bestvideo+bestaudio/best",
@@ -908,4 +914,9 @@ class YtdlpService:
             "720p": "bestvideo*[height<=720]+bestaudio/bestvideo[height<=720]+bestaudio/best[height<=720]/best",
             "480p": "bestvideo*[height<=480]+bestaudio/bestvideo[height<=480]+bestaudio/best[height<=480]/best",
         }
-        return formats.get(quality, formats["best"])
+        base = formats.get(quality, formats["best"])
+        cfilter = YtdlpService._CODEC_FILTERS.get(codec or "")
+        if not cfilter:
+            return base
+        height = f"[height<={quality[:-1]}]" if quality in ("2160p", "1080p", "720p", "480p") else ""
+        return f"bestvideo*{height}{cfilter}+bestaudio/bestvideo{height}{cfilter}+bestaudio/{base}"

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Repair Dates action for channels whose videos were saved with the wrong upload date** (#42). Libraries already affected by the bug above can be repaired from the channel page: Repair Dates looks up the real upload dates (from the channel feed and the YouTube Data API where those can answer, and one video at a time otherwise), previews exactly which dates and episode numbers would change and which files would be renamed, and applies the change only on confirm. Corrected videos always get their file renamed and their NFO rewritten, even when the episode number does not move. It checks up to 250 videos per run and stops early if the lookups start failing; in either case it says so, and running it again continues with the rest. It refuses to run while a scan of the same channel is in progress, and a scheduled scan that lands during a repair waits for its next cycle.
+- **Per-channel preferred video codec** (#36). Edit Channel > Download Settings now has a Preferred Codec setting with three options: Any (the default, unchanged behavior), H.264 / AVC for devices that cannot play AV1 such as Apple TV, and VP9. The preferred codec is requested first and the best available stream is used when it is not offered for a video, so nothing stops downloading and nothing is re-encoded. H.264 on YouTube is usually capped at 1080p, so leave 4K channels on Any. Applies to future downloads only; existing files are not re-downloaded.
 
 ## [1.9.42] - 2026-08-24
 

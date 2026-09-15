@@ -28,6 +28,7 @@ class ChannelCreate(BaseModel):
     auto_download: bool = True
     quality_cutoff: Optional[str] = None
     min_quality: Optional[str] = Field(default=None, pattern="^(2160p|1080p|720p|480p)$")
+    preferred_codec: Optional[str] = Field(default=None, pattern="^(h264|vp9)$")
     min_video_duration: Optional[int] = None
     download_from_year: Optional[int] = None
     title_filter: Optional[str] = None
@@ -54,6 +55,7 @@ class ChannelUpdate(BaseModel):
     auto_download: Optional[bool] = None
     quality_cutoff: Optional[str] = None
     min_quality: Optional[str] = Field(default=None, pattern="^(2160p|1080p|720p|480p)$")
+    preferred_codec: Optional[str] = Field(default=None, pattern="^(h264|vp9)$")
     min_video_duration: Optional[int] = None
     download_from_year: Optional[int] = None
     title_filter: Optional[str] = None
@@ -88,6 +90,7 @@ class ChannelResponse(UTCBaseModel):
     auto_download: bool
     quality_cutoff: Optional[str]
     min_quality: Optional[str]
+    preferred_codec: Optional[str]
     min_video_duration: Optional[int]
     download_from_year: Optional[int]
     title_filter: Optional[str]
