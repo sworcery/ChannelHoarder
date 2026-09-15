@@ -20,8 +20,34 @@ from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService
 from app.utils.file_utils import sanitize_filename
+from app.utils.error_codes import ErrorCode, classify_error
 
 logger = logging.getLogger(__name__)
+
+# Fetch failures that will never succeed by retrying, so they must not count
+# toward the scan's failure breaker or be deferred to the next scan.
+_NON_TRANSIENT_FETCH_CODES = frozenset({
+    ErrorCode.VIDEO_PRIVATE,
+    ErrorCode.VIDEO_REMOVED,
+    ErrorCode.VIDEO_UNAVAILABLE,
+    ErrorCode.GEO_BLOCKED,
+    ErrorCode.LIVESTREAM_SCHEDULED,
+})
+
+# last_error_code values a deferral warning may replace: our own codes plus the
+# informational per-video codes a single failed download leaves behind. Anything
+# more severe (disk full, expired cookies, outdated yt-dlp) is left alone.
+_DEGRADED_OVERWRITABLE = (
+    None,
+    ErrorCode.SCAN_FAILED.value,
+    ErrorCode.METADATA_DEGRADED.value,
+    ErrorCode.VIDEO_PRIVATE.value,
+    ErrorCode.VIDEO_REMOVED.value,
+    ErrorCode.VIDEO_UNAVAILABLE.value,
+    ErrorCode.GEO_BLOCKED.value,
+    ErrorCode.LIVESTREAM_SCHEDULED.value,
+    ErrorCode.QUALITY_TOO_LOW.value,
+)
 
 # YouTube Shorts are <= 60s. This is the shorts-classification cutoff and is kept
 # separate from Channel.min_video_duration, which is a download length filter - reusing
@@ -367,46 +393,67 @@ class ChannelService:
             live_status = entry.get("live_status")
             source_url = entry.get("url") or entry.get("webpage_url")
 
+            date_unresolved_transient = False
+            date_unresolved_permanent = False
+
             if not upload_date and vid_id in rss_dates:
                 upload_date = self._parse_upload_date(rss_dates[vid_id])
 
-            if not upload_date and not skip_metadata_fetch:
-                logger.info("Fetching metadata for %s to get upload date", vid_id)
-                full_info = await asyncio.to_thread(self.ytdlp.get_video_info, vid_id, platform)
-                if full_info:
-                    fetched_date = (
-                        self._parse_upload_date(full_info.get("release_date"))
-                        or self._parse_upload_date(full_info.get("upload_date"))
-                    )
-                    if fetched_date:
-                        upload_date = fetched_date
-                        consecutive_metadata_failures = 0
-                    else:
-                        consecutive_metadata_failures += 1
-                    title = full_info.get("title") or title
-                    description = full_info.get("description") or description
-                    duration = full_info.get("duration") or duration
-                    thumbnail = full_info.get("thumbnail") or thumbnail
-                    live_status = full_info.get("live_status") or live_status
-                else:
-                    consecutive_metadata_failures += 1
-
-                if consecutive_metadata_failures >= max_consecutive_failures:
-                    logger.warning(
-                        "Skipping per-video metadata fetch after %d consecutive failures "
-                        "(likely bot detection). Remaining videos will use fallback dates.",
-                        consecutive_metadata_failures,
-                    )
-                    skip_metadata_fetch = True
-
             if not upload_date:
-                upload_date = None
+                if skip_metadata_fetch:
+                    # The breaker already tripped this scan, so no fetch is attempted.
+                    # We genuinely don't know this video's date - don't invent one.
+                    date_unresolved_transient = True
+                else:
+                    logger.info("Fetching metadata for %s to get upload date", vid_id)
+                    full_info, fetch_error = await asyncio.to_thread(self.ytdlp.get_video_info_or_error, vid_id, platform)
+                    if full_info:
+                        # Reachable: whatever else happened, this isn't a block. Reset the
+                        # breaker so a source that simply doesn't publish dates can't trip it.
+                        consecutive_metadata_failures = 0
+                        fetched_date = (
+                            self._parse_upload_date(full_info.get("release_date"))
+                            or self._parse_upload_date(full_info.get("upload_date"))
+                        )
+                        if fetched_date:
+                            upload_date = fetched_date
+                        # No date on a successful fetch means the source doesn't publish
+                        # one. That is not transient, so the today-fallback below applies.
+                        title = full_info.get("title") or title
+                        description = full_info.get("description") or description
+                        duration = full_info.get("duration") or duration
+                        thumbnail = full_info.get("thumbnail") or thumbnail
+                        live_status = full_info.get("live_status") or live_status
+                    else:
+                        fetch_code = classify_error(fetch_error or "")
+                        if fetch_code in _NON_TRANSIENT_FETCH_CODES:
+                            # This video cannot be fetched by anyone (private, removed,
+                            # geo-blocked, premiere not started). It is not a block, so it
+                            # must not trip the breaker or be deferred. It stays eligible for
+                            # the Data API date lookup below; if that can't date it either,
+                            # it is dropped from this scan.
+                            logger.info("Skipping %s: %s", vid_id, fetch_code.value)
+                            date_unresolved_permanent = True
+                        else:
+                            consecutive_metadata_failures += 1
+                            date_unresolved_transient = True
+
+                    if consecutive_metadata_failures >= max_consecutive_failures:
+                        logger.warning(
+                            "Skipping per-video metadata fetch after %d consecutive failures "
+                            "(likely bot detection). Remaining videos without a known date "
+                            "will be deferred to the next scan.",
+                            consecutive_metadata_failures,
+                        )
+                        skip_metadata_fetch = True
 
             enriched_entries.append({
                 "vid_id": vid_id, "title": title, "description": description,
                 "upload_date": upload_date, "duration": duration, "thumbnail": thumbnail,
                 "source_tab": source_tab, "live_status": live_status,
                 "source_url": source_url,
+                "date_unresolved_transient": date_unresolved_transient,
+                "date_unresolved_permanent": date_unresolved_permanent,
             })
 
         # Batch-resolve missing dates via YouTube API if available
@@ -419,6 +466,51 @@ class ChannelService:
                     raw = api_dates[entry["vid_id"]]
                     if raw:
                         entry["upload_date"] = self._parse_upload_date(raw)
+
+        # Defer, don't fabricate. A video whose date is unknown because the metadata
+        # fetch failed or was skipped (expired cookies / bot detection / network) is
+        # left out of the database entirely. Stamping it with today's date would put
+        # a years-old video in the current season with a current episode number, and
+        # that corruption is permanent. Because it is never inserted, the next scan
+        # sees it as new again and retries it with fresh metadata.
+        deferred_entries = [
+            e for e in enriched_entries
+            if e["upload_date"] is None and e["date_unresolved_transient"]
+        ]
+        dropped_entries = [
+            e for e in enriched_entries
+            if e["upload_date"] is None and e["date_unresolved_permanent"]
+        ]
+        deferred_count = 0
+        skipped_count = 0
+        if deferred_entries or dropped_entries:
+            enriched_entries = [
+                e for e in enriched_entries
+                if not (e["upload_date"] is None
+                        and (e["date_unresolved_transient"] or e["date_unresolved_permanent"]))
+            ]
+            # A listing can repeat an entry; count distinct IDs, and don't count one
+            # that another occurrence of the same video already resolved.
+            kept_ids = {e["vid_id"] for e in enriched_entries}
+            deferred_count = len({e["vid_id"] for e in deferred_entries} - kept_ids)
+            skipped_count = len(
+                {e["vid_id"] for e in dropped_entries} - kept_ids
+                - {e["vid_id"] for e in deferred_entries}
+            )
+
+        if deferred_count:
+            logger.warning(
+                "Deferred %d video(s) for %s: upload date could not be determined "
+                "(metadata fetch failed or was skipped). They are not saved with a "
+                "placeholder date and will be retried on the next scan.",
+                deferred_count, channel.channel_name,
+            )
+
+        if skipped_count:
+            logger.info(
+                "Skipped %d permanently unavailable video(s) for %s",
+                skipped_count, channel.channel_name,
+            )
 
         # Final fallback: assign today's date to anything still missing
         from datetime import date as date_cls
@@ -646,9 +738,21 @@ class ChannelService:
         channel.total_videos = len(existing_ids) + new_count
         if new_count > 0:
             channel.health_status = "healthy"
+        if deferred_count > 0:
+            # Videos were intentionally left out, so this scan is not "healthy" even
+            # if other videos landed. Tell the user why and that it self-corrects, but
+            # never paper over a more specific error (disk full, auth) already recorded.
+            if channel.last_error_code in _DEGRADED_OVERWRITABLE:
+                channel.health_status = "warning"
+                channel.last_error_code = ErrorCode.METADATA_DEGRADED.value
+        elif channel.last_error_code == ErrorCode.METADATA_DEGRADED.value:
+            # A previous degraded scan has now resolved cleanly.
+            channel.last_error_code = None
+            channel.health_status = "healthy"
 
         await self.db.commit()
-        logger.info("Found %d new videos for %s", new_count, channel.channel_name)
+        logger.info("Found %d new videos for %s (%d deferred, %d skipped)",
+                    new_count, channel.channel_name, deferred_count, skipped_count)
 
         # Phase B2: Correct fallback dates on existing videos via YouTube API
         dates_corrected = 0

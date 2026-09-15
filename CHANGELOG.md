@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.43] - 2026-09-14
+
+### Fixed
+- **Videos whose upload date could not be fetched are no longer saved with today's date** (#42). When the per-video metadata fetch failed mid-scan (expired cookies, bot detection, a network problem) and the scan's three-strike breaker tripped, every remaining video was stamped with the current date, so years-old videos landed in the current season with sequential episode numbers, permanently. Those videos are now left out of that scan and picked up with their real date on the next successful scan, and the channel is flagged with a `METADATA_DEGRADED` warning until a scan completes cleanly; refreshing cookies.txt and rescanning resolves it. Videos that can never be fetched (private, members-only, removed, geo-blocked, or a premiere that has not started) no longer count toward the breaker, so a few dead videos at the top of a channel no longer stall the rest; they are recorded with the date the YouTube Data API reports when a key is configured, as before, and skipped otherwise. A private video's real yt-dlp message is now classified as private rather than as an expired-cookies error. A source that publishes no date at all still falls back to today, as before, and a reachable but dateless fetch no longer counts toward the breaker.
+
 ## [1.9.42] - 2026-08-24
 
 ### Added

@@ -522,32 +522,43 @@ class YtdlpService:
                            "playlist" if is_playlist else "channel", channel_id, e)
         return dates
 
-    def get_video_info(self, video_id: str, platform: str = "youtube") -> dict | None:
-        """Get full metadata for a single video (non-flat extraction)."""
+    def _extract_video_info(self, video_id: str, platform: str, ignore_errors: bool) -> tuple[dict | None, str | None]:
+        """Extract full metadata for one video. Returns (info, error_message)."""
         from app.utils.platform_utils import build_video_url
         url = build_video_url(platform, video_id)
         opts = self._base_opts(platform=platform)
         opts.update({
             "skip_download": True,
-            "ignoreerrors": True,
+            "ignoreerrors": ignore_errors,
         })
         # Non-YouTube extraction uses curl_cffi (impersonate). This runs per-video in
         # the scan loop, so skip it while cooling down to avoid re-entering curl_cffi
         # on a corrupted heap (the double-free crash).
         if platform != "youtube" and _curlcffi_cooling_down():
             logger.info("Skipping video-info extraction for %s (curl_cffi network cooldown)", url)
-            return None
+            return None, "curl_cffi network cooldown"
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                return info
+                if info is None:
+                    return None, "no metadata returned"
+                return info, None
         except Exception as e:
             logger.error("Failed to get video info for %s: %s", video_id, e)
             if platform != "youtube" and _is_curlcffi_connection_error(e):
                 _trip_curlcffi_cooldown(str(e))
-            return None
+            return None, str(e)
         finally:
             self._cleanup_cookie_tmp(opts)
+
+    def get_video_info(self, video_id: str, platform: str = "youtube") -> dict | None:
+        """Get full metadata for a single video (non-flat extraction)."""
+        return self._extract_video_info(video_id, platform, ignore_errors=True)[0]
+
+    def get_video_info_or_error(self, video_id: str, platform: str = "youtube") -> tuple[dict | None, str | None]:
+        """Like get_video_info, but surfaces the extractor error so callers can
+        tell a permanently unavailable video from a transient block."""
+        return self._extract_video_info(video_id, platform, ignore_errors=False)
 
     def get_video_info_by_url(self, url: str) -> dict | None:
         """Get full metadata for a video by its URL (any platform)."""

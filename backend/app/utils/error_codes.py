@@ -19,6 +19,7 @@ class ErrorCode(str, Enum):
     DOWNLOAD_STALLED = "DOWNLOAD_STALLED"
     QUALITY_TOO_LOW = "QUALITY_TOO_LOW"
     SCAN_FAILED = "SCAN_FAILED"
+    METADATA_DEGRADED = "METADATA_DEGRADED"
     LIVESTREAM_SCHEDULED = "LIVESTREAM_SCHEDULED"
     UNKNOWN = "UNKNOWN"
 
@@ -162,6 +163,14 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         retry_strategy="none",
         severity="info",
     ),
+    ErrorCode.METADATA_DEGRADED: ErrorInfo(
+        code=ErrorCode.METADATA_DEGRADED,
+        summary="Video metadata could not be fetched",
+        explanation="During the last scan, upload dates could not be retrieved for some videos - usually expired cookies, bot detection, or a network problem. Those videos were left out rather than saved with a wrong date, which would have scrambled their season and episode numbers.",
+        suggested_fix="Upload fresh cookies.txt in Settings > Authentication, then scan again. The skipped videos are picked up automatically on the next successful scan; nothing is lost. For videos already saved with a wrong date, open the channel and use Repair Dates.",
+        retry_strategy="linear",
+        severity="warning",
+    ),
     ErrorCode.UNKNOWN: ErrorInfo(
         code=ErrorCode.UNKNOWN,
         summary="Unknown error",
@@ -180,17 +189,20 @@ def classify_error(error_str: str) -> ErrorCode:
     if "live event" in error_lower or "premieres in" in error_lower or "will begin in" in error_lower:
         return ErrorCode.LIVESTREAM_SCHEDULED
 
+    if "members-only" in error_lower or "join this channel" in error_lower:
+        return ErrorCode.VIDEO_PRIVATE
+
+    if "private video" in error_lower:
+        return ErrorCode.VIDEO_PRIVATE
+
     if "sign in" in error_lower or "confirm you're not a bot" in error_lower or "login required" in error_lower:
         return ErrorCode.AUTH_EXPIRED
 
     if "429" in error_lower or "too many requests" in error_lower or "rate limit" in error_lower:
         return ErrorCode.RATE_LIMITED
 
-    if "not available in your country" in error_lower or "geo restriction" in error_lower or "geo-blocked" in error_lower or "geoblocked" in error_lower:
+    if "not available in your country" in error_lower or "available in your country" in error_lower or "geo restriction" in error_lower or "geo-blocked" in error_lower or "geoblocked" in error_lower:
         return ErrorCode.GEO_BLOCKED
-
-    if "private video" in error_lower:
-        return ErrorCode.VIDEO_PRIVATE
 
     if "video has been removed" in error_lower or "removed by the uploader" in error_lower:
         return ErrorCode.VIDEO_REMOVED
