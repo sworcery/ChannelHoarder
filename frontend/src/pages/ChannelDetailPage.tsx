@@ -35,6 +35,7 @@ import {
   FileEdit,
   Tv,
   Pencil,
+  CalendarDays,
 } from "lucide-react"
 import { useState, useCallback, useMemo } from "react"
 
@@ -66,6 +67,10 @@ export default function ChannelDetailPage() {
   const [renumberPreview, setRenumberPreview] = useState<any | null>(null)
   const [renumberLoading, setRenumberLoading] = useState(false)
   const [renumberApplying, setRenumberApplying] = useState(false)
+  const [repairOpen, setRepairOpen] = useState(false)
+  const [repairPreview, setRepairPreview] = useState<any | null>(null)
+  const [repairLoading, setRepairLoading] = useState(false)
+  const [repairApplying, setRepairApplying] = useState(false)
 
   const [expandedSeasons, setExpandedSeasons] = useState<Set<number>>(new Set())
 
@@ -458,6 +463,22 @@ export default function ChannelDetailPage() {
                 }
               }}>
                 <ListOrdered className="h-3.5 w-3.5" /> Fix Episode Numbers
+              </DropdownItem>
+              <DropdownItem onClick={async () => {
+                setRepairOpen(true)
+                setRepairLoading(true)
+                setRepairPreview(null)
+                try {
+                  const data = await api.repairDatesPreview(channelId)
+                  setRepairPreview(data)
+                } catch (e: any) {
+                  toast(e.message, "error")
+                  setRepairOpen(false)
+                } finally {
+                  setRepairLoading(false)
+                }
+              }}>
+                <CalendarDays className="h-3.5 w-3.5" /> Repair Dates
               </DropdownItem>
               <DropdownSeparator />
               <DropdownItem onClick={() => setDeleteDialogOpen(true)} variant="danger">
@@ -1608,6 +1629,113 @@ export default function ChannelDetailPage() {
                   className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
                 >
                   {renumberApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListOrdered className="h-4 w-4" />}
+                  Apply Changes
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {/* Repair Dates Modal */}
+      {repairOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => { if (!repairApplying) setRepairOpen(false) }}>
+          <div className="bg-card rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">Repair Upload Dates</h3>
+              <button onClick={() => setRepairOpen(false)} disabled={repairApplying} className="p-1 hover:bg-accent rounded">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {repairLoading && (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                  Checking upload dates...
+                </div>
+              )}
+
+              {repairPreview && repairPreview.total_changes === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  {repairPreview.stopped_early ? "No wrong dates found so far." : "No wrong dates found."}
+                  {repairPreview.stopped_early && (
+                    <div className="mt-3 px-3 py-2 rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-sm text-left">
+                      {repairPreview.message}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {repairPreview && repairPreview.total_changes > 0 && (
+                <div>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {repairPreview.total_changes} video{repairPreview.total_changes !== 1 ? "s" : ""} have a wrong upload date
+                    (out of {repairPreview.checked} checked). Episodes will be renumbered and files on disk renamed to match.
+                  </p>
+                  {repairPreview.stopped_early && (
+                    <div className="mb-4 px-3 py-2 rounded-md bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-sm">
+                      {repairPreview.message}
+                    </div>
+                  )}
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted">
+                        <tr>
+                          <th className="text-left px-3 py-2">Title</th>
+                          <th className="text-left px-3 py-2">Current</th>
+                          <th className="text-left px-3 py-2">Corrected</th>
+                          <th className="text-left px-3 py-2">Episode</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {repairPreview.changes.map((c: any) => (
+                          <tr key={c.video_id} className="border-t">
+                            <td className="px-3 py-2 truncate max-w-[250px]" title={c.title}>
+                              {c.title}
+                              {c.has_file && <FileEdit className="inline-block h-3 w-3 ml-1.5 text-muted-foreground" />}
+                            </td>
+                            <td className="px-3 py-2 text-red-400">{c.old_date}</td>
+                            <td className="px-3 py-2 text-green-400">{c.new_date}</td>
+                            <td className="px-3 py-2 text-muted-foreground">{c.old_episode}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {repairPreview && repairPreview.total_changes > 0 && (
+              <div className="flex justify-end gap-3 p-4 border-t">
+                <button
+                  onClick={() => setRepairOpen(false)}
+                  disabled={repairApplying}
+                  className="px-4 py-2 text-sm border rounded hover:bg-muted"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    setRepairApplying(true)
+                    try {
+                      const result = await api.repairDatesConfirm(
+                        channelId,
+                        repairPreview.changes.map((c: any) => ({ video_id: c.video_id, source_id: c.source_id, new_date: c.new_date }))
+                      )
+                      invalidateVideos()
+                      toast(result.message)
+                      setRepairOpen(false)
+                    } catch (e: any) {
+                      toast(e.message, "error")
+                    } finally {
+                      setRepairApplying(false)
+                    }
+                  }}
+                  disabled={repairApplying}
+                  className="flex items-center gap-1.5 px-4 py-2 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+                >
+                  {repairApplying ? <Loader2 className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />}
                   Apply Changes
                 </button>
               </div>

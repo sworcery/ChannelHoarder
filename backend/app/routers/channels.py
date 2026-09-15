@@ -15,9 +15,9 @@ from pydantic import BaseModel, Field
 
 from app.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, VideoResponse,
-    ImportScanRequest, ImportConfirmRequest,
+    ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
-from app.services.channel_service import ChannelService, SHORTS_MAX_DURATION
+from app.services.channel_service import ChannelService, SHORTS_MAX_DURATION, _scanning_channels
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -361,6 +361,135 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
         "updated": updated,
         "renamed": renamed,
     }
+
+
+@router.post("/{channel_id}/repair-dates/preview", status_code=200)
+async def repair_dates_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
+    """Preview upload-date repairs for videos stamped with a fallback date, without applying anything."""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    service = ChannelService(db)
+    changes, checked, stopped_early, capped = await service.resolve_fallback_dates(channel)
+
+    if stopped_early:
+        message = "Stopped after repeated metadata fetch failures. Upload fresh cookies.txt and run Repair Dates again for the rest."
+    elif capped:
+        message = "Checked the first 250 videos with a suspect date. Run Repair Dates again for the rest."
+    else:
+        message = None
+
+    return {
+        "channel_name": channel.channel_name,
+        "checked": checked,
+        "changes": changes,
+        "total_changes": len(changes),
+        "stopped_early": stopped_early or capped,
+        "message": message,
+    }
+
+
+@router.post("/{channel_id}/repair-dates/confirm", status_code=200)
+async def repair_dates_confirm(
+    channel_id: int,
+    body: RepairDatesConfirm,
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply upload-date repairs, renumber episodes, and rename files on disk."""
+    from datetime import date
+
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+    if not channel:
+        raise HTTPException(status_code=404, detail="Channel not found")
+
+    if channel_id in _scanning_channels:
+        raise HTTPException(status_code=409, detail="A scan is running for this channel. Try again when it finishes.")
+
+    _scanning_channels.add(channel_id)
+    try:
+        # A duplicate video_id in the payload is applied once.
+        seen_ids: set[int] = set()
+        deduped_changes = []
+        for item in body.changes:
+            if item.video_id in seen_ids:
+                continue
+            seen_ids.add(item.video_id)
+            deduped_changes.append(item)
+
+        min_year = 1990
+        max_year = date.today().year + 1
+
+        dates_corrected = 0
+        skipped = 0
+        corrected_ids: set[int] = set()
+        for item in deduped_changes:
+            if not (min_year <= item.new_date.year <= max_year):
+                skipped += 1
+                continue
+
+            video = await db.get(Video, item.video_id)
+            if (
+                video is not None
+                and video.channel_id == channel_id
+                and video.video_id == item.source_id
+                and video.discovered_at is not None
+                and video.discovered_at.date() == video.upload_date
+                and item.new_date != video.upload_date
+            ):
+                video.upload_date = item.new_date
+                if video.is_short or video.is_livestream:
+                    # Shorts/livestreams never get an episode number, so the
+                    # renumber pass only rebuilds their file/NFO; set season here.
+                    video.season = item.new_date.year
+                corrected_ids.add(video.id)
+                dates_corrected += 1
+            else:
+                skipped += 1
+
+        await db.flush()
+
+        renamed = 0
+        if dates_corrected > 0:
+            result = await db.execute(
+                select(Video)
+                .where(Video.channel_id == channel_id)
+                .order_by(Video.upload_date.asc(), Video.id.asc())
+            )
+            videos = result.scalars().all()
+
+            from app.services.naming_service import resolve_naming_template
+            template = await resolve_naming_template(db, channel.naming_template)
+            try:
+                renamed = await asyncio.to_thread(
+                    _renumber_channel_episodes, videos, channel, template, force_ids=corrected_ids
+                )
+            except Exception as e:
+                logger.error("Repair Dates renumber failed for %s: %s", channel.channel_name, e, exc_info=True)
+                await db.commit()
+                raise HTTPException(
+                    status_code=500,
+                    detail="Dates were corrected but renaming stopped partway. Check the log, then run Fix Episode Numbers to finish.",
+                )
+
+        if dates_corrected == 0:
+            message = f"Corrected {dates_corrected} upload dates"
+        else:
+            message = f"Corrected {dates_corrected} upload dates, renumbered episodes, renamed {renamed} files on disk"
+        if skipped > 0:
+            message += f", {skipped} item(s) skipped because they no longer applied"
+
+        await db.commit()
+        return {
+            "message": message,
+            "dates_corrected": dates_corrected,
+            "skipped": skipped,
+            "renamed": renamed,
+        }
+    finally:
+        _scanning_channels.discard(channel_id)
 
 
 @router.post("/{channel_id}/scan", status_code=202)

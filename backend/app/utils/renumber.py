@@ -10,7 +10,8 @@ from app.utils.file_utils import move_video_files
 logger = logging.getLogger(__name__)
 
 
-def renumber_channel_episodes(videos: list, channel, naming_template: str | None = None) -> int:
+def renumber_channel_episodes(videos: list, channel, naming_template: str | None = None,
+                               force_ids: set[int] | None = None) -> int:
     """Renumber episodes in chronological order, excluding shorts and livestreams.
 
     Videos list must be pre-sorted by upload_date ASC. Returns count of files
@@ -20,9 +21,14 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
     resolve_naming_template() - this runs in a worker thread and cannot read the
     global setting itself. It falls back to the channel's own value only so
     existing callers keep working.
+
+    force_ids rebuilds the file and NFO for a video even when its season and
+    episode number are unchanged - needed when only the upload_date changed,
+    since the filename and NFO still embed the old date.
     """
     if naming_template is None:
         naming_template = channel.naming_template
+    force_ids = set(force_ids or ())
     season_counts: dict[int, int] = {}
     renamed = 0
 
@@ -31,6 +37,34 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
         if video.is_short or video.is_livestream:
             if video.episode != 0:
                 video.episode = 0
+            if video.id in force_ids:
+                season = video.upload_date.year
+                episode = 0
+                old_path = video.file_path
+                video.season = season
+
+                if old_path and os.path.exists(old_path):
+                    new_path = build_output_path(
+                        channel_name=channel.channel_name,
+                        video_title=video.title,
+                        video_id=video.video_id,
+                        upload_date=video.upload_date,
+                        season=season,
+                        episode=episode,
+                        naming_template=naming_template,
+                        base_dir=channel.download_dir,
+                    ) + (os.path.splitext(old_path)[1] or ".mp4")
+
+                    if old_path != new_path:
+                        try:
+                            move_video_files(old_path, new_path)
+                            video.file_path = new_path
+                            renamed += 1
+                        except FileExistsError as e:
+                            logger.warning("Skipping renumber move: %s", e)
+                            video.file_path = old_path
+
+                _regenerate_nfo(video, channel)
             continue
 
         season = video.upload_date.year
@@ -38,7 +72,7 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
         season_counts[season] += 1
         new_episode = season_counts[season]
 
-        if video.season != season or video.episode != new_episode:
+        if video.season != season or video.episode != new_episode or video.id in force_ids:
             old_path = video.file_path
             video.season = season
             video.episode = new_episode

@@ -149,6 +149,17 @@ class VideoSummary(UTCBaseModel):
     retry_count: int
 
 
+# --- Repair Dates Schemas ---
+class RepairDateChange(BaseModel):
+    video_id: int
+    source_id: str = Field(max_length=256)
+    new_date: date
+
+
+class RepairDatesConfirm(BaseModel):
+    changes: list[RepairDateChange] = Field(default_factory=list, max_length=50000)
+
+
 # --- Download Queue Schemas ---
 class QueueAdd(BaseModel):
     video_id: int

@@ -827,6 +827,126 @@ class ChannelService:
 
         return corrected
 
+    async def resolve_fallback_dates(self, channel: Channel) -> tuple[list[dict], int, bool, bool]:
+        """Preview-only resolver for a channel's upload-date fallback suspects.
+
+        Finds videos whose upload_date still equals their discovered_at date (the
+        stamped-today fallback) and re-resolves the real date without writing
+        anything. Tries the free RSS feed first, then the YouTube Data API (if
+        configured), then falls back to a per-video yt-dlp fetch behind the same
+        3-strike breaker the scan uses. Returns (changes, checked, stopped_early,
+        capped).
+
+        Releases the session's read transaction with a rollback before any network
+        call, so any uncommitted work the caller has pending is discarded. Call it
+        on a clean session.
+        """
+        from datetime import date
+        from app.utils.platform_utils import is_playlist_url
+
+        max_suspects = 250
+        result = await self.db.execute(
+            select(Video).where(
+                Video.channel_id == channel.id,
+                func.date(Video.discovered_at) == Video.upload_date,
+            ).order_by(Video.id.asc()).limit(max_suspects + 1)
+        )
+        rows = result.scalars().all()
+        if not rows:
+            return [], 0, False, False
+
+        capped = len(rows) > max_suspects
+        rows = rows[:max_suspects]
+
+        # Snapshot everything the rest of this method needs before any network
+        # call, then release the read transaction - the calls below can be slow
+        # and there is no reason to hold a DB transaction open through them.
+        snapshots = [
+            {
+                "id": v.id, "video_id": v.video_id, "title": v.title,
+                "upload_date": v.upload_date, "season": v.season, "episode": v.episode,
+                "file_path": v.file_path, "is_short": v.is_short, "is_livestream": v.is_livestream,
+            }
+            for v in rows
+        ]
+        await self.db.rollback()
+        await self.db.refresh(channel)
+
+        platform = channel.platform
+        is_playlist = is_playlist_url(channel.channel_url)
+
+        changes: list[dict] = []
+        checked = 0
+        stopped_early = False
+
+        def _record_change(snap: dict, new_date: date | None) -> None:
+            if new_date and new_date != snap["upload_date"]:
+                changes.append({
+                    "video_id": snap["id"],
+                    "source_id": snap["video_id"],
+                    "title": snap["title"],
+                    "old_date": str(snap["upload_date"]),
+                    "new_date": str(new_date),
+                    "old_episode": f"S{snap['season']}E{snap['episode']:03d}",
+                    "has_file": bool(snap["file_path"] and os.path.exists(snap["file_path"])),
+                })
+
+        # 1. RSS feed (free, no auth, covers ~15 recent videos - YouTube only)
+        rss_dates = await asyncio.to_thread(
+            self.ytdlp.get_rss_upload_dates, channel.channel_id, platform, is_playlist
+        )
+        remaining = []
+        for snap in snapshots:
+            raw = rss_dates.get(snap["video_id"])
+            new_date = self._parse_upload_date(raw) if raw else None
+            if new_date:
+                checked += 1
+                _record_change(snap, new_date)
+            else:
+                remaining.append(snap)
+
+        # 2. YouTube Data API batch lookup for whatever RSS didn't cover
+        if remaining and self.yt_api and platform == "youtube":
+            api_dates = await self.yt_api.get_video_dates([s["video_id"] for s in remaining])
+            still_remaining = []
+            for snap in remaining:
+                raw = api_dates.get(snap["video_id"])
+                new_date = self._parse_upload_date(raw) if raw else None
+                if new_date:
+                    checked += 1
+                    _record_change(snap, new_date)
+                else:
+                    still_remaining.append(snap)
+            remaining = still_remaining
+
+        # 3. Per-video yt-dlp fallback for whatever is still undated, behind the
+        # same breaker the scan uses - so an API quota failure degrades instead
+        # of silently reporting no changes.
+        consecutive_failures = 0
+        for snap in remaining:
+            info, err = await asyncio.to_thread(
+                self.ytdlp.get_video_info_or_error, snap["video_id"], platform
+            )
+            if info:
+                consecutive_failures = 0
+                checked += 1
+                new_date = (
+                    self._parse_upload_date(info.get("release_date"))
+                    or self._parse_upload_date(info.get("upload_date"))
+                )
+                _record_change(snap, new_date)
+            else:
+                code = classify_error(err or "")
+                if code in _NON_TRANSIENT_FETCH_CODES:
+                    continue
+                checked += 1
+                consecutive_failures += 1
+                if consecutive_failures >= 3:
+                    stopped_early = True
+                    break
+
+        return changes, checked, stopped_early, capped
+
     async def _reclassify_existing_videos(self, channel: Channel, video_list: list[dict]) -> int:
         """Re-check tab classification for existing videos and auto-clean disabled categories.
 

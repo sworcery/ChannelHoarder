@@ -195,6 +195,12 @@ export const api = {
   renumberConfirm: (channelId: number) =>
     request<{ message: string; updated: number; renamed: number }>(`/channels/${channelId}/renumber/confirm`, { method: "POST" }),
 
+  // Upload-date repair (preview then confirm)
+  repairDatesPreview: (channelId: number) =>
+    request<{ channel_name: string; checked: number; changes: { video_id: number; source_id: string; title: string; old_date: string; new_date: string; old_episode: string; has_file: boolean }[]; total_changes: number; stopped_early: boolean; message: string | null }>(`/channels/${channelId}/repair-dates/preview`, { method: "POST" }),
+  repairDatesConfirm: (channelId: number, changes: { video_id: number; source_id: string; new_date: string }[]) =>
+    request<{ message: string; dates_corrected: number; skipped: number; renamed: number }>(`/channels/${channelId}/repair-dates/confirm`, { method: "POST", body: JSON.stringify({ changes }) }),
+
   // Downloads
   getQueue: (params?: { skip?: number; limit?: number; search?: string }) => {
     const qs = new URLSearchParams()
