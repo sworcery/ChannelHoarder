@@ -55,6 +55,10 @@ _DEGRADED_OVERWRITABLE = (
 # as shorts and auto-deleted when a large min_video_duration was set.
 SHORTS_MAX_DURATION = 60
 
+# YouTube allows Shorts up to 3 minutes. A longer video listed on the Shorts tab is
+# a bad listing, not a Short, so it is never tagged from the tab.
+SHORTS_TAB_MAX_DURATION = 185
+
 # Track channels currently being scanned to prevent concurrent scan races
 _scanning_channels: set[int] = set()
 
@@ -334,6 +338,7 @@ class ChannelService:
         if self.yt_api and supports_api(platform) and not is_playlist:
             try:
                 video_list = await self.yt_api.get_channel_videos(channel.channel_id)
+                await self._tag_shorts_from_tab(channel, video_list, platform)
             except Exception as e:
                 logger.warning("YouTube API failed for %s, falling back to yt-dlp: %s", channel.channel_name, e)
                 video_list = await asyncio.to_thread(
@@ -990,6 +995,36 @@ class ChannelService:
                     break
 
         return changes, checked, stopped_early, capped
+
+    async def _tag_shorts_from_tab(self, channel: Channel, video_list: list[dict], platform: str) -> None:
+        """Tag Data API entries that are on the channel's Shorts tab.
+
+        The Data API doesn't say which tab a video is on, so without this the
+        duration fallback misses Shorts over 60s (YouTube allows up to 3 minutes).
+        Only videos too long for that fallback and short enough to be a Short are
+        tagged, and the tab is only fetched when there are any.
+        """
+        candidates = [
+            e for e in video_list
+            if e.get("duration") and SHORTS_MAX_DURATION < e["duration"] <= SHORTS_TAB_MAX_DURATION
+        ]
+        if not candidates:
+            return
+        try:
+            shorts = await asyncio.to_thread(
+                self.ytdlp.get_channel_video_list, channel.channel_url, platform, "shorts"
+            )
+        except Exception as e:
+            logger.warning("Could not read the Shorts tab for %s: %s", channel.channel_name, e)
+            return
+        short_ids = {e.get("id") for e in shorts if e.get("id")}
+        tagged = 0
+        for entry in candidates:
+            if entry.get("id") in short_ids:
+                entry["_source_tab"] = "shorts"
+                tagged += 1
+        if tagged:
+            logger.info("Tagged %d Shorts from the Shorts tab for %s", tagged, channel.channel_name)
 
     async def _reclassify_existing_videos(self, channel: Channel, video_list: list[dict]) -> int:
         """Re-check tab classification for existing videos and auto-clean disabled categories.

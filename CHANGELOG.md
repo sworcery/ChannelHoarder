@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **YouTube channels without a Data API key get their avatar and Plex poster again** (#44). yt-dlp does not return a single thumbnail for a YouTube channel, only a list of avatar and banner images, and the app only looked for the single thumbnail. Channels added without a YouTube Data API key had no avatar in the app and no `poster.jpg` in their folder. The avatar now comes from that list. Separately, adding a channel wrote `poster.jpg` from the empty yt-dlp value even when the API key had found the avatar, so the poster only appeared after the channel's first download. It is now written when the channel is added. Existing YouTube channels missing an avatar or `poster.jpg` get them on their next scan, and Refresh Metadata now writes a missing `poster.jpg` as well.
+- **Shorts longer than 60 seconds are recognized on YouTube Data API scans** (#43). The Data API does not say whether a video is a Short, so API scans fell back to a 60-second cutoff, while YouTube now allows Shorts up to 3 minutes. When a channel has videos between 1 and 3 minutes long, API scans now also read its Shorts tab and treat the ones listed there as Shorts, which scans without an API key already did. Videos saved earlier as regular episodes are reclassified as Shorts on the channel's next scan, and on channels where Shorts are not enabled their downloaded files are removed, the same as on scans without an API key.
 
 ## [1.9.43] - 2026-09-14
 
