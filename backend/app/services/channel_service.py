@@ -18,7 +18,7 @@ from app.services.metadata_service import write_tvshow_nfo
 from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
-from app.services.ytdlp_service import YtdlpService
+from app.services.ytdlp_service import YtdlpService, channel_avatar_url
 from app.utils.file_utils import sanitize_filename
 from app.utils.error_codes import ErrorCode, classify_error
 
@@ -159,7 +159,7 @@ class ChannelService:
             except Exception as e:
                 logger.warning("Could not fetch thumbnail via API: %s", e)
         if not thumbnail_url:
-            thumbnail_url = info.get("thumbnail")
+            thumbnail_url = channel_avatar_url(info)
 
         channel = Channel(
             channel_id=channel_id,
@@ -197,7 +197,7 @@ class ChannelService:
             channel_id=channel_id,
             channel_url=channel_url,
             description=info.get("description"),
-            thumbnail_url=info.get("thumbnail"),
+            thumbnail_url=thumbnail_url,
             base_dir=data.download_dir,
             platform=platform,
         )
@@ -226,7 +226,7 @@ class ChannelService:
 
         if info:
             if not channel.thumbnail_url:
-                channel.thumbnail_url = info.get("thumbnail") or channel.thumbnail_url
+                channel.thumbnail_url = channel_avatar_url(info)
             channel.description = info.get("description") or channel.description
 
             # Extract banner URL from thumbnails list (widest image)
@@ -240,8 +240,48 @@ class ChannelService:
 
         await self.db.commit()
         await self.db.refresh(channel)
+
+        if channel.thumbnail_url:
+            try:
+                await self._write_channel_nfo(channel)
+            except Exception as e:
+                logger.warning("Could not write poster for %s: %s", channel.channel_name, e)
+
         logger.info("Refreshed metadata for: %s", channel.channel_name)
         return channel
+
+    async def _write_channel_nfo(self, channel: Channel) -> None:
+        """Rewrite tvshow.nfo and download poster.jpg if the channel folder lacks one."""
+        await asyncio.to_thread(
+            write_tvshow_nfo,
+            channel_name=channel.channel_name,
+            channel_id=channel.channel_id,
+            channel_url=channel.channel_url,
+            description=channel.description,
+            thumbnail_url=channel.thumbnail_url,
+            base_dir=channel.download_dir,
+            platform=channel.platform,
+        )
+
+    async def _backfill_channel_art(self, channel: Channel) -> None:
+        """Fill in a missing avatar or poster.jpg. Retried every scan until both exist."""
+        poster = os.path.join(
+            channel.download_dir or settings.DOWNLOAD_DIR,
+            sanitize_filename(channel.channel_name), "poster.jpg",
+        )
+        if channel.thumbnail_url and os.path.exists(poster):
+            return
+        try:
+            if channel.thumbnail_url:
+                await self._write_channel_nfo(channel)
+            else:
+                # Channels added while yt-dlp returned no avatar; also writes the poster
+                await self.refresh_channel_metadata(channel)
+        except Exception as e:
+            logger.warning("Could not backfill channel art for %s: %s", channel.channel_name, e)
+            # A failed commit inside the refresh would otherwise break the rest of the scan
+            await self.db.rollback()
+            await self.db.refresh(channel)
 
     async def scan_channel(self, channel: Channel) -> int:
         """Scan a channel for new videos. Returns count of newly discovered videos."""
@@ -285,6 +325,9 @@ class ChannelService:
 
         platform = getattr(channel, "platform", "youtube")
         is_playlist = is_playlist_url(channel.channel_url)
+
+        if platform == "youtube" and not is_playlist:
+            await self._backfill_channel_art(channel)
 
         # Try YouTube Data API first (only for channels that support it, not playlists), fall back to yt-dlp
         # yt-dlp path fetches all tabs (videos/shorts/streams) separately for better classification

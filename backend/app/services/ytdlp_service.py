@@ -106,6 +106,26 @@ def _cleanup_cookie_cache():
 atexit.register(_cleanup_cookie_cache)
 
 
+def channel_avatar_url(info: dict | None) -> str | None:
+    """Channel avatar URL from yt-dlp channel info.
+
+    yt-dlp leaves 'thumbnail' unset for YouTube channels; the avatar is only in
+    'thumbnails', as square entries next to the wide banner ones.
+    """
+    if not info:
+        return None
+    if info.get("thumbnail"):
+        return info["thumbnail"]
+    thumbnails = info.get("thumbnails") or []
+    square = [t for t in thumbnails if t.get("url") and t.get("width") and t.get("width") == t.get("height")]
+    if square:
+        return max(square, key=lambda t: t["width"])["url"]
+    for thumb in thumbnails:
+        if thumb.get("id") == "avatar_uncropped" and thumb.get("url"):
+            return thumb["url"]
+    return None
+
+
 class YtdlpService:
     """Wrapper for all yt-dlp interactions."""
 

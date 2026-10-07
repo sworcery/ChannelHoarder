@@ -39,6 +39,8 @@ def _make_channel_kwargs(platform, seed_channel):
 def _wire_service(service, calls, entries, video_info, video_errors, rss):
     service.ytdlp.get_channel_video_list_all_tabs = lambda url, platform: list(entries)
     service.ytdlp.get_rss_upload_dates = lambda cid, platform, is_playlist: dict(rss or {})
+    # The seeded channel has no thumbnail; keep the scan's avatar backfill offline
+    service.ytdlp.get_channel_info = lambda url, platform="youtube": None
 
     def _get_video_info_or_error(vid_id, platform="youtube"):
         calls.append(vid_id)

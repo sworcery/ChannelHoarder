@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.44] - 2026-10-07
+
+### Fixed
+- **YouTube channels without a Data API key get their avatar and Plex poster again** (#44). yt-dlp does not return a single thumbnail for a YouTube channel, only a list of avatar and banner images, and the app only looked for the single thumbnail. Channels added without a YouTube Data API key had no avatar in the app and no `poster.jpg` in their folder. The avatar now comes from that list. Separately, adding a channel wrote `poster.jpg` from the empty yt-dlp value even when the API key had found the avatar, so the poster only appeared after the channel's first download. It is now written when the channel is added. Existing YouTube channels missing an avatar or `poster.jpg` get them on their next scan, and Refresh Metadata now writes a missing `poster.jpg` as well.
+
 ## [1.9.43] - 2026-09-14
 
 ### Fixed
