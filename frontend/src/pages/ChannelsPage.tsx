@@ -6,6 +6,7 @@ import { formatDateTime, formatBytes } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
+import BulkImportDialog from "@/components/channels/BulkImportDialog"
 import { HelpIcon } from "@/components/ui/HelpIcon"
 import { useDebounce } from "@/hooks/useDebounce"
 import {
@@ -19,6 +20,7 @@ import {
   List,
   ArrowUpDown,
   Download,
+  Upload,
 } from "lucide-react"
 
 type ViewMode = "grid" | "list"
@@ -68,6 +70,7 @@ export default function ChannelsPage() {
   const [addDownloadDir, setAddDownloadDir] = useState("")
   const [scanAfterAdd, setScanAfterAdd] = useState(true)
   const [moveAllDir, setMoveAllDir] = useState("")
+  const [showBulk, setShowBulk] = useState(false)
   const [showMoveAll, setShowMoveAll] = useState(false)
   const [movingAll, setMovingAll] = useState(false)
   const [moveAllPreview, setMoveAllPreview] = useState<any>(null)
@@ -171,6 +174,13 @@ export default function ChannelsPage() {
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
           >
             <Plus className="h-4 w-4" /> Add Channel
+          </button>
+          <button
+            onClick={() => setShowBulk(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors"
+            title="Add many channels from a list or CSV file"
+          >
+            <Upload className="h-4 w-4" /> Bulk Import
           </button>
           <button
             onClick={() => setShowMoveAll(true)}
@@ -590,6 +600,7 @@ export default function ChannelsPage() {
           <p>No channels yet. Add one to get started.</p>
         </div>
       )}
+      <BulkImportDialog open={showBulk} onClose={() => setShowBulk(false)} />
       {/* Move All Dialog */}
       {showMoveAll && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

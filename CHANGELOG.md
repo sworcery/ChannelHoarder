@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.46] - 2026-10-22
+
+### Added
+- **Bulk Import for adding many channels at once** (#46). A new Bulk Import button on the Channels page takes a pasted list of channel URLs or @handles (one per line or comma-separated) or an uploaded CSV or text file, and picks out every channel URL in it, so YouTube Takeout's `subscriptions.csv` works as-is. Quality, download directory and auto-download are set once for the whole batch. Channels are added a few seconds apart with progress and a result for each one, the import stops by itself after five failures in a row, and failed URLs are listed for copying. Auto-download starts off in Bulk Import, because with it on, each channel's first scan queues its entire back catalog.
+
 ## [1.9.45] - 2026-10-22
 
 ### Fixed
