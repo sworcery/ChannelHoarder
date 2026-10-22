@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.45] - 2026-10-22
+
+### Fixed
+- **Odysee channels pick up new videos again** (#45). Odysee's channel listing gives each video's release time but not a date, so every new video needed a separate lookup to get one, and that lookup used an address Odysee does not recognize. Since 1.9.43, a video whose date cannot be looked up waits for the next scan instead of being saved with the wrong date, so new Odysee videos waited forever. Scans now take the date from the release time in the listing with no extra lookup, and the videos that were waiting are added on the next scan. Lookups that are still needed on non-YouTube sites now use each video's own page address, which also makes Repair Dates and the minimum-quality check work on Odysee channels.
+
 ## [1.9.44] - 2026-10-07
 
 ### Fixed

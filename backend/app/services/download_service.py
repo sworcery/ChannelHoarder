@@ -216,7 +216,7 @@ class DownloadService:
             if cdata.min_quality:
                 from app.utils.quality_utils import best_available_quality, quality_rank
                 info = await asyncio.to_thread(
-                    self.ytdlp.get_video_info, vdata.video_id, cdata.platform
+                    self.ytdlp.get_video_info, vdata.video_id, cdata.platform, video_url
                 )
                 if info:
                     best_q = best_available_quality(info.get("formats") or [])

@@ -42,7 +42,7 @@ def _wire_service(service, calls, entries, video_info, video_errors, rss):
     # The seeded channel has no thumbnail; keep the scan's avatar backfill offline
     service.ytdlp.get_channel_info = lambda url, platform="youtube": None
 
-    def _get_video_info_or_error(vid_id, platform="youtube"):
+    def _get_video_info_or_error(vid_id, platform="youtube", url=None):
         calls.append(vid_id)
         info = video_info.get(vid_id)
         if info is not None:

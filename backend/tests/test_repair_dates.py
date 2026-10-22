@@ -33,7 +33,7 @@ class _FakeYtApi:
 def _make_ytdlp_fetcher(calls, responses, errors=None):
     errors = errors or {}
 
-    def _fetch(vid_id, platform="youtube"):
+    def _fetch(vid_id, platform="youtube", url=None):
         calls.append(vid_id)
         if vid_id in responses:
             return responses[vid_id], None
@@ -789,7 +789,7 @@ class TestPreviewEndpoint:
         monkeypatch.setattr(YtdlpService, "get_rss_upload_dates", staticmethod(lambda cid, platform, is_playlist: {}))
         monkeypatch.setattr(
             YtdlpService, "get_video_info_or_error",
-            lambda self, vid_id, platform="youtube": (None, "Sign in to confirm you're not a bot"),
+            lambda self, vid_id, platform="youtube", url=None: (None, "Sign in to confirm you're not a bot"),
         )
 
         async def scenario(db):
@@ -822,7 +822,7 @@ class TestPreviewEndpoint:
         monkeypatch.setattr(YtdlpService, "get_rss_upload_dates", staticmethod(lambda cid, platform, is_playlist: {}))
         monkeypatch.setattr(
             YtdlpService, "get_video_info_or_error",
-            lambda self, vid_id, platform="youtube": ({"upload_date": today.strftime("%Y%m%d")}, None),
+            lambda self, vid_id, platform="youtube", url=None: ({"upload_date": today.strftime("%Y%m%d")}, None),
         )
 
         async def scenario(db):

@@ -542,10 +542,17 @@ class YtdlpService:
                            "playlist" if is_playlist else "channel", channel_id, e)
         return dates
 
-    def _extract_video_info(self, video_id: str, platform: str, ignore_errors: bool) -> tuple[dict | None, str | None]:
-        """Extract full metadata for one video. Returns (info, error_message)."""
+    def _extract_video_info(
+        self, video_id: str, platform: str, ignore_errors: bool, url: str | None = None,
+    ) -> tuple[dict | None, str | None]:
+        """Extract full metadata for one video. Returns (info, error_message).
+
+        url is the video's own page URL when known. It is used off YouTube, where
+        an ID alone is not always a working URL (Odysee needs the claim name too).
+        """
         from app.utils.platform_utils import build_video_url
-        url = build_video_url(platform, video_id)
+        if not url or platform == "youtube":
+            url = build_video_url(platform, video_id)
         opts = self._base_opts(platform=platform)
         opts.update({
             "skip_download": True,
@@ -571,14 +578,16 @@ class YtdlpService:
         finally:
             self._cleanup_cookie_tmp(opts)
 
-    def get_video_info(self, video_id: str, platform: str = "youtube") -> dict | None:
+    def get_video_info(self, video_id: str, platform: str = "youtube", url: str | None = None) -> dict | None:
         """Get full metadata for a single video (non-flat extraction)."""
-        return self._extract_video_info(video_id, platform, ignore_errors=True)[0]
+        return self._extract_video_info(video_id, platform, ignore_errors=True, url=url)[0]
 
-    def get_video_info_or_error(self, video_id: str, platform: str = "youtube") -> tuple[dict | None, str | None]:
+    def get_video_info_or_error(
+        self, video_id: str, platform: str = "youtube", url: str | None = None,
+    ) -> tuple[dict | None, str | None]:
         """Like get_video_info, but surfaces the extractor error so callers can
         tell a permanently unavailable video from a transient block."""
-        return self._extract_video_info(video_id, platform, ignore_errors=False)
+        return self._extract_video_info(video_id, platform, ignore_errors=False, url=url)
 
     def get_video_info_by_url(self, url: str) -> dict | None:
         """Get full metadata for a video by its URL (any platform)."""

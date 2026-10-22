@@ -3,7 +3,7 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import select, func
@@ -67,6 +67,16 @@ _scanning_channels: set[int] = set()
 # extraction and must be skipped so they don't get stored as videos.
 _UNAVAILABLE_TITLES = {"[private video]", "[deleted video]", "[unavailable video]"}
 _UNAVAILABLE_AVAILABILITY = {"private", "deleted"}
+
+
+def _date_from_timestamp(ts) -> date | None:
+    """UTC date of a Unix timestamp, matching how yt-dlp derives upload_date."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromtimestamp(ts, timezone.utc).date()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 
 def is_unavailable_title(title: str | None) -> bool:
@@ -434,6 +444,13 @@ class ChannelService:
                 self._parse_upload_date(entry.get("release_date"))
                 or self._parse_upload_date(entry.get("upload_date"))
             )
+            # Odysee listings carry only timestamps. Not used on YouTube, where a
+            # listing's release_timestamp is an upcoming premiere's scheduled start.
+            if not upload_date and platform != "youtube":
+                upload_date = (
+                    _date_from_timestamp(entry.get("release_timestamp"))
+                    or _date_from_timestamp(entry.get("timestamp"))
+                )
             title = entry.get("title", "Untitled")
             description = entry.get("description")
             duration = entry.get("duration")
@@ -455,7 +472,9 @@ class ChannelService:
                     date_unresolved_transient = True
                 else:
                     logger.info("Fetching metadata for %s to get upload date", vid_id)
-                    full_info, fetch_error = await asyncio.to_thread(self.ytdlp.get_video_info_or_error, vid_id, platform)
+                    full_info, fetch_error = await asyncio.to_thread(
+                        self.ytdlp.get_video_info_or_error, vid_id, platform, source_url
+                    )
                     if full_info:
                         # Reachable: whatever else happened, this isn't a block. Reset the
                         # breaker so a source that simply doesn't publish dates can't trip it.
@@ -915,6 +934,7 @@ class ChannelService:
                 "id": v.id, "video_id": v.video_id, "title": v.title,
                 "upload_date": v.upload_date, "season": v.season, "episode": v.episode,
                 "file_path": v.file_path, "is_short": v.is_short, "is_livestream": v.is_livestream,
+                "source_url": v.source_url,
             }
             for v in rows
         ]
@@ -974,7 +994,7 @@ class ChannelService:
         consecutive_failures = 0
         for snap in remaining:
             info, err = await asyncio.to_thread(
-                self.ytdlp.get_video_info_or_error, snap["video_id"], platform
+                self.ytdlp.get_video_info_or_error, snap["video_id"], platform, snap["source_url"]
             )
             if info:
                 consecutive_failures = 0
