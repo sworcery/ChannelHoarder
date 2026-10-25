@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.47] - 2026-10-25
+
+### Documentation
+- Brought the README up to date: the tagline now describes a video channel archiver rather than a YouTube-only one, the feature list covers the per-channel preferred codec (#36) and Repair Dates (#42), and First Steps lists Discord alongside Telegram and Pushover. The Unraid template's overview now mentions Discord notifications too.
+
 ## [1.9.46] - 2026-10-22
 
 ### Added

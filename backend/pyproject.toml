@@ -1,7 +1,7 @@
 [project]
 name = "channelhoarder"
-version = "1.9.46"
-description = "Self-hosted YouTube channel archiver with Plex-compatible naming"
+version = "1.9.46.1"
+description = "Self-hosted video channel archiver with Plex-compatible naming"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [{name = "sworcery", email = "sworcery@gmail.com"}]

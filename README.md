@@ -5,7 +5,7 @@
 <h1 align="center">ChannelHoarder</h1>
 
 <p align="center">
-  Self-hosted YouTube channel archiver with a modern web UI, designed for Plex-compatible output.<br>
+  Self-hosted video channel archiver with a modern web UI, designed for Plex-compatible output.<br>
   Runs as a single Docker container and automatically downloads new videos from your subscribed channels.
 </p>
 
@@ -14,9 +14,9 @@
 ## Features
 
 - **Multi-platform** - Subscribe to channels (or YouTube playlists) from YouTube, Rumble, Twitch, Dailymotion, Vimeo, and Odysee by URL or @handle
-- **Automatic archiving** - Scheduled scans detect new videos and queue them, with per-channel quality (up to 4K), quality cutoff, title (keyword/regex) and duration filters, and per-channel storage paths
+- **Automatic archiving** - Scheduled scans detect new videos and queue them, with per-channel quality (up to 4K), preferred codec (H.264 or VP9), quality cutoff, title (keyword/regex) and duration filters, and per-channel storage paths
 - **Plex / Jellyfin / Emby ready** - TV Show-style naming (seasons by year, chronological episodes) with customizable templates, NFO metadata, and poster/season art
-- **Sonarr-style episode management** - Monitor/unmonitor, status icons, collapsible seasons, bulk actions, and per-episode retry, re-download, rename, and delete
+- **Sonarr-style episode management** - Monitor/unmonitor, status icons, collapsible seasons, bulk actions, per-episode retry/re-download/rename/delete, and a channel-level Repair Dates action for videos saved with the wrong upload date
 - **Robust downloads** - Sequential queue with rate limiting and live progress (speed/ETA) over WebSocket, standalone single-video downloads, import of existing files, subtitle and chapter support, and automatic Shorts / livestream filtering
 - **Smart authentication** - Cookies (auto-sync via Windows exporter or Tampermonkey, or manual upload) with PO token fallback, optional YouTube Data API key, and a selectable yt-dlp player client
 - **Anti-detection** - Configurable download delays, random jitter, and user-agent rotation
@@ -63,7 +63,7 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 
 1. Go to **Settings → Authentication** and verify the PO Token Server shows **Running**
 2. *(Optional)* Add a YouTube Data API key for faster channel discovery
-3. *(Optional)* Configure Telegram or Pushover notifications
+3. *(Optional)* Configure Telegram, Pushover, or Discord notifications
 4. Go to **Channels** → **Add Channel** and paste a channel URL
 5. Videos will be scanned immediately and queued for download
 
