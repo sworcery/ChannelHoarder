@@ -14,6 +14,8 @@ env:
 
 jobs:
   lint:
+    # github.com only: Gitea reads .github/workflows too.
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -40,6 +42,7 @@ jobs:
 
   build-and-push:
     needs: lint
+    if: ${{ github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
