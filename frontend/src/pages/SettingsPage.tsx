@@ -77,14 +77,6 @@ export default function SettingsPage() {
   )
 }
 
-const SCAN_PRESETS = [
-  { label: "Every 6 hours", value: "0 */6 * * *" },
-  { label: "Every 12 hours", value: "0 */12 * * *" },
-  { label: "Daily at 3 AM", value: "0 3 * * *" },
-  { label: "Twice daily (8 AM & 8 PM)", value: "0 8,20 * * *" },
-  { label: "Custom", value: "custom" },
-]
-
 function GeneralTab() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
@@ -96,9 +88,7 @@ function GeneralTab() {
   })
 
   // Settings state
-  const [scanCron, setScanCron] = useState("0 3 * * *")
-  const [customCron, setCustomCron] = useState("")
-  const [isCustomCron, setIsCustomCron] = useState(false)
+  const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
   const [defaultQuality, setDefaultQuality] = useState("best")
   const [maxConcurrent, setMaxConcurrent] = useState(1)
   const [maxRetries, setMaxRetries] = useState(3)
@@ -111,16 +101,7 @@ function GeneralTab() {
 
   useEffect(() => {
     if (settings) {
-      const cron = String(settings.global_schedule_cron || "0 3 * * *")
-      const preset = SCAN_PRESETS.find(p => p.value === cron)
-      if (preset) {
-        setScanCron(cron)
-        setIsCustomCron(false)
-      } else {
-        setScanCron("custom")
-        setCustomCron(cron)
-        setIsCustomCron(true)
-      }
+      if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
       if (settings.default_quality) setDefaultQuality(String(settings.default_quality))
       if (settings.max_concurrent_downloads != null) setMaxConcurrent(Number(settings.max_concurrent_downloads))
       if (settings.max_retries != null) setMaxRetries(Number(settings.max_retries))
@@ -137,7 +118,7 @@ function GeneralTab() {
   const saveSettingsMutation = useMutation({
     mutationFn: () =>
       api.updateSettings({
-        global_schedule_cron: isCustomCron ? customCron : scanCron,
+        scan_min_interval_hours: scanMinIntervalHours,
         default_quality: defaultQuality,
         max_concurrent_downloads: maxConcurrent,
         max_retries: maxRetries,
@@ -182,41 +163,21 @@ function GeneralTab() {
         <div className="flex items-center gap-2">
           <Clock className="h-5 w-5 text-primary" />
           <h3 className="font-semibold">Scan Schedule</h3>
-          <HelpIcon text="Cron schedule for checking channels." anchor="automatic-scanning" />
+          <HelpIcon text="How often each channel is checked for new uploads." anchor="automatic-scanning" />
         </div>
-        <p className="text-sm text-muted-foreground">
-          How often to check subscribed channels for new uploads.
-        </p>
-        <div className="max-w-xs">
-          <select
-            value={isCustomCron ? "custom" : scanCron}
-            onChange={(e) => {
-              if (e.target.value === "custom") {
-                setIsCustomCron(true)
-                setScanCron("custom")
-                setCustomCron(String(settings?.global_schedule_cron || "0 3 * * *"))
-              } else {
-                setIsCustomCron(false)
-                setScanCron(e.target.value)
-              }
-            }}
-            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
-          >
-            {SCAN_PRESETS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-          {isCustomCron && (
-            <input
-              type="text"
-              placeholder="0 3 * * *"
-              value={customCron}
-              onChange={(e) => setCustomCron(e.target.value)}
-              className="w-full mt-2 px-3 py-2 rounded-md border bg-background font-mono text-sm"
-            />
-          )}
+        <div>
+          <label className="block text-sm font-medium mb-1">Scan each channel every</label>
+          <input
+            type="number"
+            value={scanMinIntervalHours}
+            onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
+            min={1}
+            max={168}
+            className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+          />
+          <span className="text-sm text-muted-foreground ml-2">hours</span>
           <p className="text-xs text-muted-foreground mt-1">
-            {isCustomCron ? "Standard 5-field cron expression" : ""}
+            Each channel gets its own random scan time, between this many hours and twice that (never more than 12 hours extra) after its last scan, so channels aren't all scanned at once. With a scan window set, a scan that comes due outside it waits for the window to open. A new interval applies from each channel's next scan; Scan All Channels Now applies it right away. To keep scans to certain hours of the day, set a scan window under Anti-Detection.
           </p>
         </div>
         <button
@@ -995,7 +956,6 @@ function AntiDetectTab() {
   const [scanWindowEnabled, setScanWindowEnabled] = useState(false)
   const [scanWindowStartHour, setScanWindowStartHour] = useState<number>(22)
   const [scanWindowEndHour, setScanWindowEndHour] = useState<number>(6)
-  const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
   const [manualScanCooldownMinutes, setManualScanCooldownMinutes] = useState<number>(5)
 
   const { data: settings } = useQuery({
@@ -1019,7 +979,6 @@ function AntiDetectTab() {
         setScanWindowEndHour(Number(settings.scan_window_end_hour))
         setScanWindowEnabled(true)
       }
-      if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
       if (settings.manual_scan_cooldown_minutes != null) setManualScanCooldownMinutes(Number(settings.manual_scan_cooldown_minutes))
     }
   }, [settings])
@@ -1035,7 +994,6 @@ function AntiDetectTab() {
         scan_jitter_max_seconds: scanJitterMaxSeconds,
         scan_window_start_hour: scanWindowEnabled ? scanWindowStartHour : null,
         scan_window_end_hour: scanWindowEnabled ? scanWindowEndHour : null,
-        scan_min_interval_hours: scanMinIntervalHours,
         manual_scan_cooldown_minutes: manualScanCooldownMinutes,
       }),
     onSuccess: () => {
@@ -1112,7 +1070,7 @@ function AntiDetectTab() {
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <h3 className="font-semibold">Scan Schedule</h3>
         <p className="text-sm text-muted-foreground">
-          Each channel is scanned once per day. By default scans spread across the full 24 hours for the most organic traffic pattern. You can optionally constrain them to a specific local-time window (e.g. 10 PM to 6 AM). Windows must be at least 8 hours wide to avoid clustering.
+          How often each channel is scanned is set under General. By default scans spread across the full 24 hours for the most organic traffic pattern. You can optionally constrain them to a specific local-time window (e.g. 10 PM to 6 AM); a scan that comes due outside the window waits for the next one. Windows must be at least 8 hours wide to avoid clustering.
         </p>
         <label className="flex items-center gap-2 cursor-pointer">
           <input
@@ -1159,29 +1117,12 @@ function AntiDetectTab() {
               <p className={`text-xs ${tooNarrow ? "text-red-500" : "text-muted-foreground"}`}>
                 {tooNarrow
                   ? `Window is only ${width} hours. Must be at least 8 hours.`
-                  : `Each channel is scanned once per 24 hours, between ${String(scanWindowStartHour).padStart(2, "0")}:00 and ${String(scanWindowEndHour).padStart(2, "0")}:00 (${width === 0 ? 24 : width} hour window).`}
+                  : `Scans only run between ${String(scanWindowStartHour).padStart(2, "0")}:00 and ${String(scanWindowEndHour).padStart(2, "0")}:00 (${width === 0 ? 24 : width} hour window).`}
               </p>
             </div>
           )
         })()}
         <div className="pt-3 border-t space-y-3">
-          <div>
-            <label className="flex items-center gap-1 text-sm font-medium mb-1">
-              Minimum hours between auto-scans
-              <HelpIcon text="Ensures random scheduling never re-scans a channel within this many hours. Default 12 means each channel is scanned roughly once per day." anchor="channel-management" />
-            </label>
-            <input
-              type="number"
-              value={scanMinIntervalHours}
-              onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
-              min={1}
-              max={168}
-              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Hours. Random auto-scans are guaranteed to be at least this far apart.
-            </p>
-          </div>
           <div>
             <label className="flex items-center gap-1 text-sm font-medium mb-1">
               Manual "Scan Now" cooldown

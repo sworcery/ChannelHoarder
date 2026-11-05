@@ -40,7 +40,7 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
 
 
 @router.put("/")
-async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSession = Depends(get_db)):
+async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
     update_data = body.model_dump(exclude_unset=True)
 
     # Validate scan window if either hour field is being updated
@@ -91,13 +91,6 @@ async def update_settings(body: SettingsUpdate, request: Request, db: AsyncSessi
     logger.info("Settings committed to database")
 
     # Apply runtime-reactive settings immediately
-    if "global_schedule_cron" in update_data:
-        try:
-            scheduler = request.app.state.scheduler
-            scheduler.reschedule_scan(update_data["global_schedule_cron"])
-        except Exception as e:
-            logger.warning("Could not reschedule scan: %s", e)
-
     if "log_level" in update_data:
         level = update_data["log_level"].upper()
         logging.getLogger().setLevel(getattr(logging, level, logging.INFO))

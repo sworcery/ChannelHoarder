@@ -131,7 +131,3 @@ class SchedulerService:
     async def shutdown(self):
         self.scheduler.shutdown(wait=True)
         logger.info("Scheduler shut down")
-
-    def reschedule_scan(self, new_cron: str):
-        """No-op retained for backwards compat. Scan timing is now per-channel."""
-        logger.info("Scan cron update ignored (window-based scheduling): %s", new_cron)

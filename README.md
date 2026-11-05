@@ -80,7 +80,7 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 
 **Automatic scanning:**
 
-- The scheduler runs a channel scan on a configurable schedule (default: daily at 3:00 AM, changeable in Settings)
+- Each channel is scanned at its own random time, every 12 to 24 hours by default (set the interval under Settings > General, and optionally limit scans to certain hours with a scan window under Settings > Anti-Detection)
 - Each scan checks for new videos that haven't been downloaded yet and adds them to the download queue with `pending` status
 - If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise yt-dlp handles discovery directly
 - Manual scans can be triggered per-channel or for all channels at once
@@ -239,7 +239,7 @@ The free tier provides 10,000 quota units per day, which is enough for most pers
 
 All settings are configurable through the **Settings** page:
 
-- **General** - Scan schedule (presets + custom cron), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
+- **General** - Scan interval (how often each channel is scanned), default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
 - **Authentication** - PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
 - **Naming** - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
 - **yt-dlp** - Version info (yt-dlp ships current on every image build)

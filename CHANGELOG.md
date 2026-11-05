@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.47] - 2026-10-25
 
+### Fixed
+- **The scan interval setting now controls how often channels are scanned** (#50). Settings > General showed a scan schedule (presets or a cron expression) that has done nothing since 1.7.27, when each channel moved to its own random scan time. It is gone, and the interval setting that used to sit under Anti-Detection as "Minimum hours between auto-scans" takes its place on General as "Scan each channel every". That setting didn't fully work either: without a scan window, every scan added up to 12 random hours on top of it, so even a 1-hour interval scanned a channel only every 1 to 13 hours. The random extra is now at most the interval itself, still capped at 12 hours, so 1 hour means every 1 to 2 hours and the default of 12 hours stays at 12 to 24. A new interval applies from each channel's next scan, or right away after Scan All Channels Now.
+
 ### Documentation
 - Brought the README up to date: the tagline now describes a video channel archiver rather than a YouTube-only one, the feature list covers the per-channel preferred codec (#36) and Repair Dates (#42), and First Steps lists Discord alongside Telegram and Pushover. The Unraid template's overview now mentions Discord notifications too.
 

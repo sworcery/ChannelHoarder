@@ -20,7 +20,6 @@ _DEFAULTS = {
     "max_concurrent_downloads": lambda: settings.MAX_CONCURRENT_DOWNLOADS,
     "max_retries": lambda: settings.MAX_RETRIES,
     "default_quality": lambda: settings.DEFAULT_QUALITY,
-    "global_schedule_cron": lambda: settings.DEFAULT_SCAN_CRON,
     "log_level": lambda: settings.LOG_LEVEL,
 }
 

@@ -54,23 +54,27 @@ def compute_next_scan_at(
 
     min_offset_hours (default 12) enforces a minimum gap before the next scan
     so randomization can't roll a near-future time. This is critical for avoiding
-    hammering YouTube with repeated scans of the same channel.
+    hammering YouTube with repeated scans of the same channel. Without a window,
+    a random extra of 0 to min(12h, min_offset) is added (1h -> 1-2h, 12h -> 12-24h,
+    24h -> 24-36h).
     """
     # Use local system timezone for window semantics
     if now_local is None:
         now_local = datetime.now().astimezone()
 
-    min_offset_seconds = max(60, int(min_offset_hours * 3600))
+    # Floor at 1h (the settings API minimum) so a bad stored value can't make
+    # every channel due on every scan tick
+    min_offset_seconds = max(3600, int(min_offset_hours * 3600))
     earliest = now_local + timedelta(seconds=min_offset_seconds)
 
-    # No window or invalid: pick somewhere between min_offset and min_offset + 12h
+    # No window or invalid: pick somewhere between min_offset and min_offset + extra
     no_window = (
         start_hour is None or end_hour is None or start_hour == end_hour
     )
 
     if no_window:
-        # Spread across a 12h band starting at the minimum offset
-        extra = random.randint(0, 12 * 3600)
+        # Spread over a band as wide as the interval, capped at 12h
+        extra = random.randint(0, min(12 * 3600, min_offset_seconds))
         target_local = earliest + timedelta(seconds=extra)
         return target_local.astimezone(timezone.utc).replace(tzinfo=None)
 

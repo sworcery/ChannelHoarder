@@ -229,7 +229,6 @@ class DashboardStats(UTCBaseModel):
 # --- Settings Schemas ---
 class SettingsUpdate(BaseModel):
     default_quality: Optional[str] = None
-    global_schedule_cron: Optional[str] = None
     download_delay_min: Optional[int] = None
     download_delay_max: Optional[int] = None
     jitter_enabled: Optional[bool] = None
