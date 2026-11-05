@@ -9,6 +9,7 @@ from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, Channel, DownloadQueue, Video
 from app.services.download_service import DownloadService
+from app.services.queue_order import queue_order_by
 from app.services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
@@ -88,11 +89,15 @@ async def process_download_queue():
 
         # Get next queued videos (fill all available slots). Over-fetch so we can drop
         # any still-running ones and still fill the slots.
+        queue_order = await get_setting(db, "download_queue_order")
         result = await db.execute(
             select(DownloadQueue)
+            # Outer joins so entries whose video is gone still reach the cleanup below
+            .outerjoin(Video, DownloadQueue.video_id == Video.id)
+            .outerjoin(Channel, Video.channel_id == Channel.id)
             .options(joinedload(DownloadQueue.video))
             .where(DownloadQueue.started_at.is_(None))
-            .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
+            .order_by(*queue_order_by(queue_order))
             .limit(slots + len(running_video_ids))
         )
         candidates = result.scalars().unique().all()

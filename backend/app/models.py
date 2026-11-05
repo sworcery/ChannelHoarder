@@ -46,6 +46,7 @@ class Channel(Base):
     include_shorts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     include_livestreams: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     auto_download: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    prioritize_downloads: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     last_scanned_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     next_scan_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, index=True)
     total_videos: Mapped[int] = mapped_column(Integer, default=0)

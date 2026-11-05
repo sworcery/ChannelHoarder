@@ -1125,6 +1125,22 @@ export default function ChannelDetailPage() {
                     </p>
                   </div>
                   <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Download first</label>
+                    <button
+                      onClick={() => updateMutation.mutate({ prioritize_downloads: !channel.prioritize_downloads })}
+                      className={`px-3 py-1.5 rounded-md text-sm ${
+                        channel.prioritize_downloads
+                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                      }`}
+                    >
+                      {channel.prioritize_downloads ? "On" : "Off"}
+                    </button>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Queued videos from this channel download before other channels' videos.
+                    </p>
+                  </div>
+                  <div>
                     <label className="block text-xs text-muted-foreground mb-1">Scan for Videos</label>
                     <div className="flex items-center gap-2">
                       <button

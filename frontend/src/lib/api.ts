@@ -239,6 +239,8 @@ export const api = {
   clearQueue: () => request<MessageResponse>("/downloads/clear-queue", { method: "POST" }),
   setQueuePriority: (queueId: number, priority: number) =>
     request<MessageResponse>(`/downloads/queue/${queueId}/priority`, { method: "POST", body: JSON.stringify({ priority }) }),
+  moveQueueItemToTop: (queueId: number) =>
+    request<MessageResponse>(`/downloads/queue/${queueId}/move-to-top`, { method: "POST" }),
   downloadNow: (queueId: number) =>
     request<MessageResponse>(`/downloads/queue/${queueId}/download-now`, { method: "POST" }),
 

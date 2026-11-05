@@ -14,6 +14,7 @@ export interface Channel {
   include_shorts: boolean
   include_livestreams: boolean
   auto_download: boolean
+  prioritize_downloads: boolean
   quality_cutoff: string | null
   min_quality: string | null
   preferred_codec: string | null

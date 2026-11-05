@@ -28,6 +28,7 @@ import {
   Square,
   MinusSquare,
   Zap,
+  ArrowUpToLine,
 } from "lucide-react"
 
 /** Human-readable error descriptions shown inline */
@@ -311,6 +312,31 @@ export default function DownloadsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const moveToTopMutation = useMutation({
+    mutationFn: (queueId: number) => api.moveQueueItemToTop(queueId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+  const queueOrder = (appSettings?.download_queue_order as string) || "queued"
+
+  const queueOrderMutation = useMutation({
+    mutationFn: (order: string) => api.updateSettings({ download_queue_order: order }),
+    onSuccess: (_data, order) => {
+      queryClient.setQueryData(["app-settings"], (old: Record<string, unknown> | undefined) =>
+        old ? { ...old, download_queue_order: order } : old)
+      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   // Clear selection when switching tabs
   const handleTabChange = useCallback((newTab: typeof tab) => {
     setTab(newTab)
@@ -467,6 +493,27 @@ export default function DownloadsPage() {
             </div>
           )}
 
+          {/* Download order */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+            <label htmlFor="queue-order" className="text-sm text-muted-foreground">Download order</label>
+            <select
+              id="queue-order"
+              value={queueOrderMutation.isPending ? queueOrderMutation.variables : queueOrder}
+              onChange={(e) => queueOrderMutation.mutate(e.target.value)}
+              disabled={queueOrderMutation.isPending}
+              className="px-2 py-1 text-sm rounded-md border bg-background"
+            >
+              <option value="queued">Order added</option>
+              <option value="newest">Newest videos first</option>
+              <option value="oldest">Oldest videos first</option>
+              <option value="shortest">Shortest first</option>
+              <option value="longest">Longest first</option>
+            </select>
+            <span className="text-xs text-muted-foreground">
+              Items you move to the top and channels set to download first always go first.
+            </span>
+          </div>
+
           {/* Search */}
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -599,6 +646,16 @@ export default function DownloadsPage() {
 
                         {/* Queue controls */}
                         <div className="flex items-center gap-0.5 shrink-0">
+                          {!entry.started_at && (
+                            <button
+                              onClick={() => moveToTopMutation.mutate(entry.id)}
+                              className="p-1.5 hover:bg-accent rounded"
+                              title="Move to top"
+                              aria-label="Move to top"
+                            >
+                              <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                          )}
                           {!entry.started_at && (
                             <button
                               onClick={() => downloadNowMutation.mutate(entry.id)}

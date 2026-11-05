@@ -53,6 +53,7 @@ class ChannelUpdate(BaseModel):
     include_shorts: Optional[bool] = None
     include_livestreams: Optional[bool] = None
     auto_download: Optional[bool] = None
+    prioritize_downloads: Optional[bool] = None
     quality_cutoff: Optional[str] = None
     min_quality: Optional[str] = Field(default=None, pattern="^(2160p|1080p|720p|480p)$")
     preferred_codec: Optional[str] = Field(default=None, pattern="^(h264|vp9)$")
@@ -89,6 +90,7 @@ class ChannelResponse(UTCBaseModel):
     include_shorts: bool
     include_livestreams: bool
     auto_download: bool
+    prioritize_downloads: bool = False
     quality_cutoff: Optional[str]
     min_quality: Optional[str]
     preferred_codec: Optional[str]
@@ -242,6 +244,7 @@ class SettingsUpdate(BaseModel):
     manual_scan_cooldown_minutes: Optional[int] = Field(default=None, ge=0, le=1440)  # "Scan Now" cooldown
     max_concurrent_downloads: Optional[int] = None
     max_retries: Optional[int] = None
+    download_queue_order: Optional[str] = Field(default=None, pattern="^(queued|newest|oldest|shortest|longest)$")
     user_agent_rotation: Optional[bool] = None
     youtube_api_key: Optional[str] = None
     pot_server_enabled: Optional[bool] = None

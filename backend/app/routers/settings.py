@@ -199,6 +199,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "include_shorts": ch.include_shorts,
             "include_livestreams": ch.include_livestreams,
             "auto_download": ch.auto_download,
+            "prioritize_downloads": ch.prioritize_downloads,
             "title_filter": ch.title_filter,
             "title_filter_is_regex": ch.title_filter_is_regex,
             "title_filter_mode": ch.title_filter_mode,
@@ -269,6 +270,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             title_filter_is_regex=ch_data.get("title_filter_is_regex", False),
             title_filter_mode=ch_data.get("title_filter_mode", "include"),
             auto_download=ch_data.get("auto_download", True),
+            prioritize_downloads=ch_data.get("prioritize_downloads", False),
             health_status="unknown",
         )
         db.add(channel)

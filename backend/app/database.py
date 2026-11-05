@@ -74,6 +74,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN auto_download BOOLEAN DEFAULT 1 NOT NULL")
             )
+        if "prioritize_downloads" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN prioritize_downloads BOOLEAN DEFAULT 0 NOT NULL")
+            )
         if "include_livestreams" not in columns:
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN include_livestreams BOOLEAN DEFAULT 0 NOT NULL")

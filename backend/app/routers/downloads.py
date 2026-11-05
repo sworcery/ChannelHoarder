@@ -13,6 +13,8 @@ from app.config import settings as app_settings
 from app.deps import get_db
 from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
+from app.services.queue_order import queue_order_by
+from app.services.settings_service import get_setting
 from app.services.ytdlp_service import YtdlpService
 from app.utils.file_utils import escape_like, move_video_files, validate_download_path
 
@@ -27,26 +29,38 @@ async def get_queue(
     search: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
-    # Count query (no eager loading needed)
-    count_query = select(func.count(DownloadQueue.id))
+    # Count query (no eager loading needed); same joins as the data query so
+    # leftover rows without a video don't inflate the total
+    count_query = (
+        select(func.count(DownloadQueue.id))
+        .join(Video, DownloadQueue.video_id == Video.id)
+        .join(Channel, Video.channel_id == Channel.id)
+    )
     if search:
-        count_query = count_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{escape_like(search)}%"))
+        count_query = count_query.where(Video.title.ilike(f"%{escape_like(search)}%"))
     total = await db.scalar(count_query) or 0
 
     # Data query with eager loading  - defer large text blobs not needed for queue display
-    data_query = select(DownloadQueue).options(
-        joinedload(DownloadQueue.video)
-        .defer(Video.description)
-        .defer(Video.error_details)
-        .defer(Video.file_path)
-        .joinedload(Video.channel)
+    queue_order = await get_setting(db, "download_queue_order")
+    data_query = (
+        select(DownloadQueue)
+        .join(Video, DownloadQueue.video_id == Video.id)
+        .join(Channel, Video.channel_id == Channel.id)
+        .options(
+            joinedload(DownloadQueue.video)
+            .defer(Video.description)
+            .defer(Video.error_details)
+            .defer(Video.file_path)
+            .joinedload(Video.channel)
+        )
     )
     if search:
-        data_query = data_query.join(DownloadQueue.video).where(Video.title.ilike(f"%{escape_like(search)}%"))
+        data_query = data_query.where(Video.title.ilike(f"%{escape_like(search)}%"))
 
     result = await db.execute(
         data_query
-        .order_by(DownloadQueue.priority.desc(), DownloadQueue.queued_at.asc())
+        # Active downloads first, then the order they will be dispatched in
+        .order_by(DownloadQueue.started_at.is_(None), *queue_order_by(queue_order))
         .offset(skip)
         .limit(limit)
     )
@@ -299,6 +313,21 @@ async def set_queue_priority(queue_id: int, body: PriorityUpdate, db: AsyncSessi
     entry.priority = body.priority
     await db.commit()
     return {"message": f"Priority set to {body.priority}", "priority": body.priority}
+
+
+@router.post("/queue/{queue_id}/move-to-top")
+async def move_queue_item_to_top(queue_id: int, db: AsyncSession = Depends(get_db)):
+    """Put a queue entry ahead of everything else currently queued."""
+    result = await db.execute(select(DownloadQueue).where(DownloadQueue.id == queue_id))
+    entry = result.scalar_one_or_none()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Queue entry not found")
+    if entry.started_at is not None:
+        raise HTTPException(status_code=409, detail="Cannot change priority of an active download")
+    max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0
+    entry.priority = max(max_priority, entry.priority) + 1
+    await db.commit()
+    return {"message": "Moved to top of queue", "priority": entry.priority}
 
 
 @router.post("/queue/{queue_id}/download-now")

@@ -21,6 +21,7 @@ _DEFAULTS = {
     "max_retries": lambda: settings.MAX_RETRIES,
     "default_quality": lambda: settings.DEFAULT_QUALITY,
     "log_level": lambda: settings.LOG_LEVEL,
+    "download_queue_order": lambda: "queued",
 }
 
 
