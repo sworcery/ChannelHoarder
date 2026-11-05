@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
@@ -132,6 +133,31 @@ async def test_webhook(provider: str = "telegram"):
     return await send_test_notification(provider)
 
 
+def _import_from_date(ch_data: dict):
+    """Parse download_from_date (ISO string); fall back to legacy download_from_year (Jan 1)."""
+    raw = ch_data.get("download_from_date")
+    if raw:
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            return None
+    year = ch_data.get("download_from_year")
+    if year:
+        try:
+            return date(int(year), 1, 1)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _import_retention_days(raw):
+    try:
+        val = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return val if 1 <= val <= 36500 else None
+
+
 @router.get("/export")
 async def export_config(db: AsyncSession = Depends(get_db)):
     """Export all settings and channels as JSON for backup."""
@@ -165,7 +191,8 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "min_quality": ch.min_quality,
             "preferred_codec": ch.preferred_codec,
             "min_video_duration": ch.min_video_duration,
-            "download_from_year": ch.download_from_year,
+            "download_from_date": ch.download_from_date.isoformat() if ch.download_from_date else None,
+            "retention_days": ch.retention_days,
             "naming_template": ch.naming_template,
             "download_dir": ch.download_dir,
             "enabled": ch.enabled,
@@ -229,7 +256,8 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             quality=ch_data.get("quality", "best"),
             quality_cutoff=ch_data.get("quality_cutoff"),
             min_video_duration=ch_data.get("min_video_duration"),
-            download_from_year=ch_data.get("download_from_year"),
+            download_from_date=_import_from_date(ch_data),
+            retention_days=_import_retention_days(ch_data.get("retention_days")),
             naming_template=ch_data.get("naming_template"),
             download_dir=ch_data.get("download_dir"),
             enabled=ch_data.get("enabled", True),

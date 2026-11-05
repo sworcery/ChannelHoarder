@@ -125,6 +125,16 @@ class SchedulerService:
             name="Clean up abandoned download temp directories",
         )
 
+        # Per-channel retention: delete downloaded files past their retention window (every 6 hours)
+        from app.tasks.retention import apply_retention
+        self.scheduler.add_job(
+            apply_retention,
+            IntervalTrigger(hours=6),
+            id="retention_cleanup",
+            replace_existing=True,
+            name="Delete downloaded videos past channel retention",
+        )
+
         self.scheduler.start()
         logger.info("Scheduler started with %d jobs", len(self.scheduler.get_jobs()))
 

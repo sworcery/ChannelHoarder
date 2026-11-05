@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -112,6 +113,25 @@ async def add_channel(
     except Exception as e:
         logger.error("Failed to add channel: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to add channel. Check logs for details.")
+
+
+@router.get("/{channel_id}/retention-preview")
+async def retention_preview(
+    channel_id: int,
+    days: int = Query(..., ge=1, le=36500),
+    db: AsyncSession = Depends(get_db),
+):
+    """Count and size of downloaded videos a retention of `days` would delete now."""
+    from app.tasks.retention import expired_videos_filter
+
+    exists = await db.scalar(select(Channel.id).where(Channel.id == channel_id))
+    if exists is None:
+        raise HTTPException(status_code=404, detail="Channel not found")
+    row = (await db.execute(
+        select(func.count(Video.id), func.coalesce(func.sum(Video.file_size), 0))
+        .where(*expired_videos_filter(channel_id, days))
+    )).one()
+    return {"count": int(row[0]), "total_bytes": int(row[1])}
 
 
 @router.get("/{channel_id}", response_model=ChannelResponse)
@@ -1932,6 +1952,17 @@ async def force_rescan(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
+    # Videos downloaded and then deliberately removed (retention): keep them skipped
+    removed_result = await db.execute(
+        select(Video.video_id).where(
+            Video.channel_id == channel.id,
+            Video.status == "skipped",
+            Video.monitored.is_(False),
+            Video.downloaded_at.is_not(None),
+        )
+    )
+    removed_video_ids = [r[0] for r in removed_result.all()]
+
     # Delete all child records
     video_ids = select(Video.id).where(Video.channel_id == channel.id)
     await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
@@ -1960,6 +1991,26 @@ async def force_rescan(
             "deleted": deleted_count,
             "new_videos": 0,
         }
+
+    # Re-apply the "deliberately removed" state before file matching
+    if removed_video_ids:
+        for i in range(0, len(removed_video_ids), 500):
+            chunk = removed_video_ids[i:i + 500]
+            await db.execute(
+                update(Video)
+                .where(Video.channel_id == channel.id, Video.video_id.in_(chunk))
+                .values(status="skipped", monitored=False)
+            )
+            await db.execute(
+                sa_delete(DownloadQueue).where(
+                    DownloadQueue.video_id.in_(
+                        select(Video.id).where(
+                            Video.channel_id == channel.id, Video.video_id.in_(chunk)
+                        )
+                    )
+                )
+            )
+        await db.commit()
 
     # Match existing files on disk back to the new video records by video ID
     import re
@@ -2008,6 +2059,10 @@ async def force_rescan(
                     video.status = "completed"
                     video.file_path = str(mp4_path)
                     video.file_size = mp4_path.stat().st_size
+                    if video.downloaded_at is None:
+                        video.downloaded_at = datetime.fromtimestamp(
+                            mp4_path.stat().st_mtime, tz=timezone.utc
+                        ).replace(tzinfo=None)
                     matched_video_ids.append(video.id)
                     matched_count += 1
             if matched_video_ids:

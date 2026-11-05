@@ -82,9 +82,21 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN next_scan_at DATETIME")
             )
-        if "download_from_year" not in columns:
+        if "download_from_date" not in columns:
             await conn.execute(
-                text("ALTER TABLE channels ADD COLUMN download_from_year INTEGER")
+                text("ALTER TABLE channels ADD COLUMN download_from_date DATE")
+            )
+            # One-time carry-over of the old year cutoff (column is left unused)
+            if "download_from_year" in columns:
+                await conn.execute(
+                    text(
+                        "UPDATE channels SET download_from_date = printf('%04d-01-01', download_from_year) "
+                        "WHERE download_from_year BETWEEN 1 AND 9999"
+                    )
+                )
+        if "retention_days" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN retention_days INTEGER")
             )
         if "min_quality" not in columns:
             await conn.execute(

@@ -5,6 +5,7 @@ import { formatDate, formatDateTime, formatBytes, formatDuration } from "@/lib/u
 import { STATUS_COLORS, HEALTH_COLORS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { StatusIcon } from "@/components/ui/StatusIcon"
 import { DropdownMenu, DropdownItem, DropdownSeparator } from "@/components/ui/DropdownMenu"
 import {
@@ -51,7 +52,35 @@ export default function ChannelDetailPage() {
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [editDownloadDir, setEditDownloadDir] = useState<string | null>(null)
   const [editMinDuration, setEditMinDuration] = useState<string | null>(null)
-  const [editFromYear, setEditFromYear] = useState<string | null>(null)
+  const [editFromDate, setEditFromDate] = useState<string | null>(null)
+  const [editRetention, setEditRetention] = useState<string | null>(null)
+  const [retentionConfirm, setRetentionConfirm] = useState<{ days: number; count: number; bytes: number } | null>(null)
+  const [retentionChecking, setRetentionChecking] = useState(false)
+
+  const saveRetention = async () => {
+    if (editRetention === null) return
+    const raw = editRetention.trim()
+    const days = raw === "" ? null : parseInt(raw, 10)
+    const current = channel?.retention_days ?? null
+    // Only setting or lowering retention can delete existing files
+    if (days !== null && (current === null || days < current)) {
+      setRetentionChecking(true)
+      try {
+        const preview = await api.getRetentionPreview(channelId, days)
+        if (preview.count > 0) {
+          setRetentionConfirm({ days, count: preview.count, bytes: preview.total_bytes })
+          return
+        }
+      } catch (e) {
+        toast((e as Error).message, "error")
+        return
+      } finally {
+        setRetentionChecking(false)
+      }
+    }
+    updateMutation.mutate({ retention_days: days })
+    setEditRetention(null)
+  }
   const [editTitleFilter, setEditTitleFilter] = useState<string | null>(null)
   const [importOpen, setImportOpen] = useState(false)
   const [importFolder, setImportFolder] = useState("")
@@ -938,26 +967,49 @@ export default function ChannelDetailPage() {
                 </div>
               </div>
 
-              {/* Year Filter */}
+              {/* Start Date Filter */}
               <div>
-                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Year <HelpIcon text="Only download videos published in this year or later. Applies to future scans. Already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Download From Date <HelpIcon text="Only videos published on or after this date are downloaded. Applies to future scans. Already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" /></label>
+                <div className="flex gap-1 max-w-xs">
+                  <input
+                    type="date"
+                    min="2005-01-01"
+                    value={editFromDate ?? (channel.download_from_date || "")}
+                    onChange={(e) => setEditFromDate(e.target.value)}
+                    className="w-44 px-2 py-1.5 rounded-md border bg-background text-sm"
+                  />
+                  {editFromDate !== null && editFromDate !== (channel.download_from_date || "") && (
+                    <button
+                      onClick={() => {
+                        updateMutation.mutate({ download_from_date: editFromDate || null })
+                        setEditFromDate(null)
+                      }}
+                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Retention */}
+              <div>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Delete videos after (days) <HelpIcon text="Deletes the downloaded files this many days after each video was downloaded. The videos stay listed as skipped and will not download again, including after Force Rescan. Leave empty to keep videos forever." anchor="channel-management" /></label>
                 <div className="flex gap-1 max-w-xs">
                   <input
                     type="number"
-                    min="2005"
-                    max={new Date().getFullYear()}
-                    value={editFromYear ?? (channel.download_from_year || "")}
-                    placeholder="All years"
-                    onChange={(e) => setEditFromYear(e.target.value)}
+                    min="1"
+                    max="36500"
+                    value={editRetention ?? (channel.retention_days || "")}
+                    placeholder="Keep forever"
+                    onChange={(e) => setEditRetention(e.target.value)}
                     className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
                   />
-                  {editFromYear !== null && editFromYear !== String(channel.download_from_year || "") && (
+                  {editRetention !== null && editRetention !== String(channel.retention_days || "") && (
                     <button
-                      onClick={() => {
-                        updateMutation.mutate({ download_from_year: Number(editFromYear) || null })
-                        setEditFromYear(null)
-                      }}
-                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                      onClick={saveRetention}
+                      disabled={retentionChecking || !(editRetention.trim() === "" || (/^\d+$/.test(editRetention.trim()) && parseInt(editRetention, 10) >= 1 && parseInt(editRetention, 10) <= 36500))}
+                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
                     >
                       Save
                     </button>
@@ -1943,6 +1995,18 @@ export default function ChannelDetailPage() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={!!retentionConfirm}
+        title={`Delete ${retentionConfirm?.count ?? 0} downloaded video${retentionConfirm?.count === 1 ? "" : "s"}?`}
+        message={`${retentionConfirm?.count ?? 0} downloaded video${retentionConfirm?.count === 1 ? " is" : "s are"} already older than ${retentionConfirm?.days ?? 0} days (${formatBytes(retentionConfirm?.bytes ?? 0)}). Their files will be permanently deleted within the next 6 hours, and later videos ${retentionConfirm?.days ?? 0} days after they download.`}
+        confirmLabel="Save and delete"
+        onConfirm={() => {
+          if (retentionConfirm) updateMutation.mutate({ retention_days: retentionConfirm.days })
+          setRetentionConfirm(null)
+          setEditRetention(null)
+        }}
+        onCancel={() => setRetentionConfirm(null)}
+      />
     </div>
   )
 }

@@ -18,7 +18,8 @@ export interface Channel {
   min_quality: string | null
   preferred_codec: string | null
   min_video_duration: number | null
-  download_from_year: number | null
+  download_from_date: string | null
+  retention_days: number | null
   title_filter: string | null
   title_filter_is_regex: boolean
   title_filter_mode: "include" | "exclude"

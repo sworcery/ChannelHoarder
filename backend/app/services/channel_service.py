@@ -187,7 +187,7 @@ class ChannelService:
             quality_cutoff=data.quality_cutoff,
             preferred_codec=data.preferred_codec,
             min_video_duration=data.min_video_duration,
-            download_from_year=data.download_from_year,
+            download_from_date=data.download_from_date,
             title_filter=data.title_filter,
             title_filter_is_regex=data.title_filter_is_regex,
             title_filter_mode=data.title_filter_mode,
@@ -736,12 +736,12 @@ class ChannelService:
                     new_count += 1
                     continue
 
-            # Check per-channel year filter
-            if channel.download_from_year and upload_date.year < channel.download_from_year:
+            # Check per-channel start-date filter
+            if channel.download_from_date and upload_date < channel.download_from_date:
                 video.status = "skipped"
                 video.monitored = False
-                logger.info("Skipped old video: %s (%s) - year %d < %d minimum",
-                            vid_id, title, upload_date.year, channel.download_from_year)
+                logger.info("Skipped old video: %s (%s) - %s before %s start date",
+                            vid_id, title, upload_date, channel.download_from_date)
                 new_count += 1
                 continue
 

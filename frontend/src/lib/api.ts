@@ -53,6 +53,8 @@ export const api = {
   getChannel: (id: number) => request<Channel>(`/channels/${id}`),
   updateChannel: (id: number, data: Partial<Channel>) =>
     request<Channel>(`/channels/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  getRetentionPreview: (id: number, days: number) =>
+    request<{ count: number; total_bytes: number }>(`/channels/${id}/retention-preview?days=${days}`),
   deleteChannel: (id: number, deleteFiles = false) =>
     request<void>(`/channels/${id}?delete_files=${deleteFiles}`, { method: "DELETE" }),
   getChannelVideos: (id: number, params?: { skip?: number; limit?: number; status?: string; monitored?: boolean; search?: string }) => {
