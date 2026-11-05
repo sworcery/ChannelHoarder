@@ -5,7 +5,7 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.47] - 2026-10-25
+## [1.9.47] - 2026-11-05
 
 ### Added
 - **Per-channel start date and auto-delete** (#49). In a channel's settings, "Download From Year" is now "Download From Date", so a channel can start from an exact day. Existing year settings become January 1 of that year, and config exports that still have a year import the same way. A new "Delete videos after (days)" setting deletes each downloaded video's files that many days after it was downloaded, checked every 6 hours. Deleted videos stay listed as skipped and don't download again, including after Force Rescan. Saving a value that would delete videos you already have asks first, with the number of videos and the space they use. A video whose file is missing when its time comes, for example because the media share isn't mounted, is left alone.

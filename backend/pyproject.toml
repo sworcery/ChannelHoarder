@@ -1,6 +1,6 @@
 [project]
 name = "channelhoarder"
-version = "1.9.46.4"
+version = "1.9.47"
 description = "Self-hosted video channel archiver with Plex-compatible naming"
 license = "MIT"
 requires-python = ">=3.12"
