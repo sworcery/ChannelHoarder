@@ -1,0 +1,144 @@
+name: Build image
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Weekly rebuild so the image picks up the latest yt-dlp even without a code push.
+    - cron: '0 6 * * 1'
+  workflow_dispatch: {}
+
+# Gitea Actions only (GitHub ignores .gitea/). The GitHub workflow in
+# .github/workflows is gated to github.com, so Gitea skips it. No tests run
+# here; the local suite is the gate.
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      # Compare the push's before/after SHAs by hand. workflow_dispatch and
+      # schedule have no "before", and a first push or force push has a
+      # null/all-zero one, so those always build.
+      - name: Detect relevant changes
+        id: filter
+        run: |
+          set -e
+          if [ "${{ github.event_name }}" != "push" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=${{ github.event_name }} always builds" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BEFORE="${{ github.event.before }}"
+          AFTER="${{ github.sha }}"
+          ZERO="0000000000000000000000000000000000000000"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "$ZERO" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no usable previous commit - building to be safe" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # --quiet exits 1 on a difference and >1 on an error; both build.
+          if ! git diff --quiet "$BEFORE" "$AFTER" -- backend/ frontend/ docker/ tools/ .gitea/workflows/build.yml; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "reason=relevant paths changed" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no relevant paths changed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip notice
+        if: steps.filter.outputs.changed != 'true'
+        run: echo "::notice::Skipping build - ${{ steps.filter.outputs.reason }}"
+
+      # The registry is this Gitea instance, so its host comes from the server
+      # URL rather than being written into a public repo.
+      - name: Read version and registry
+        id: meta
+        if: steps.filter.outputs.changed == 'true'
+        run: |
+          echo "ver=$(sed -n 's/^ *APP_VERSION: str = "\(.*\)"$/\1/p' backend/app/config.py)" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$(echo "${{ github.sha }}" | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          host="${GITHUB_SERVER_URL#*://}"
+          echo "registry=${host%/}" >> "$GITHUB_OUTPUT"
+          echo "owner=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      # The job's docker.sock is the runner host's daemon, so these tags land
+      # in its local image store directly. CACHEBUST forces the yt-dlp layer
+      # to rebuild every run (see docker/Dockerfile).
+      - name: Build image
+        if: steps.filter.outputs.changed == 'true'
+        env:
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg CACHEBUST="$(date +%s)" \
+            -t channelhoarder:latest \
+            -t "channelhoarder:${{ steps.meta.outputs.ver }}" \
+            -t "channelhoarder:${{ steps.meta.outputs.short_sha }}" \
+            .
+          docker images channelhoarder
+
+      # Optional: a no-op (not a failure) until REGISTRY_TOKEN is configured.
+      - name: Check registry token
+        id: registry
+        if: steps.filter.outputs.changed == 'true'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$REGISTRY_TOKEN" ]; then
+            echo "push=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "push=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Log in to Gitea registry
+        if: steps.filter.outputs.changed == 'true' && steps.registry.outputs.push == 'true'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+        run: echo "$REGISTRY_TOKEN" | docker login "${{ steps.meta.outputs.registry }}" -u "${REGISTRY_USER:-${{ steps.meta.outputs.owner }}}" --password-stdin
+
+      # :latest moves every run. :v<version> and :<sha> are rollback targets,
+      # pushed only the first time: a weekly yt-dlp rebuild, a manual re-run or
+      # a push that doesn't bump the version must not replace them.
+      - name: Push to Gitea registry
+        if: steps.filter.outputs.changed == 'true' && steps.registry.outputs.push == 'true'
+        env:
+          REGISTRY_TOKEN: ${{ secrets.REGISTRY_TOKEN }}
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+        run: |
+          owner="${{ steps.meta.outputs.owner }}"
+          img="${{ steps.meta.outputs.registry }}/$owner/channelhoarder"
+          src="channelhoarder:${{ steps.meta.outputs.short_sha }}"
+          docker tag "$src" "$img:latest"
+          docker push "$img:latest"
+          for tag in "v${{ steps.meta.outputs.ver }}" "${{ steps.meta.outputs.short_sha }}"; do
+            if curl -fsI -o /dev/null -u "${REGISTRY_USER:-$owner}:$REGISTRY_TOKEN" \
+                -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.docker.distribution.manifest.v2+json" \
+                "${GITHUB_SERVER_URL%/}/v2/$owner/channelhoarder/manifests/$tag"; then
+              echo "::notice::$tag already in the registry - left as is"
+              continue
+            fi
+            docker tag "$src" "$img:$tag"
+            docker push "$img:$tag"
+          done
+
+      - name: Log out of Gitea registry
+        if: always() && steps.filter.outputs.changed == 'true' && steps.registry.outputs.push == 'true'
+        run: docker logout "${{ steps.meta.outputs.registry }}"
+
+      # Keep channelhoarder:latest in the host's image store; drop this run's
+      # other tags so they don't pile up there.
+      - name: Remove run tags
+        if: always() && steps.filter.outputs.changed == 'true'
+        run: |
+          img="${{ steps.meta.outputs.registry }}/${{ steps.meta.outputs.owner }}/channelhoarder"
+          for ref in "channelhoarder:${{ steps.meta.outputs.ver }}" "channelhoarder:${{ steps.meta.outputs.short_sha }}" \
+              "$img:latest" "$img:v${{ steps.meta.outputs.ver }}" "$img:${{ steps.meta.outputs.short_sha }}"; do
+            docker rmi "$ref" >/dev/null 2>&1 || true
+          done
