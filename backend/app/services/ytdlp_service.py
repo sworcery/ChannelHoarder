@@ -272,8 +272,11 @@ class YtdlpService:
                 entries = [e for e in entries if e is not None]
                 for entry in entries:
                     entry["_source_tab"] = tab
-                    if "url" not in entry and "webpage_url" in entry:
+                    # Full extraction sets "url" to the (expiring) media URL; the scan
+                    # stores "url" as the video's source_url, so use the page URL.
+                    if entry.get("webpage_url"):
                         entry["url"] = entry["webpage_url"]
+                        entry["_full_extraction"] = True
                     if not entry.get("id") and not entry.get("video_id") and entry.get("webpage_url"):
                         from urllib.parse import urlparse
                         path = urlparse(entry["webpage_url"]).path.strip("/")

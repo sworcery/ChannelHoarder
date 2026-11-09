@@ -6,7 +6,7 @@ import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select, func
+from sqlalchemy import or_, select, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -383,25 +383,31 @@ class ChannelService:
         # livestreams when the user hasn't enabled those categories.
         reclassified_count = await self._reclassify_existing_videos(channel, video_list)
 
-        # Backfill source_url for existing videos missing it (fixes Odysee/Rumble URLs)
+        # Backfill source_url for existing videos missing it (fixes Odysee/Rumble URLs).
+        # Entries whose URL the full-extraction fallback set to the page URL also
+        # replace a stored URL: that path used to save the expiring media URL.
         if existing_ids:
             url_map = {}
+            replace_ids = set()
             for entry in video_list:
                 vid_id = entry.get("id") or entry.get("video_id", "")
                 src = entry.get("url") or entry.get("webpage_url")
                 if vid_id and src and vid_id in existing_ids:
                     url_map[vid_id] = src
+                    if entry.get("_full_extraction"):
+                        replace_ids.add(vid_id)
             if url_map:
                 result = await self.db.execute(
                     select(Video).where(
                         Video.channel_id == channel.id,
                         Video.video_id.in_(url_map.keys()),
-                        Video.source_url.is_(None),
+                        or_(Video.source_url.is_(None), Video.video_id.in_(replace_ids)),
                     )
                 )
                 for video in result.scalars().all():
-                    video.source_url = url_map[video.video_id]
-                    logger.debug("Backfilled source_url for %s", video.video_id)
+                    if video.source_url != url_map[video.video_id]:
+                        video.source_url = url_map[video.video_id]
+                        logger.debug("Backfilled source_url for %s", video.video_id)
 
         # First pass: identify new video IDs
         new_entries = []
