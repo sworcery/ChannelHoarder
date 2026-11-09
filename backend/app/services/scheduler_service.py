@@ -135,6 +135,16 @@ class SchedulerService:
             name="Delete downloaded videos past channel retention",
         )
 
+        # Opt-in RSS check: scan a YouTube channel when its feed shows a new video
+        from app.tasks.rss_check import rss_check_tick
+        self.scheduler.add_job(
+            rss_check_tick,
+            IntervalTrigger(minutes=5),
+            id="rss_check",
+            replace_existing=True,
+            name="Scan channels whose RSS feed shows a new video",
+        )
+
         self.scheduler.start()
         logger.info("Scheduler started with %d jobs", len(self.scheduler.get_jobs()))
 

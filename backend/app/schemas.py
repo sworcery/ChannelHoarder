@@ -2,7 +2,7 @@ import re
 from datetime import datetime, date, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, model_serializer, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 
 class UTCBaseModel(BaseModel):
@@ -241,6 +241,15 @@ class SettingsUpdate(BaseModel):
     scan_window_start_hour: Optional[int] = Field(default=None, ge=0, le=23)
     scan_window_end_hour: Optional[int] = Field(default=None, ge=0, le=23)
     scan_min_interval_hours: Optional[int] = Field(default=None, ge=1, le=168)  # Min gap between auto-scans for the same channel
+    rss_check_minutes: Optional[int] = Field(default=None, ge=0, le=1440)  # 0 = off; else check YouTube RSS feeds this often
+
+    @field_validator("rss_check_minutes")
+    @classmethod
+    def _rss_check_minutes_range(cls, v):
+        if v is not None and 0 < v < 15:
+            raise ValueError("rss_check_minutes must be 0 (off) or between 15 and 1440 minutes")
+        return v
+
     manual_scan_cooldown_minutes: Optional[int] = Field(default=None, ge=0, le=1440)  # "Scan Now" cooldown
     max_concurrent_downloads: Optional[int] = None
     max_retries: Optional[int] = None

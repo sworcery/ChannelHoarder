@@ -22,6 +22,7 @@ _DEFAULTS = {
     "default_quality": lambda: settings.DEFAULT_QUALITY,
     "log_level": lambda: settings.LOG_LEVEL,
     "download_queue_order": lambda: "queued",
+    "rss_check_minutes": lambda: 0,
 }
 
 

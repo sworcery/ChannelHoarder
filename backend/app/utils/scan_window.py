@@ -32,6 +32,18 @@ def validate_scan_window(start_hour: int | None, end_hour: int | None) -> None:
         )
 
 
+def in_scan_window(start_hour: int | None, end_hour: int | None, now_local: datetime | None = None) -> bool:
+    """True when now (local time) is inside the daily scan window, or no window is set."""
+    if start_hour is None or end_hour is None or start_hour == end_hour:
+        return True
+    if now_local is None:
+        now_local = datetime.now().astimezone()
+    hour = now_local.hour
+    if start_hour < end_hour:
+        return start_hour <= hour < end_hour
+    return hour >= start_hour or hour < end_hour  # wraps midnight
+
+
 def _window_width_hours(start_hour: int, end_hour: int) -> int:
     """Return width of window in hours, handling midnight wrap."""
     if end_hour > start_hour:

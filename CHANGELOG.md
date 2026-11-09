@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.48] - 2026-11-09
 
+### Added
+- **Find new YouTube uploads within minutes using RSS feeds** (#50). A new "Check YouTube feeds every" setting on Settings > General (off by default, 15 minutes or more when on) checks each YouTube channel's RSS feed and scans the channel only when the feed lists a video that isn't in the library yet, so new uploads are found soon after they're posted without scanning more often. Videos a scan skips, such as Shorts or filtered videos, don't trigger another scan. YouTube stops serving feeds to an address after roughly 750 requests a day, so checks are spread out and kept to about 600 feed requests a day, counting the feed request every normal scan makes. With many channels, each channel is checked less often, and the log says how often. If feeds that loaded before start failing, all checks pause for an hour; a single channel whose feed has never loaded is retried after 24 hours without holding up the others. Checks stay inside the scan window if one is set, and interval scans keep running as before to catch anything a feed misses. Thanks to the reporter for testing the idea and measuring the limit.
+
 ### Fixed
 - **Download Now can no longer start the same video twice.** A download that runs longer than 4 hours is treated as stuck and its queue entry is reset. For downloads started with Download Now, the queue couldn't tell that the original was still running, so it started a second download of the same video. Download Now itself could do the same if pressed again after the reset. Both now see the download that is still running.
 - **Rejected settings show the reason instead of "[object Object]".** When the server turned down a value (for example a number outside its allowed range), the error message read "[object Object]". It now shows what was wrong.

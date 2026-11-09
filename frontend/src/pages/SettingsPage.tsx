@@ -89,6 +89,7 @@ function GeneralTab() {
 
   // Settings state
   const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
+  const [rssCheckMinutes, setRssCheckMinutes] = useState<number>(0)
   const [defaultQuality, setDefaultQuality] = useState("best")
   const [maxConcurrent, setMaxConcurrent] = useState(1)
   const [maxRetries, setMaxRetries] = useState(3)
@@ -102,6 +103,7 @@ function GeneralTab() {
   useEffect(() => {
     if (settings) {
       if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
+      if (settings.rss_check_minutes != null) setRssCheckMinutes(Number(settings.rss_check_minutes))
       if (settings.default_quality) setDefaultQuality(String(settings.default_quality))
       if (settings.max_concurrent_downloads != null) setMaxConcurrent(Number(settings.max_concurrent_downloads))
       if (settings.max_retries != null) setMaxRetries(Number(settings.max_retries))
@@ -119,6 +121,7 @@ function GeneralTab() {
     mutationFn: () =>
       api.updateSettings({
         scan_min_interval_hours: scanMinIntervalHours,
+        rss_check_minutes: rssCheckMinutes,
         default_quality: defaultQuality,
         max_concurrent_downloads: maxConcurrent,
         max_retries: maxRetries,
@@ -178,6 +181,27 @@ function GeneralTab() {
           <span className="text-sm text-muted-foreground ml-2">hours</span>
           <p className="text-xs text-muted-foreground mt-1">
             Each channel gets its own random scan time, between this many hours and twice that (never more than 12 hours extra) after its last scan, so channels aren't all scanned at once. With a scan window set, a scan that comes due outside it waits for the window to open. A new interval applies from each channel's next scan; Scan All Channels Now applies it right away. To keep scans to certain hours of the day, set a scan window under Anti-Detection.
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium mb-1">Check YouTube feeds every</label>
+          <input
+            type="number"
+            value={rssCheckMinutes}
+            onChange={(e) => {
+              const n = Math.round(Number(e.target.value) || 0)
+              setRssCheckMinutes(Math.max(0, Math.min(1440, n)))
+            }}
+            onBlur={() => {
+              if (rssCheckMinutes > 0 && rssCheckMinutes < 15) setRssCheckMinutes(15)
+            }}
+            min={0}
+            max={1440}
+            className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+          />
+          <span className="text-sm text-muted-foreground ml-2">minutes (0 = off, otherwise 15 to 1440)</span>
+          <p className="text-xs text-muted-foreground mt-1">
+            Checks each YouTube channel's feed and scans only when a new video appears, so new uploads are found sooner without extra scans. Interval scans still run as the backup. With many channels it checks less often to stay under YouTube's daily feed limit, and with a scan window set it only checks inside the window.
           </p>
         </div>
         <button

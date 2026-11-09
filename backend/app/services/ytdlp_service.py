@@ -524,6 +524,19 @@ class YtdlpService:
         """
         if platform != "youtube":
             return {}
+        dates, reason = YtdlpService.fetch_rss_feed(channel_id, is_playlist)
+        if dates is None:
+            logger.warning("Failed to fetch RSS feed for %s %s: %s",
+                           "playlist" if is_playlist else "channel", channel_id, reason)
+            return {}
+        logger.info("RSS feed returned dates for %d videos from %s %s",
+                    len(dates), "playlist" if is_playlist else "channel", channel_id)
+        return dates
+
+    @staticmethod
+    def fetch_rss_feed(channel_id: str, is_playlist: bool = False) -> tuple[dict[str, str] | None, str | None]:
+        """Fetch a YouTube RSS feed. Returns ({video_id: YYYYMMDD}, None) on
+        success or (None, reason) on any HTTP error or exception."""
         param = "playlist_id" if is_playlist else "channel_id"
         url = f"https://www.youtube.com/feeds/videos.xml?{param}={channel_id}"
         dates: dict[str, str] = {}
@@ -538,12 +551,11 @@ class YtdlpService:
                 if vid_el is not None and pub_el is not None and vid_el.text and pub_el.text:
                     # published is ISO format like "2024-01-15T12:00:00+00:00"
                     dates[vid_el.text] = pub_el.text[:10].replace("-", "")
-            logger.info("RSS feed returned dates for %d videos from %s %s",
-                        len(dates), "playlist" if is_playlist else "channel", channel_id)
+        except httpx.HTTPStatusError as e:
+            return None, f"HTTP {e.response.status_code}"
         except Exception as e:
-            logger.warning("Failed to fetch RSS feed for %s %s: %s",
-                           "playlist" if is_playlist else "channel", channel_id, e)
-        return dates
+            return None, str(e) or type(e).__name__
+        return dates, None
 
     def _extract_video_info(
         self, video_id: str, platform: str, ignore_errors: bool, url: str | None = None,
