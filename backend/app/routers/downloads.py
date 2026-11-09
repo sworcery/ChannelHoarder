@@ -348,6 +348,13 @@ async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
     if not video:
         raise HTTPException(status_code=404, detail="Video not found for queue entry")
 
+    # Same name the queue dispatcher uses, so each side sees the other's running
+    # download. After the 4h stale reset started_at is cleared while the task may
+    # still be running.
+    task_name = f"download-{video.video_id}"
+    if any(t.get_name() == task_name and not t.done() for t in _active_tasks):
+        raise HTTPException(status_code=409, detail="Download already in progress")
+
     result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
@@ -363,7 +370,7 @@ async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
     # Launch download as background task
     task = asyncio.create_task(
         _run_download(video.id, channel.id, entry.id),
-        name=f"download-now-{video.video_id}",
+        name=task_name,
     )
     _active_tasks.add(task)
     task.add_done_callback(_active_tasks.discard)

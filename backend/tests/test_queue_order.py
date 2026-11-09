@@ -171,6 +171,51 @@ def test_move_to_top():
     asyncio.run(run())
 
 
+def test_download_now_not_started_twice_after_stale_reset(monkeypatch):
+    import app.tasks.process_queue as pq
+    from app.routers.downloads import download_now
+
+    async def run():
+        eng, maker = await _maker()
+        release = asyncio.Event()
+        started = []
+
+        async def fake_download(video_id, channel_id, queue_id):
+            started.append(video_id)
+            await release.wait()
+
+        monkeypatch.setattr(pq, "_run_download", fake_download)
+        monkeypatch.setattr(pq, "async_session", maker)
+        pq._active_tasks.clear()
+        try:
+            async with maker() as db:
+                await _seed(db)
+                q1 = (await db.execute(select(DownloadQueue).join(Video).where(Video.video_id == "v1"))).scalar_one()
+                await download_now(q1.id, db)
+                await asyncio.sleep(0)
+                assert len(started) == 1
+
+                # The 4h stale reset clears started_at while the download is still running.
+                q1.started_at = None
+                await db.commit()
+
+                with pytest.raises(HTTPException) as e:
+                    await download_now(q1.id, db)
+                assert e.value.status_code == 409
+
+                await pq.process_download_queue()
+                await asyncio.sleep(0)
+                assert started.count(started[0]) == 1
+                names = [t.get_name() for t in pq._active_tasks if not t.done()]
+                assert names.count("download-v1") == 1
+        finally:
+            release.set()
+            await asyncio.gather(*pq._active_tasks, return_exceptions=True)
+            pq._active_tasks.clear()
+            await eng.dispose()
+    asyncio.run(run())
+
+
 def test_migration_adds_prioritize_downloads(monkeypatch):
     async def run():
         eng = _engine()

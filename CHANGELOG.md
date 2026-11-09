@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.48] - 2026-11-09
+
+### Fixed
+- **Download Now can no longer start the same video twice.** A download that runs longer than 4 hours is treated as stuck and its queue entry is reset. For downloads started with Download Now, the queue couldn't tell that the original was still running, so it started a second download of the same video. Download Now itself could do the same if pressed again after the reset. Both now see the download that is still running.
+
 ## [1.9.47] - 2026-11-05
 
 ### Added
