@@ -329,6 +329,26 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
 ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live progress. See [docs/API.md](docs/API.md) for the full endpoint list, or browse the interactive Swagger UI at `/docs` on a running instance.
 
+**Dashboard widgets:** `GET /api/v1/dashboard/stats` returns channel, download, queue and storage counts as JSON, so dashboard apps can show them. For [Homepage](https://gethomepage.dev/), use its Custom API widget:
+
+```yaml
+- ChannelHoarder:
+    href: http://your-server:8587
+    widget:
+      type: customapi
+      url: http://your-server:8587/api/v1/dashboard/stats
+      mappings:
+        - field: total_channels
+          label: Channels
+        - field: total_downloaded
+          label: Downloaded
+        - field: queue_length
+          label: Queue
+        - field: storage_used_bytes
+          label: Storage
+          format: bytes
+```
+
 </details>
 
 <details>

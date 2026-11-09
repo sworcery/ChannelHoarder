@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Rejected settings show the reason instead of "[object Object]".** When the server turned down a value (for example a number outside its allowed range), the error message read "[object Object]". It now shows what was wrong.
 - **Videos found by the slower fallback listing keep a working address.** When a site's quick channel listing comes back empty, ChannelHoarder falls back to a full listing. That listing saved each video's temporary media link instead of its page address, and those links expire, so later downloads and date lookups for those videos could fail. New videos now get the page address, and videos already saved with a media link are corrected on the channel's next scan. YouTube channels never use this listing.
 
+### Documentation
+- **Homepage dashboard widget** (#51). The README's API section now shows how to put ChannelHoarder's channel, download, queue and storage counts on a [Homepage](https://gethomepage.dev/) dashboard with its Custom API widget, which reads the existing `/api/v1/dashboard/stats` endpoint.
+
 ## [1.9.47] - 2026-11-05
 
 ### Added
