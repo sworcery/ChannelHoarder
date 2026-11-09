@@ -12,7 +12,7 @@ class UTCBaseModel(BaseModel):
 
     def model_post_init(self, __context) -> None:
         """Attach UTC timezone to any naive datetime fields."""
-        for field_name in self.model_fields:
+        for field_name in type(self).model_fields:
             value = getattr(self, field_name, None)
             if isinstance(value, datetime) and value.tzinfo is None:
                 object.__setattr__(self, field_name, value.replace(tzinfo=timezone.utc))
