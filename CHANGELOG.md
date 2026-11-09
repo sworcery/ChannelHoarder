@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **Download Now can no longer start the same video twice.** A download that runs longer than 4 hours is treated as stuck and its queue entry is reset. For downloads started with Download Now, the queue couldn't tell that the original was still running, so it started a second download of the same video. Download Now itself could do the same if pressed again after the reset. Both now see the download that is still running.
+- **Rejected settings show the reason instead of "[object Object]".** When the server turned down a value (for example a number outside its allowed range), the error message read "[object Object]". It now shows what was wrong.
 
 ## [1.9.47] - 2026-11-05
 
