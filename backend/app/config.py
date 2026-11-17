@@ -6,13 +6,14 @@ from pathlib import Path
 
 class Settings(BaseSettings):
     APP_NAME: str = "ChannelHoarder"
-    APP_VERSION: str = "1.9.48"
+    APP_VERSION: str = "1.9.48.1"
     DEBUG: bool = False
     LOG_LEVEL: str = "info"
 
     CONFIG_DIR: str = "/config"
     DOWNLOAD_DIR: str = "/downloads"
     EXTRA_DOWNLOAD_DIRS: str = ""  # Comma-separated additional allowed download paths (e.g. /cartoons,/media)
+    TEMP_DIR: str = ""  # Optional folder (e.g. on an SSD) for in-progress downloads; empty = inside the download dir
     COOKIE_WATCH_DIR: str = "/cookies"
     DATABASE_URL: str = ""
 

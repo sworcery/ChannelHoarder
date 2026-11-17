@@ -35,6 +35,57 @@ def is_download_active() -> bool:
     return bool(_active_downloads)
 
 
+def attempt_temp_dir(download_root: str) -> str:
+    """Per-attempt working dir: under TEMP_DIR if set, else under the download root."""
+    base = settings.TEMP_DIR or download_root
+    return os.path.join(base, ".channelhoarder-tmp", uuid4().hex)
+
+
+def create_attempt_dir(temp_dir: str) -> None:
+    try:
+        os.makedirs(temp_dir, exist_ok=True)
+    except OSError as e:
+        if settings.TEMP_DIR:
+            raise Exception(
+                f"Cannot create download temp folder under TEMP_DIR ({temp_dir}): {e}. "
+                "Check that TEMP_DIR exists and is writable."
+            ) from e
+        raise
+
+
+def move_finished_files(temp_dir: str, final_parent: str) -> None:
+    """Move finished files into place. Blocking; call via asyncio.to_thread.
+
+    Falls back to copy-to-sibling then rename when a plain rename fails (cross-drive),
+    so a half-copied file is never visible at the final path.
+    """
+    for f in os.listdir(temp_dir):
+        src, dst = os.path.join(temp_dir, f), os.path.join(final_parent, f)
+        try:
+            os.replace(src, dst)
+            continue
+        except OSError:
+            pass
+        partial = dst + ".chmove"
+        try:
+            shutil.copyfile(src, partial)
+            try:
+                # Keep the file's times (yt-dlp sets mtime to the upload date). Drives
+                # such as NTFS/exFAT can refuse permission/time changes; that must not
+                # fail an otherwise finished download.
+                shutil.copystat(src, partial)
+            except OSError:
+                pass
+            os.replace(partial, dst)
+        except BaseException:
+            try:
+                os.remove(partial)
+            except OSError:
+                pass
+            raise
+        os.remove(src)
+
+
 class DownloadService:
     """Manages video downloads with short-lived DB sessions.
 
@@ -162,8 +213,7 @@ class DownloadService:
         # so the final move is an atomic same-filesystem rename. Orphaned dirs are
         # reclaimed by the cleanup_download_temp task.
         download_root = cdata.download_dir or settings.DOWNLOAD_DIR
-        temp_dir = os.path.join(download_root, ".channelhoarder-tmp", uuid4().hex)
-        os.makedirs(temp_dir, exist_ok=True)
+        temp_dir = attempt_temp_dir(download_root)
 
         _loop = asyncio.get_running_loop()
         import time
@@ -210,6 +260,7 @@ class DownloadService:
             _last_progress_time = time.monotonic()
 
         try:
+            create_attempt_dir(temp_dir)
             await wait_for_rate_limit()
 
             # Check minimum quality requirement before downloading
@@ -280,17 +331,19 @@ class DownloadService:
 
             # Move the finished files from the per-attempt temp dir to the final
             # location (atomic same-filesystem renames), then remove the temp dir.
-            # On failure/stall we deliberately do NOT touch temp_dir - the orphaned
-            # yt-dlp thread may still be writing there; the sweeper reclaims it.
+            # When the download itself fails or stalls we never reach this point and
+            # deliberately leave temp_dir alone - the orphaned yt-dlp thread may still
+            # be writing there; the sweeper reclaims it.
             final_parent = os.path.dirname(output_path)
-            for f in os.listdir(temp_dir):
-                src, dst = os.path.join(temp_dir, f), os.path.join(final_parent, f)
-                try:
-                    os.replace(src, dst)
-                except OSError:
-                    # Different filesystem (EXDEV) or metadata quirk - fall back to a
-                    # copy+delete so a successful download isn't misreported as failed.
-                    shutil.move(src, dst)
+            # A cross-drive move copies the whole file, so keep it off the event loop.
+            try:
+                await asyncio.to_thread(move_finished_files, temp_dir, final_parent)
+            except Exception:
+                # yt-dlp has finished, so nothing still writes here. Drop the finished
+                # copy now: with TEMP_DIR on another drive, failed moves (destination
+                # full or read-only) would otherwise fill that drive until the 6h sweep.
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise
             shutil.rmtree(temp_dir, ignore_errors=True)
 
             # Verify output file

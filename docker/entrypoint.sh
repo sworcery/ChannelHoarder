@@ -27,6 +27,16 @@ chown -R appuser:appuser /config /home/appuser /app /opt/pot-provider
 chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?)  - continuing"
 chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?)  - continuing"
 chown -R appuser:appuser /tmp/quick-downloads 2>/dev/null || true
+# Optional temp folder: Docker creates a new bind-mount folder owned by root. Change only
+# the folder itself and our subfolder, never recursively, in case it's a shared folder.
+# Don't create it either: if it isn't mapped, downloads should fail clearly instead of
+# filling the container.
+if [ -n "$TEMP_DIR" ] && [ -d "$TEMP_DIR" ]; then
+    chown appuser:appuser "$TEMP_DIR" 2>/dev/null || echo "WARNING: Could not chown $TEMP_DIR (NFS/SMB mount?)  - continuing"
+    if [ -d "$TEMP_DIR/.channelhoarder-tmp" ]; then
+        chown appuser:appuser "$TEMP_DIR/.channelhoarder-tmp" 2>/dev/null || true
+    fi
+fi
 
 # We run the bgutil PO-token HTTP server (below), so the yt-dlp plugin only needs
 # its base_url - not the on-disk script. Deliberately NOT creating the

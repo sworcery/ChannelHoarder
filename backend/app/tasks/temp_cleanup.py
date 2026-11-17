@@ -26,6 +26,8 @@ async def cleanup_download_temp() -> None:
     and this sweeper reclaims them once they are safely old.
     """
     roots = {settings.DOWNLOAD_DIR}
+    if settings.TEMP_DIR:
+        roots.add(settings.TEMP_DIR)
     try:
         async with async_session() as db:
             result = await db.execute(

@@ -40,23 +40,27 @@ async def check_system_health():
                     "message": "PO token server is not responding. Downloads may fail.",
                 })
 
-        # Check disk space
+        # Check disk space (the temp folder too when it's on its own drive)
         try:
-            disk = shutil.disk_usage(settings.DOWNLOAD_DIR)
-            free_gb = disk.free / (1024 ** 3)
+            free_gb = shutil.disk_usage(settings.DOWNLOAD_DIR).free / (1024 ** 3)
+            where = ""
+            if settings.TEMP_DIR:
+                temp_free_gb = shutil.disk_usage(settings.TEMP_DIR).free / (1024 ** 3)
+                if temp_free_gb < free_gb:
+                    free_gb, where = temp_free_gb, " in the temp folder"
             disk_status = "healthy" if free_gb > 5 else ("warning" if free_gb > 1 else "critical")
 
             db.add(SystemHealthLog(
                 component="disk",
                 status=disk_status,
-                message=f"{free_gb:.1f} GB free",
+                message=f"{free_gb:.1f} GB free{where}",
             ))
 
             if disk_status == "critical":
                 await NotificationService.broadcast("health_alert", {
                     "component": "disk",
                     "status": "critical",
-                    "message": f"Only {free_gb:.1f} GB disk space remaining!",
+                    "message": f"Only {free_gb:.1f} GB disk space remaining{where}!",
                 })
         except Exception as e:
             logger.error("Failed to check disk space: %s", e)

@@ -204,6 +204,7 @@ If you already added channels to an existing TV library, move them to the new li
 | `CONFIG_DIR` | `/config` | Configuration and database storage path |
 | `DOWNLOAD_DIR` | `/downloads` | Video output directory |
 | `EXTRA_DOWNLOAD_DIRS` | *(empty)* | Comma-separated additional allowed download paths (e.g. `/media,/cartoons`) |
+| `TEMP_DIR` | *(empty)* | Optional folder for in-progress downloads, such as a volume on an SSD. Finished videos are then moved into their download folder, so a slow or external download drive only gets the finished file. Empty means downloads happen inside the download folder itself |
 | `COOKIE_WATCH_DIR` | `/cookies` | Directory watched for cookie file updates |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Maximum simultaneous downloads |
 | `MAX_RETRIES` | `3` | Retry attempts for failed downloads |

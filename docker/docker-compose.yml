@@ -12,6 +12,8 @@ services:
       - ./config:/config
       - ./downloads:/downloads
       - ./cookies:/cookies
+      # Optional: download on a fast drive first (also set TEMP_DIR below)
+      # - /path/on/ssd:/temp
     environment:
       - PUID=1000
       - PGID=1000
@@ -20,4 +22,6 @@ services:
       - POT_SERVER_ENABLED=true
       # Optional: Set your YouTube Data API key
       # - YOUTUBE_API_KEY=your_api_key_here
+      # Optional: download into /temp, then move finished videos into /downloads
+      # - TEMP_DIR=/temp
     restart: unless-stopped

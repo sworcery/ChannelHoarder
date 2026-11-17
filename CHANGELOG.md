@@ -5,6 +5,11 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.49] - 2026-11-17
+
+### Added
+- **Download to a separate temp folder, such as an SSD** (#52). A new optional `TEMP_DIR` setting puts in-progress downloads in a folder of your choosing; each finished video is then moved into its download folder. A slow or external download drive only receives the finished file instead of every partial write. On Unraid, map a folder on a fast drive to the new "Temp Download Path" (`/temp`) and set "Temp Dir" to `/temp`; with Docker Compose, add a `/temp` volume and `TEMP_DIR=/temp`. Left empty, downloads work exactly as before. Moving a file to another drive copies it under a temporary name and only gives it its real name once the copy is complete, so a failed copy never looks like a finished video. Copying happens in the background, so the web interface stays responsive during large moves. If a move fails, the copy on the temp drive is removed right away so it can't fill that drive. If `TEMP_DIR` is set but the folder isn't mapped or can't be written, downloads fail with a message naming it rather than falling back to the download drive. The low-disk-space health alert also covers the temp folder.
+
 ## [1.9.48] - 2026-11-09
 
 ### Added
