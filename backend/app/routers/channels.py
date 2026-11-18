@@ -709,10 +709,12 @@ async def bulk_delete_videos(
         await db.delete(q)
 
     deleted = 0
+    with_files = 0
     files_removed = 0
     for video in videos:
         if body.delete_files and video.file_path:
             files_removed += await asyncio.to_thread(delete_video_files, video.file_path)
+            with_files += 1
 
         video.status = "skipped"
         video.file_path = None
@@ -720,7 +722,12 @@ async def bulk_delete_videos(
         deleted += 1
 
     await db.commit()
-    return {"message": f"Deleted {deleted} videos ({files_removed} files removed)", "deleted": deleted, "files_removed": files_removed}
+    if body.delete_files and with_files:
+        msg = (f"Deleted the files of {with_files} videos ({files_removed} files removed); "
+               f"{deleted} videos marked skipped")
+    else:
+        msg = f"Marked {deleted} videos skipped"
+    return {"message": msg, "deleted": deleted, "files_removed": files_removed}
 
 
 @router.delete("/{channel_id}/videos/{video_id}")
@@ -764,7 +771,7 @@ async def redownload_video(
     video_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete existing file and re-queue video for download."""
+    """Re-queue video for download. The existing file is kept until the new one lands."""
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -772,15 +779,10 @@ async def redownload_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    if video.file_path:
-        await asyncio.to_thread(delete_video_files, video.file_path)
-
-    video.file_path = None
-    video.file_size = None
-    video.quality_downloaded = None
     video.error_code = None
     video.error_message = None
     video.error_details = None
+    video.retry_count = 0
     video.status = "queued"
 
     # Add to queue if not already there

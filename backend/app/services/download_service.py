@@ -19,6 +19,7 @@ from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.ytdlp_service import YtdlpService
 from app.utils.error_codes import ErrorCode, ERROR_CATALOG, classify_error
+from app.utils.file_utils import delete_video_files
 from app.utils.platform_utils import build_video_url
 from app.utils.rate_limiter import wait_for_rate_limit
 
@@ -84,6 +85,48 @@ def move_finished_files(temp_dir: str, final_parent: str) -> None:
                 pass
             raise
         os.remove(src)
+
+
+def _remove_replaced_file(old_path: str, new_path: str) -> None:
+    """Remove the file a finished re-download replaced. Blocking.
+
+    Never touches the old path when it is the very file just written (same text,
+    case-only difference on a case-insensitive mount, or a symlinked folder). When
+    the old file shares the new file's name stem (e.g. .mkv -> .mp4) only the old
+    video file goes: the sidecars at that stem now belong to the new download.
+    """
+    if not os.path.exists(old_path):
+        return
+    if os.path.abspath(old_path) == os.path.abspath(new_path):
+        return
+    try:
+        if os.path.exists(new_path) and os.path.samefile(old_path, new_path):
+            return
+    except OSError:
+        return
+    old_stem = os.path.splitext(old_path)[0]
+    new_stem = os.path.splitext(new_path)[0]
+    same_stem = old_stem == new_stem
+    if not same_stem:
+        try:
+            same_stem = (
+                os.path.samefile(os.path.dirname(old_path), os.path.dirname(new_path))
+                and os.path.basename(old_stem).lower() == os.path.basename(new_stem).lower()
+            )
+        except OSError:
+            same_stem = False
+    if same_stem:
+        os.remove(old_path)
+    else:
+        delete_video_files(old_path)
+
+
+# Errors that mean this video can't be fetched again (as opposed to cookies, yt-dlp
+# or disk trouble that a later run can get past).
+_VIDEO_GONE_CODES = frozenset({
+    ErrorCode.VIDEO_UNAVAILABLE, ErrorCode.VIDEO_PRIVATE, ErrorCode.VIDEO_REMOVED,
+    ErrorCode.GEO_BLOCKED, ErrorCode.AGE_RESTRICTED,
+})
 
 
 class DownloadService:
@@ -335,6 +378,30 @@ class DownloadService:
             # deliberately leave temp_dir alone - the orphaned yt-dlp thread may still
             # be writing there; the sweeper reclaims it.
             final_parent = os.path.dirname(output_path)
+            # Never move anything over an existing file until the new video itself is
+            # known to be a real, non-empty file: an empty result must not destroy the
+            # old copy. yt-dlp has finished, so dropping the temp dir here is safe.
+            expected_base = os.path.basename(output_path)
+            finished_ok = False
+            try:
+                exact = os.path.join(temp_dir, expected_base + ".mp4")
+                if os.path.exists(exact):
+                    # The expected file decides; a leftover format stream must not
+                    # stand in for an empty result.
+                    finished_ok = os.path.getsize(exact) > 0
+                else:
+                    for f in os.listdir(temp_dir):
+                        if f.startswith(expected_base) and f.endswith(".mp4"):
+                            if os.path.getsize(os.path.join(temp_dir, f)) > 0:
+                                finished_ok = True
+                                break
+            except OSError:
+                pass
+            if not finished_ok:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise Exception(
+                    f"Downloaded file is missing or empty (0 bytes): {expected_base}.mp4"
+                )
             # A cross-drive move copies the whole file, so keep it off the event loop.
             try:
                 await asyncio.to_thread(move_finished_files, temp_dir, final_parent)
@@ -426,6 +493,14 @@ class DownloadService:
                 if not video:
                     return False
 
+                # Current path from the DB, not the start-of-download snapshot: a rename
+                # or move during the download must not leave an untracked duplicate.
+                old_path = video.file_path
+                old_in_use_elsewhere = bool(old_path) and bool(await db.scalar(
+                    select(func.count(Video.id))
+                    .where(Video.file_path == old_path)
+                    .where(Video.id != video.id)
+                ))
                 video.status = "completed"
                 video.file_path = mp4_path
                 video.file_size = file_size
@@ -476,6 +551,13 @@ class DownloadService:
                     logger.info("Auto-recovery: download succeeded, cookies_expired cleared, queue unpaused")
 
                 await db.commit()
+                # A re-download that landed on a different name replaces the old file
+                # only now that the new one is safely recorded.
+                if old_path and not old_in_use_elsewhere:
+                    try:
+                        await asyncio.to_thread(_remove_replaced_file, old_path, mp4_path)
+                    except Exception:
+                        logger.warning("Could not remove replaced file %s", old_path, exc_info=True)
                 logger.info("Downloaded: %s (%s)", vdata.title, self._format_bytes(file_size))
 
         except Exception as e:
@@ -587,6 +669,24 @@ class DownloadService:
                 if queue_entry:
                     await db.delete(queue_entry)
 
+            # A failed re-download or quality upgrade must not strand a video whose
+            # old file is still on disk: give it back as completed.
+            try:
+                kept_file = bool(video.file_path) and os.path.getsize(video.file_path) > 0
+            except OSError:
+                kept_file = False
+            if kept_file and video.status in ("failed", "skipped"):
+                video.status = "completed"
+                if code in _VIDEO_GONE_CODES:
+                    # The video itself is gone upstream: keep error_code as a marker so
+                    # the quality-upgrade task doesn't re-queue it daily. Errors about
+                    # the system (cookies, yt-dlp, disk) clear, so later upgrades run.
+                    pass
+                else:
+                    video.error_code = None
+                    video.error_message = None
+                    video.error_details = None
+
             channel.last_error_code = code.value
             failed_count = await db.scalar(
                 select(func.count(Video.id))
@@ -626,6 +726,11 @@ class DownloadService:
             await self.notification.broadcast("cookies_expired", {
                 "message": "YouTube cookies have expired. Queue paused. Re-export and upload fresh cookies.",
             })
+
+        if kept_file:
+            logger.info("Re-download/upgrade failed for %s but the existing file was kept: %s",
+                        vdata.title, diagnosis.summary)
+            return
 
         await self.notification.broadcast("download_failed", {
             "video_id": vdata.video_id,

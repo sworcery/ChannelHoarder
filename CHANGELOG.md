@@ -19,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   
   A folder reached by two paths (another Docker mount of the same folder, or a different upper/lower case on drives that ignore case) is recognised as the same folder rather than treated as a destination to clear. Running the move again picks up where a failed one stopped, and a second move of the same channel can't start while one is running.
 
+- **Deleting files now asks first, and Re-download keeps your copy until the new one lands.**
+  - **Confirmation:** on a channel's page, Delete (for selected videos), Delete File and Re-download used to act on one click. Delete and Delete File removed files right away, and the select-all box also covers videos in collapsed seasons. Each now shows a confirmation with the number of videos and the space their files use.
+  - **Re-download:** it used to delete the existing file before downloading again, so a video taken down in the meantime was simply gone. Now the current file stays until the new download is complete. If the new download fails or comes back empty, the video keeps its file and stays downloaded.
+  - **Quality upgrades:** a failed upgrade behaves the same way. A video removed upstream isn't retried by the daily upgrade check anymore, and no "download failed" alert is sent when the old file was kept.
+
 ## [1.9.49] - 2026-11-17
 
 ### Added

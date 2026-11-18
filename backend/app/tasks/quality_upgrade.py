@@ -43,6 +43,9 @@ async def check_quality_upgrades():
                 .where(Video.channel_id == channel.id)
                 .where(Video.status == "completed")
                 .where(Video.monitored == True)
+                # An error_code on a completed video marks a failed upgrade (e.g.
+                # removed upstream); do not retry it every day.
+                .where(Video.error_code.is_(None))
                 .where(Video.id.notin_(subquery))
             )
             videos = result.scalars().all()

@@ -105,6 +105,9 @@ export default function ChannelDetailPage() {
 
   const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set())
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null)
+  const [fileConfirm, setFileConfirm] = useState<
+    { kind: "bulk-delete"; ids: number[] } | { kind: "delete-file" | "redownload"; video: any } | null
+  >(null)
 
   const { toast } = useToast()
 
@@ -613,7 +616,7 @@ export default function ChannelDetailPage() {
               <FileEdit className="h-3 w-3" /> Rename
             </button>
             <div className="h-4 w-px bg-border" />
-            <button onClick={() => bulkDeleteMutation.mutate({ ids: [...selectedVideoIds], deleteFiles: true })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+            <button onClick={() => setFileConfirm({ kind: "bulk-delete", ids: [...selectedVideoIds] })} disabled={isBulkLoading} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md border border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
               <Trash2 className="h-3 w-3" /> Delete
             </button>
             <button onClick={() => setSelectedVideoIds(new Set())} className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-md text-muted-foreground hover:text-foreground">
@@ -794,7 +797,7 @@ export default function ChannelDetailPage() {
                                 </DropdownItem>
                               )}
                               {(video.status === "completed" || video.status === "failed") && (
-                                <DropdownItem onClick={() => api.redownloadVideo(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })}>
+                                <DropdownItem onClick={() => setFileConfirm({ kind: "redownload", video })}>
                                   <RefreshCcw className="h-3.5 w-3.5" /> Re-download
                                 </DropdownItem>
                               )}
@@ -806,7 +809,7 @@ export default function ChannelDetailPage() {
                                   <DropdownItem onClick={() => api.downloadVideoSubtitles(channelId, video.id).then((r) => toast(r.message)).catch((e: any) => toast(e.message, "error"))}>
                                     <Download className="h-3.5 w-3.5" /> Download Subtitles
                                   </DropdownItem>
-                                  <DropdownItem onClick={() => api.deleteVideoFile(channelId, video.id).then((r) => { invalidateVideos(); toast(r.message) })} variant="danger">
+                                  <DropdownItem onClick={() => setFileConfirm({ kind: "delete-file", video })} variant="danger">
                                     <FileX className="h-3.5 w-3.5" /> Delete File
                                   </DropdownItem>
                                 </>
@@ -2011,6 +2014,69 @@ export default function ChannelDetailPage() {
           </div>
         </div>
       )}
+      {(() => {
+        if (!fileConfirm) return null
+        const bulkIds = fileConfirm.kind === "bulk-delete" ? fileConfirm.ids : []
+        const targets: any[] = fileConfirm.kind === "bulk-delete"
+          ? videos.filter((v: any) => bulkIds.includes(v.id))
+          : [fileConfirm.video]
+        const withFiles = targets.filter((v: any) => v.file_path)
+        const n = withFiles.length
+        const size = formatBytes(withFiles.reduce((sum: number, v: any) => sum + (v.file_size || 0), 0))
+        const plural = n === 1 ? "video" : "videos"
+        const close = () => setFileConfirm(null)
+        if (fileConfirm.kind === "redownload") {
+          return (
+            <ConfirmDialog
+              open
+              title="Re-download this video?"
+              message={n > 0
+                ? `"${fileConfirm.video.title}" (${size}) will be downloaded again. The current file is kept until the new download finishes, and kept if it fails.`
+                : `"${fileConfirm.video.title}" will be downloaded again.`}
+              confirmLabel="Re-download"
+              onConfirm={() => {
+                api.redownloadVideo(channelId, fileConfirm.video.id)
+                  .then(() => { invalidateVideos(); toast("Re-queued the video for download") })
+                  .catch((e: any) => toast(e.message, "error"))
+                close()
+              }}
+              onCancel={close}
+            />
+          )
+        }
+        if (fileConfirm.kind === "delete-file") {
+          return (
+            <ConfirmDialog
+              open
+              title="Delete this file?"
+              message={`The file of "${fileConfirm.video.title}" (${size}) will be permanently deleted from disk and the video goes back to pending.`}
+              confirmLabel="Delete file"
+              onConfirm={() => {
+                api.deleteVideoFile(channelId, fileConfirm.video.id)
+                  .then(() => { invalidateVideos(); toast("Deleted the file of 1 video") })
+                  .catch((e: any) => toast(e.message, "error"))
+                close()
+              }}
+              onCancel={close}
+            />
+          )
+        }
+        return (
+          <ConfirmDialog
+            open
+            title={n > 0 ? `Delete the files of ${n} ${plural}?` : `Skip ${targets.length} ${targets.length === 1 ? "video" : "videos"}?`}
+            message={n > 0
+              ? `${targets.length} selected ${targets.length === 1 ? "video" : "videos"} will be marked skipped and removed from the download queue; ${n} ${n === 1 ? "file" : "files"} (${size}) will be permanently deleted from disk. This includes videos inside collapsed seasons.`
+              : `${targets.length} selected ${targets.length === 1 ? "video" : "videos"} will be marked skipped and removed from the download queue. None of them has a downloaded file, so nothing is deleted from disk.`}
+            confirmLabel={n > 0 ? "Delete files" : "Skip videos"}
+            onConfirm={() => {
+              bulkDeleteMutation.mutate({ ids: bulkIds, deleteFiles: true })
+              close()
+            }}
+            onCancel={close}
+          />
+        )
+      })()}
       <ConfirmDialog
         open={!!retentionConfirm}
         title={`Delete ${retentionConfirm?.count ?? 0} downloaded video${retentionConfirm?.count === 1 ? "" : "s"}?`}
