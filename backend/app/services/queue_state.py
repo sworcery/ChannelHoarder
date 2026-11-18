@@ -90,6 +90,9 @@ async def resume_if_paused_for_cookies(db: AsyncSession) -> bool:
     Returns True if the queue was resumed. A manual or disk_full pause stays.
     """
     await set_cookies_expired(db, False)
+    # Fresh cookies: videos whose date lookups failed may work now.
+    from app.services.channel_service import clear_date_lookup_failures
+    await clear_date_lookup_failures(db)
     paused, reason = await get_pause_state(db)
     if paused and reason == REASON_COOKIES:
         await resume_queue(db)

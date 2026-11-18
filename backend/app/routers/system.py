@@ -386,24 +386,37 @@ async def move_shared_folder_channel(body: SharedFolderMoveRequest, db: AsyncSes
 
 @router.post("/scan-all", status_code=202)
 async def trigger_scan_all(db: AsyncSession = Depends(get_db)):
-    from app.services.channel_service import ChannelService
+    if any(not t.done() for t in _scan_all_tasks):
+        raise HTTPException(status_code=409, detail="Scan All is already running")
+    result = await db.execute(
+        select(Channel.id).where(Channel.enabled == True, Channel.channel_id != "__standalone__")
+    )
+    channel_ids = [row[0] for row in result.all()]
 
-    result = await db.execute(select(Channel).where(Channel.enabled == True))
-    channels = result.scalars().all()
-
-    total_new = 0
-    errors = []
-    for channel in channels:
-        try:
-            service = ChannelService(db)
-            new_count = await service.scan_channel(channel)
-            total_new += new_count
-        except Exception as e:
-            errors.append({"channel": channel.channel_name, "error": str(e)})
+    _scan_all_tasks.add(task := asyncio.create_task(_scan_all_task(channel_ids)))
+    task.add_done_callback(_scan_all_tasks.discard)
 
     return {
-        "message": f"Scanned {len(channels)} channels. Found {total_new} new videos.",
-        "channels_scanned": len(channels),
-        "new_videos": total_new,
-        "errors": errors,
+        "message": f"Scanning {len(channel_ids)} channels in the background.",
+        "channels_scanned": len(channel_ids),
     }
+
+
+_scan_all_tasks: set[asyncio.Task] = set()
+
+
+async def _scan_all_task(channel_ids: list[int]) -> None:
+    """Scan each channel in its own session so one failure can't poison the rest.
+    Results reach the user through the scan's own notifications."""
+    from app.database import async_session
+    from app.services.channel_service import ChannelService
+
+    for channel_id in channel_ids:
+        try:
+            async with async_session() as db:
+                channel = await db.get(Channel, channel_id)
+                if channel is None or not channel.enabled:
+                    continue
+                await ChannelService(db).scan_channel(channel)
+        except Exception as e:
+            logger.error("Scan All: scan of channel %s failed: %s", channel_id, e)

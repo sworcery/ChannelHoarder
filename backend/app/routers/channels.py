@@ -14,7 +14,7 @@ from app.deps import get_db
 from app.utils.file_utils import (
     channel_folder_name, delete_video_files, escape_like, file_keys, has_kept_file, move_video_files,
 )
-from app.models import Channel, DownloadLog, Video, DownloadQueue
+from app.models import AppSetting, Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
 from app.schemas import (
@@ -252,6 +252,10 @@ async def _delete_channel(channel_id: int, delete_files: bool, db: AsyncSession)
     await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
     await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
     await db.execute(sa_delete(Video).where(Video.channel_id == channel.id))
+    # Channel ids can be reused; don't leave this channel's failed date lookups behind.
+    await db.execute(sa_delete(AppSetting).where(
+        AppSetting.key == f"{_channel_service.DATE_LOOKUP_KEY_PREFIX}{channel.id}"
+    ))
     await db.delete(channel)
     await db.commit()
 
@@ -577,7 +581,6 @@ async def repair_dates_confirm(
 async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
     import json
     from datetime import datetime, timedelta, timezone
-    from app.models import AppSetting
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
@@ -623,6 +626,12 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
                     status_code=429,
                     detail=f"This channel was scanned recently. Try again in {remaining_sec} seconds.",
                 )
+
+    # Busy (already scanning, moving, ...) is a 409, not "found 0 new videos". The flag
+    # check and scan_channel's own claim have no await between them.
+    reason = _channel_service._flag_reason(channel.id)
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
 
     service = ChannelService(db)
     try:
@@ -1569,6 +1578,16 @@ async def _move_channel_contents(
             Video.channel_id == channel.id, Video.file_path.isnot(None)
         )
     )
+    same_folder_cache: dict[tuple[str, str], bool] = {}
+
+    def _same_file_location(new_path: str, old_path: str) -> bool:
+        # new_path is old_path re-rooted, so the file names match: the files are the
+        # same place exactly when their folders are. One realpath per folder pair.
+        pair = (os.path.dirname(new_path), os.path.dirname(old_path))
+        if pair not in same_folder_cache:
+            same_folder_cache[pair] = _same_location(*pair)
+        return same_folder_cache[pair]
+
     def _plan(old_path: str):
         """Disk work for one video, run off the event loop. None = leave it alone."""
         if skip_keys and file_keys(old_path) & skip_keys:
@@ -1579,7 +1598,7 @@ async def _move_channel_contents(
             new_path = None
         if new_path is None:
             new_path = _remap_path(old_path, old_dir, new_dir)
-        if new_path is None or _same_location(new_path, old_path):
+        if new_path is None or _same_file_location(new_path, old_path):
             return None
         shared_stem = bool(shared_stems) and stem_key(old_path) in shared_stems
         return new_path, os.path.exists(old_path), os.path.exists(new_path), shared_stem
@@ -2377,6 +2396,8 @@ async def _force_rescan_locked(channel: Channel, db: AsyncSession):
         select(Video.id).where(Video.channel_id == channel.id).except_(select(Video.id).where(*disposable))
     )).scalars().all())
     video_ids = select(Video.id).where(*disposable)
+    # A forced rescan starts fresh: give up-on date lookups another chance.
+    await _channel_service.clear_date_lookup_failures(db)
     await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
     await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
     deleted_count = await db.scalar(select(func.count(Video.id)).where(*disposable)) or 0

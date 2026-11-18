@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.deps import get_db
 from app.models import AppSetting, Channel
 from app.schemas import SettingsUpdate, NamingPreviewRequest, NamingPreviewResponse
-from app.services.channel_service import pick_channel_folder
+from app.services.channel_service import DATE_LOOKUP_KEY_PREFIX, pick_channel_folder
 from app.services.queue_state import FLAG_KEYS
 from app.utils.file_utils import channel_folder_name, sanitize_filename
 from app.services.naming_service import preview_naming, DEFAULT_TEMPLATE
@@ -33,7 +33,9 @@ if not USERSCRIPT_TEMPLATE.exists():
 
 @router.get("/")
 async def get_all_settings(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(AppSetting))
+    result = await db.execute(
+        select(AppSetting).where(~AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
+    )
     settings_list = result.scalars().all()
     settings_dict = {}
     for s in settings_list:
@@ -212,7 +214,9 @@ def _import_retention_days(raw):
 async def export_config(db: AsyncSession = Depends(get_db)):
     """Export all settings and channels as JSON for backup."""
     # Settings
-    result = await db.execute(select(AppSetting))
+    result = await db.execute(
+        select(AppSetting).where(~AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
+    )
     settings_list = result.scalars().all()
     SENSITIVE_KEYS = {
         "telegram_bot_token", "pushover_app_token", "pushover_user_key",

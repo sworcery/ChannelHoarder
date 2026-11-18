@@ -4,7 +4,7 @@ import os
 import re
 import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -297,6 +297,50 @@ def _date_from_timestamp(ts) -> date | None:
         return datetime.fromtimestamp(ts, timezone.utc).date()
     except (TypeError, ValueError, OverflowError, OSError):
         return None
+
+
+DATE_LOOKUP_MAX_FAILURES = 3
+DATE_LOOKUP_RETRY_AFTER = timedelta(days=7)
+DATE_LOOKUP_GIVEN_UP_RETRY_AFTER = timedelta(days=30)
+DATE_LOOKUP_KEY_PREFIX = "date_lookup_failures:"
+
+# Only failures about the video itself count toward giving up. Auth, bot, rate-limit,
+# network and yt-dlp errors say nothing about this video and clear up on their own.
+_DATE_FAILURE_COUNTED_CODES = frozenset({
+    ErrorCode.UNKNOWN,
+    ErrorCode.FORMAT_UNAVAILABLE,
+    ErrorCode.AGE_RESTRICTED,
+})
+
+
+def _date_lookup_blocked(record: dict | None, now: datetime) -> bool:
+    """True when this video's date lookup should be skipped (deferred) this scan.
+
+    The first failure is retried on the next scan (one blip is common); after two,
+    retries wait a week; after three the video is given up on and retried every 30 days."""
+    if not record:
+        return False
+    failures = int(record.get("n", 0))
+    if failures < 2:
+        return False
+    try:
+        last = datetime.fromisoformat(record["t"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    wait = (DATE_LOOKUP_GIVEN_UP_RETRY_AFTER if failures >= DATE_LOOKUP_MAX_FAILURES
+            else DATE_LOOKUP_RETRY_AFTER)
+    return now - last < wait
+
+
+async def clear_date_lookup_failures(db: AsyncSession) -> None:
+    """Forget every channel's failed date lookups (Force Rescan, fresh cookies).
+    Does not commit; the caller does."""
+    from sqlalchemy import delete
+    await db.execute(
+        delete(AppSetting).where(AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
+    )
 
 
 def is_unavailable_title(title: str | None) -> bool:
@@ -673,7 +717,9 @@ class ChannelService:
         self._settings_cache: dict = {}
         self._settings_cache_loaded = False
         try:
-            result = await self.db.execute(select(AppSetting))
+            result = await self.db.execute(
+                select(AppSetting).where(~AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
+            )
             for s in result.scalars().all():
                 try:
                     self._settings_cache[s.key] = json.loads(s.value)
@@ -768,6 +814,9 @@ class ChannelService:
                     if video.source_url != url_map[video.video_id]:
                         video.source_url = url_map[video.video_id]
                         logger.debug("Backfilled source_url for %s", video.video_id)
+            # Release the write before the RSS and per-video network calls below: SQLite
+            # has one writer, so an open write would stall downloads and the UI.
+            await self.db.commit()
 
         # First pass: identify new video IDs
         new_entries = []
@@ -803,6 +852,10 @@ class ChannelService:
         consecutive_metadata_failures = 0
         max_consecutive_failures = 3
         skip_metadata_fetch = False
+        date_failures = await self._load_date_failures(channel)
+        failures_changed = False
+        counted_ids: set[str] = set()
+        now_utc = datetime.now(timezone.utc)
 
         for entry in new_entries:
             vid_id = entry.get("id") or entry.get("video_id", "")
@@ -835,6 +888,10 @@ class ChannelService:
                 if skip_metadata_fetch:
                     # The breaker already tripped this scan, so no fetch is attempted.
                     # We genuinely don't know this video's date - don't invent one.
+                    date_unresolved_transient = True
+                elif _date_lookup_blocked(date_failures.get(vid_id), now_utc):
+                    # Failed repeatedly: not fetched every scan (weekly, then monthly),
+                    # but still deferred so the warning stays visible.
                     date_unresolved_transient = True
                 else:
                     logger.info("Fetching metadata for %s to get upload date", vid_id)
@@ -871,6 +928,13 @@ class ChannelService:
                         else:
                             consecutive_metadata_failures += 1
                             date_unresolved_transient = True
+                            if fetch_code in _DATE_FAILURE_COUNTED_CODES and vid_id not in counted_ids:
+                                counted_ids.add(vid_id)  # a repeated listing entry counts once
+                                prev = date_failures.get(vid_id) or {}
+                                date_failures[vid_id] = {
+                                    "n": int(prev.get("n", 0)) + 1, "t": now_utc.isoformat(),
+                                }
+                                failures_changed = True
 
                     if consecutive_metadata_failures >= max_consecutive_failures:
                         logger.warning(
@@ -900,6 +964,14 @@ class ChannelService:
                     raw = api_dates[entry["vid_id"]]
                     if raw:
                         entry["upload_date"] = self._parse_upload_date(raw)
+
+        # Forget lookup failures for videos that now have a date or left the listing.
+        listed_ids = {e["vid_id"] for e in enriched_entries if e["upload_date"] is None}
+        for vid in [v for v in date_failures if v not in listed_ids]:
+            del date_failures[vid]
+            failures_changed = True
+        if failures_changed:
+            await self._save_date_failures(channel, date_failures)
 
         # Defer, don't fabricate. A video whose date is unknown because the metadata
         # fetch failed or was skipped (expired cookies / bot detection / network) is
@@ -1228,6 +1300,35 @@ class ChannelService:
             logger.info("Renamed %d files for %s to match naming template", renamed, channel.channel_name)
 
         return new_count
+
+    @staticmethod
+    def _date_failures_key(channel: Channel) -> str:
+        return f"{DATE_LOOKUP_KEY_PREFIX}{channel.id}"
+
+    async def _load_date_failures(self, channel: Channel) -> dict[str, dict]:
+        """{video_id: {"n": failed lookups, "t": ISO time of the last one}} for this channel."""
+        import json
+        row = await self.db.get(AppSetting, self._date_failures_key(channel))
+        if row is None:
+            return {}
+        try:
+            data = json.loads(row.value)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    async def _save_date_failures(self, channel: Channel, failures: dict[str, dict]) -> None:
+        import json
+        key = self._date_failures_key(channel)
+        row = await self.db.get(AppSetting, key)
+        if not failures:
+            if row is not None:
+                await self.db.delete(row)
+        elif row is None:
+            self.db.add(AppSetting(key=key, value=json.dumps(failures)))
+        else:
+            row.value = json.dumps(failures)
+        await self.db.commit()
 
     async def _correct_fallback_dates(self, channel: Channel) -> int:
         """Fix videos whose upload_date was set to their discovered_at date (fallback).
