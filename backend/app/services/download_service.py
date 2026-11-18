@@ -613,8 +613,10 @@ class DownloadService:
 
             # Apply file permissions if configured
             from app.utils.permissions import apply_permissions
-            from app.services.settings_service import get_all_settings
-            perm_settings = await get_all_settings()
+            async with async_session() as perm_db:
+                perm_settings = await get_settings(
+                    perm_db, ["set_permissions", "chmod_folder", "chmod_file", "chown_group"]
+                )
             apply_permissions(mp4_path, perm_settings)
 
             # Create season poster only when the template organizes videos into

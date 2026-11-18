@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - unreleased
 
+### Upgrade notes
+- **Settings saved in the app now win over the container's environment variables.** Before 2.0, Max Retries, User-Agent Rotation and Log Level came from `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL`, even though the Settings page let you change them. On the first start of 2.0, any of those variables you set are copied into Settings, so nothing changes for you. After that, change them in Settings; the variables only set the starting values for a new install. The Settings page now shows the values actually in use.
+
 ### Changed
 - **Help is a "?" next to each heading.** Help text used to sit inline in headings and field labels, often repeating the paragraph below it. Each now opens from a small "?" with a link to the matching part of the README, and closes with Esc or a click outside.
 - **Confirmations look and behave like the rest of the app's dialogs,** with a close button, Esc and a click outside to close, and focus going back where it was. The other dialogs follow as the pages move to the new building blocks.

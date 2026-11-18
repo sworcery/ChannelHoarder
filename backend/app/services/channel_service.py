@@ -200,13 +200,15 @@ def _date_lookup_blocked(record: dict | None, now: datetime) -> bool:
     return now - last < wait
 
 
-async def clear_date_lookup_failures(db: AsyncSession) -> None:
-    """Forget every channel's failed date lookups (Force Rescan, fresh cookies).
-    Does not commit; the caller does."""
+async def clear_date_lookup_failures(db: AsyncSession, channel_pk: int | None = None) -> None:
+    """Forget failed date lookups: one channel's when channel_pk is given (Force
+    Rescan), else every channel's (fresh cookies). Does not commit; the caller does."""
     from sqlalchemy import delete
-    await db.execute(
-        delete(AppSetting).where(AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
-    )
+    if channel_pk is not None:
+        condition = AppSetting.key == f"{DATE_LOOKUP_KEY_PREFIX}{channel_pk}"
+    else:
+        condition = AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%")
+    await db.execute(delete(AppSetting).where(condition))
 
 
 def is_unavailable_title(title: str | None) -> bool:
@@ -579,18 +581,11 @@ class ChannelService:
         logger.info("Scanning channel: %s", channel.channel_name)
 
         # Batch-read all settings once at scan start (avoids per-video DB queries)
-        import json
+        from app.services.settings_service import get_settings, _DEFAULTS
         self._settings_cache: dict = {}
         self._settings_cache_loaded = False
         try:
-            result = await self.db.execute(
-                select(AppSetting).where(~AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
-            )
-            for s in result.scalars().all():
-                try:
-                    self._settings_cache[s.key] = json.loads(s.value)
-                except (json.JSONDecodeError, TypeError):
-                    self._settings_cache[s.key] = s.value
+            self._settings_cache = await get_settings(self.db, list(_DEFAULTS))
             self._settings_cache_loaded = True
         except Exception:
             # If this fails the cache is empty, which would make feature flags like
@@ -1418,8 +1413,11 @@ class ChannelService:
                 live_status_map[vid_id] = entry.get("live_status")
 
         # Read settings from cache if available, otherwise fall back to DB
-        shorts_globally_enabled = bool(self._settings_cache.get("shorts_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("shorts_enabled", False)
-        livestreams_globally_enabled = bool(self._settings_cache.get("livestreams_enabled", False)) if hasattr(self, '_settings_cache') else await self._get_setting_bool("livestreams_enabled", False)
+        from app.services.settings_service import get_settings
+        flags = (self._settings_cache if getattr(self, "_settings_cache_loaded", False)
+                 else await get_settings(self.db, ["shorts_enabled", "livestreams_enabled"]))
+        shorts_globally_enabled = bool(flags["shorts_enabled"])
+        livestreams_globally_enabled = bool(flags["livestreams_enabled"])
         shorts_allowed = shorts_globally_enabled and channel.include_shorts
         livestreams_allowed = livestreams_globally_enabled and channel.include_livestreams
 
@@ -1517,50 +1515,16 @@ class ChannelService:
         """Compute the next scan timestamp for a channel based on configured window."""
         from app.utils.scan_window import compute_next_scan_at
 
-        start_hour = await self._scan_window_int("scan_window_start_hour", None)
-        end_hour = await self._scan_window_int("scan_window_end_hour", None)
-        min_offset_hours = await self._scan_window_int("scan_min_interval_hours", 12)
+        from app.services.settings_service import get_setting, read_scan_window
+
+        start_hour, end_hour = await read_scan_window(self.db)
+        min_offset_hours = await get_setting(self.db, "scan_min_interval_hours")
 
         return compute_next_scan_at(
             start_hour=start_hour,
             end_hour=end_hour,
             min_offset_hours=min_offset_hours,
         )
-
-    async def _scan_window_int(self, key: str, default):
-        """Read an int AppSetting. During a scan the full settings cache is
-        authoritative (no query); outside a scan, fall back to a single DB read."""
-        import json
-        cache = getattr(self, "_settings_cache", None)
-        if cache is not None:
-            val = cache.get(key)
-            try:
-                return int(val) if val is not None else default
-            except (TypeError, ValueError):
-                return default
-        try:
-            result = await self.db.execute(select(AppSetting).where(AppSetting.key == key))
-            setting = result.scalar_one_or_none()
-            if setting:
-                return int(json.loads(setting.value))
-        except Exception as e:
-            logger.warning("Failed to read scan-window setting '%s', using default %s: %s", key, default, e)
-        return default
-
-    async def _get_setting_bool(self, key: str, default: bool = False) -> bool:
-        """Read a boolean AppSetting."""
-        try:
-            result = await self.db.execute(
-                select(AppSetting).where(AppSetting.key == key)
-            )
-            setting = result.scalar_one_or_none()
-            if setting:
-                import json
-                val = json.loads(setting.value)
-                return bool(val)
-        except Exception as e:
-            logger.warning("Failed to read setting '%s', using default %s: %s", key, default, e)
-        return default
 
     async def _rename_existing_files(self, channel: Channel) -> int:
         """Rename completed video files to match the current naming template."""

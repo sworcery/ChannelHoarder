@@ -10,22 +10,18 @@ from app.models import AppSetting, Channel
 from app.services.channel_service import ChannelService, ScanFailed
 from app.services.notification_service import NotificationService
 
-from app.services.settings_service import get_setting
-from app.utils.scan_window import in_scan_window, usable_window
+from app.services.settings_service import get_setting, read_scan_window
+from app.utils.scan_window import in_scan_window
 
 logger = logging.getLogger(__name__)
 
 
 async def _get_jitter_settings(db) -> tuple[bool, int]:
     """Read scan jitter settings from the database."""
-    enabled = True
-    max_seconds = 300
-    try:
-        enabled = await get_setting(db, "scan_jitter_enabled", True)
-        max_seconds = await get_setting(db, "scan_jitter_max_seconds", 300)
-    except Exception:
-        pass
-    return enabled, max_seconds
+    return (
+        await get_setting(db, "scan_jitter_enabled"),
+        await get_setting(db, "scan_jitter_max_seconds"),
+    )
 
 
 async def scan_due_channels():
@@ -39,9 +35,7 @@ async def scan_due_channels():
     async with async_session() as db:
         # Outside the scan window nothing scans; next_scan_at stays as it is, so
         # overdue channels run once the window opens
-        start_hour = await get_setting(db, "scan_window_start_hour", None)
-        end_hour = await get_setting(db, "scan_window_end_hour", None)
-        start_hour, end_hour = usable_window(start_hour, end_hour)
+        start_hour, end_hour = await read_scan_window(db)
         if not in_scan_window(start_hour, end_hour):
             logger.debug("Scan tick skipped: outside the scan window")
             return

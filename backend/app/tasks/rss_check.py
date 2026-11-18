@@ -13,7 +13,7 @@ from app.database import async_session
 from app.models import Channel, Video
 from app.services.channel_activity import is_scan_blocked
 from app.services.channel_service import ChannelService
-from app.services.settings_service import get_setting
+from app.services.settings_service import get_setting, read_scan_window
 from app.services.ytdlp_service import YtdlpService
 from app.utils.platform_utils import is_playlist_url, supports_rss
 from app.utils.scan_window import in_scan_window
@@ -56,25 +56,12 @@ async def _scan(channel_pk: int):
             await ChannelService(db).scan_channel(channel)
 
 
-def _as_int(value, default):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
-
-
 async def _read_settings() -> tuple[int, int | None, int | None, int]:
     async with async_session() as db:
-        minutes = await get_setting(db, "rss_check_minutes", 0)
-        start = await get_setting(db, "scan_window_start_hour", None)
-        end = await get_setting(db, "scan_window_end_hour", None)
-        interval_hours = await get_setting(db, "scan_min_interval_hours", 12)
-    return (
-        _as_int(minutes, 0),
-        _as_int(start, None),
-        _as_int(end, None),
-        max(1, _as_int(interval_hours, 12)),
-    )
+        minutes = await get_setting(db, "rss_check_minutes")
+        start, end = await read_scan_window(db)
+        interval_hours = await get_setting(db, "scan_min_interval_hours")
+    return minutes, start, end, max(1, interval_hours)
 
 
 def _spacing(minutes: int, n_channels: int, interval_hours: int) -> int:

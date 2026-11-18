@@ -575,7 +575,6 @@ async def repair_dates_confirm(
 
 @router.post("/{channel_id}/scan", status_code=202)
 async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
-    import json
     from datetime import datetime, timedelta, timezone
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -584,16 +583,8 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Channel not found")
 
     # Rate limit: prevent spam clicking "Scan Now"
-    cooldown_minutes = 5
-    try:
-        cd_result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "manual_scan_cooldown_minutes")
-        )
-        cd_setting = cd_result.scalar_one_or_none()
-        if cd_setting:
-            cooldown_minutes = int(json.loads(cd_setting.value))
-    except Exception:
-        pass
+    from app.services.settings_service import get_setting
+    cooldown_minutes = await get_setting(db, "manual_scan_cooldown_minutes")
 
     from app.services.channel_service import _last_scan_attempt
 
@@ -2393,7 +2384,7 @@ async def _force_rescan_locked(channel: Channel, db: AsyncSession):
     )).scalars().all())
     video_ids = select(Video.id).where(*disposable)
     # A forced rescan starts fresh: give up-on date lookups another chance.
-    await _channel_service.clear_date_lookup_failures(db)
+    await _channel_service.clear_date_lookup_failures(db, channel.id)
     await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
     await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
     deleted_count = await db.scalar(select(func.count(Video.id)).where(*disposable)) or 0

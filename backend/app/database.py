@@ -234,23 +234,13 @@ async def init_database():
         ))
         null_ids = [row[0] for row in null_scan_result.fetchall()]
         if null_ids:
-            import json as _json
             import random as _rand
-            from app.utils.scan_window import spread_into_window, usable_window
-
-            async def _hour(key: str):
-                row = (await conn.execute(
-                    text("SELECT value FROM app_settings WHERE key = :k"), {"k": key}
-                )).fetchone()
-                try:
-                    return _json.loads(row[0]) if row else None
-                except (TypeError, ValueError):
-                    return None
+            from app.services.settings_service import read_scan_window
+            from app.utils.scan_window import spread_into_window
 
             # A stored window that doesn't validate (hand-edited config) counts as none
-            start_h, end_h = usable_window(
-                await _hour("scan_window_start_hour"), await _hour("scan_window_end_hour")
-            )
+            async with AsyncSession(bind=conn) as _s:
+                start_h, end_h = await read_scan_window(_s)
             times = spread_into_window(len(null_ids), start_hour=start_h, end_hour=end_h)
             _rand.shuffle(times)
             for cid, scan_time in zip(null_ids, times):

@@ -33,12 +33,6 @@ async def _setup(monkeypatch, tmp_path, mode="other", old_ext=".mp4", old_sideca
     root = tmp_path / "downloads"
     root.mkdir()
 
-    async def _no_settings():
-        return {}
-
-    import app.services.settings_service as ss
-    monkeypatch.setattr(ss, "get_all_settings", _no_settings)
-
     async def _no_broadcast(self, *a, **k):
         return None
 

@@ -50,8 +50,11 @@ async def lifespan(app: FastAPI):
     await init_database()
     logger.info("Database initialized")
 
-    from app.services.settings_service import apply_log_level
-    logger.info("Log level: %s", await apply_log_level())
+    from app.database import async_session as _settings_session
+    from app.services.settings_service import apply_runtime_settings, migrate_env_overrides
+    async with _settings_session() as _db:
+        await migrate_env_overrides(_db)
+    logger.info("Log level: %s", await apply_runtime_settings())
 
     # Reset any "active" queue entries left over from a previous run.
     # When the container restarts, in-flight downloads are killed but their

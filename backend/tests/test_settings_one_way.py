@@ -150,14 +150,14 @@ async def test_saved_log_level_applies_at_startup(monkeypatch):
         async with maker() as db:
             _put(db, "log_level", "debug")
             await db.commit()
-        assert await settings_service.apply_log_level() == "DEBUG"
+        assert await settings_service.apply_runtime_settings() == "DEBUG"
         assert root.level == logging.DEBUG
 
         async with maker() as db:
             row = (await db.execute(select(AppSetting))).scalar_one()
             row.value = json.dumps("error")
             await db.commit()
-        await settings_service.apply_log_level()
+        await settings_service.apply_runtime_settings()
         assert root.level == logging.ERROR
     finally:
         root.setLevel(before)
@@ -171,7 +171,7 @@ async def test_saved_ua_rotation_reaches_ytdlp_options(monkeypatch):
     async with maker() as db:
         _put(db, "user_agent_rotation", False)
         await db.commit()
-    await settings_service.apply_log_level()
+    await settings_service.apply_runtime_settings()
     # ytdlp_service builds its options from settings.USER_AGENT_ROTATION in worker threads.
     assert settings.USER_AGENT_ROTATION is False
 

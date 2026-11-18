@@ -213,6 +213,8 @@ If you already added channels to an existing TV library, move them to the new li
 | `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads |
 | `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings |
 
+From 2.0, `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting values only. Whatever is saved in Settings wins.
+
 </details>
 
 <details>

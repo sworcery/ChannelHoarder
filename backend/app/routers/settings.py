@@ -6,13 +6,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
 from app.models import AppSetting, Channel
-from app.schemas import SettingsUpdate, NamingPreviewRequest, NamingPreviewResponse
+from app.schemas import ChannelCreate, SettingsUpdate, NamingPreviewRequest, NamingPreviewResponse
 from app.services.channel_service import DATE_LOOKUP_KEY_PREFIX, pick_channel_folder
 from app.services.queue_state import FLAG_KEYS
 from app.utils.file_utils import channel_folder_name, sanitize_filename
@@ -33,16 +33,11 @@ if not USERSCRIPT_TEMPLATE.exists():
 
 @router.get("/")
 async def get_all_settings(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(AppSetting).where(~AppSetting.key.like(DATE_LOOKUP_KEY_PREFIX + "%"))
-    )
-    settings_list = result.scalars().all()
-    settings_dict = {}
-    for s in settings_list:
-        try:
-            settings_dict[s.key] = json.loads(s.value)
-        except (json.JSONDecodeError, TypeError):
-            settings_dict[s.key] = s.value
+    from app.services.settings_service import get_effective_settings
+    # What the app uses: the saved row, else env/config, else the default
+    settings_dict = {
+        k: v for k, v in (await get_effective_settings(db)).items() if k not in FLAG_KEYS
+    }
     logger.debug("Returning %d settings: %s", len(settings_dict), list(settings_dict.keys()))
     return settings_dict
 
@@ -53,20 +48,18 @@ async def _check_update(db: AsyncSession, update_data: dict) -> None:
     if "scan_window_start_hour" in update_data or "scan_window_end_hour" in update_data:
         from app.utils.scan_window import validate_scan_window
         # Pull current values to combine with incoming updates
-        async def _get_hour(key: str):
-            if key in update_data:
-                return update_data[key]
-            result = await db.execute(select(AppSetting).where(AppSetting.key == key))
-            setting = result.scalar_one_or_none()
-            if setting:
-                try:
-                    return int(json.loads(setting.value))
-                except Exception:
-                    return None
-            return None
+        from app.services.settings_service import get_settings
+        saved = await get_settings(db, list(_HOUR_KEYS))
 
-        start_h = await _get_hour("scan_window_start_hour")
-        end_h = await _get_hour("scan_window_end_hour")
+        def _hour(key: str):
+            value = update_data[key] if key in update_data else saved[key]
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        start_h = _hour("scan_window_start_hour")
+        end_h = _hour("scan_window_end_hour")
         try:
             validate_scan_window(start_h, end_h)
         except ValueError as e:
@@ -83,6 +76,20 @@ async def _check_update(db: AsyncSession, update_data: dict) -> None:
             raise HTTPException(status_code=400, detail=f"Invalid naming template: {e}")
 
 
+class _ImportExtras(BaseModel):
+    """Channel fields ChannelCreate doesn't carry; a wrong type skips the channel."""
+    channel_name: str = "Imported"
+    channel_url: str = ""
+    platform: str = "youtube"
+    include_shorts: bool = False
+    include_livestreams: bool = False
+    prioritize_downloads: bool = False
+
+
+_IMPORT_CHECKED_FIELDS = (
+    "quality", "quality_cutoff", "naming_template", "min_quality", "preferred_codec", "min_video_duration",
+    "title_filter", "title_filter_is_regex", "title_filter_mode", "enabled", "auto_download",
+)
 _HOUR_KEYS = ("scan_window_start_hour", "scan_window_end_hour")
 
 
@@ -118,8 +125,8 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
 
     # Apply runtime-reactive settings immediately (log level, User-Agent rotation)
     if {"log_level", "user_agent_rotation"} & set(update_data):
-        from app.services.settings_service import apply_log_level
-        logger.info("Log level is %s", await apply_log_level(db))
+        from app.services.settings_service import apply_runtime_settings
+        logger.info("Log level is %s", await apply_runtime_settings(db))
 
     return {"message": "Settings updated", "updated": list(update_data.keys())}
 
@@ -224,7 +231,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
     } | set(FLAG_KEYS)  # queue pause / cookie state belongs to this install, not the backup
     settings_dict = {}
     for s in settings_list:
-        if s.key in SENSITIVE_KEYS:
+        if s.key in SENSITIVE_KEYS or s.key.startswith("_"):
             continue
         try:
             settings_dict[s.key] = json.loads(s.value)
@@ -366,29 +373,50 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             except ValueError as e:
                 skipped_channels.append({"channel_id": cid, "channel_name": name, "reason": str(e)})
                 continue
+        # Same checks as adding a channel by hand: a bad quality, filter mode,
+        # codec or template skips this channel with a reason.
+        try:
+            checked = ChannelCreate.model_validate({
+                "url": ch_data.get("channel_url") or cid,
+                **{k: ch_data[k] for k in _IMPORT_CHECKED_FIELDS if ch_data.get(k) is not None},
+            })
+            extras = _ImportExtras.model_validate(
+                {k: ch_data[k] for k in _ImportExtras.model_fields if ch_data.get(k) is not None}
+            )
+            if checked.naming_template:
+                from app.services.naming_service import validate_template
+                validate_template(checked.naming_template)
+        except (ValidationError, ValueError, TypeError) as e:
+            if isinstance(e, ValidationError):
+                err = e.errors()[0]
+                reason = f"Invalid value for '{'.'.join(str(p) for p in err['loc'])}': {err['msg']}"
+            else:
+                reason = f"Invalid naming template: {e}"
+            skipped_channels.append({"channel_id": cid, "channel_name": name, "reason": reason})
+            continue
         channel = Channel(
             channel_id=cid,
-            channel_name=ch_data.get("channel_name", "Imported"),
-            channel_url=ch_data.get("channel_url", ""),
-            platform=ch_data.get("platform", "youtube"),
-            quality=ch_data.get("quality", "best"),
-            quality_cutoff=ch_data.get("quality_cutoff"),
-            min_video_duration=ch_data.get("min_video_duration"),
+            channel_name=extras.channel_name,
+            channel_url=extras.channel_url,
+            platform=extras.platform,
+            quality=checked.quality,
+            quality_cutoff=checked.quality_cutoff,
+            min_video_duration=checked.min_video_duration,
             download_from_date=_import_from_date(ch_data),
             retention_days=_import_retention_days(ch_data.get("retention_days")),
-            naming_template=ch_data.get("naming_template"),
+            naming_template=checked.naming_template,
             download_dir=ch_data.get("download_dir"),
             folder_name=await _import_folder_name(db, ch_data, pre_existing_folders),
-            enabled=ch_data.get("enabled", True),
-            include_shorts=ch_data.get("include_shorts", False),
-            include_livestreams=ch_data.get("include_livestreams", False),
-            min_quality=ch_data.get("min_quality"),
-            preferred_codec=ch_data.get("preferred_codec"),
-            title_filter=ch_data.get("title_filter"),
-            title_filter_is_regex=ch_data.get("title_filter_is_regex", False),
-            title_filter_mode=ch_data.get("title_filter_mode", "include"),
-            auto_download=ch_data.get("auto_download", True),
-            prioritize_downloads=ch_data.get("prioritize_downloads", False),
+            enabled=checked.enabled,
+            include_shorts=extras.include_shorts,
+            include_livestreams=extras.include_livestreams,
+            min_quality=checked.min_quality,
+            preferred_codec=checked.preferred_codec,
+            title_filter=checked.title_filter,
+            title_filter_is_regex=checked.title_filter_is_regex,
+            title_filter_mode=checked.title_filter_mode,
+            auto_download=checked.auto_download,
+            prioritize_downloads=extras.prioritize_downloads,
             health_status="unknown",
         )
         db.add(channel)
@@ -398,22 +426,18 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
     # Give imported channels scan times spread across the scan window, so they
     # don't all scan back to back
     if new_channels:
-        from app.services.settings_service import get_setting
-        from app.utils.scan_window import spread_into_window, usable_window
+        from app.services.settings_service import read_scan_window
+        from app.utils.scan_window import spread_into_window
 
-        # An unusable saved window (e.g. start equals end) counts as none
-        start_h, end_h = usable_window(
-            await get_setting(db, "scan_window_start_hour", None),
-            await get_setting(db, "scan_window_end_hour", None),
-        )
+        start_h, end_h = await read_scan_window(db)
         times = spread_into_window(len(new_channels), start_hour=start_h, end_hour=end_h)
         random.shuffle(times)
         for ch, t in zip(new_channels, times):
             ch.next_scan_at = t
 
     await db.commit()
-    from app.services.settings_service import apply_log_level
-    await apply_log_level(db)
+    from app.services.settings_service import apply_runtime_settings
+    await apply_runtime_settings(db)
     return {
         "imported_settings": imported_settings,
         "imported_channels": imported_channels,
@@ -445,8 +469,9 @@ async def preview_naming_template(body: NamingPreviewRequest):
 
 @router.get("/{key}")
 async def get_setting(key: str, db: AsyncSession = Depends(get_db)):
+    internal = key.startswith(("_", DATE_LOOKUP_KEY_PREFIX)) or key in FLAG_KEYS
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))
-    setting = result.scalar_one_or_none()
+    setting = None if internal else result.scalar_one_or_none()
     if not setting:
         raise HTTPException(status_code=404, detail=f"Setting '{key}' not found")
     return {"key": key, "value": json.loads(setting.value)}
@@ -468,6 +493,6 @@ async def update_setting(key: str, value: str, db: AsyncSession = Depends(get_db
 
     await db.commit()
     if key in ("log_level", "user_agent_rotation"):
-        from app.services.settings_service import apply_log_level
-        await apply_log_level(db)
+        from app.services.settings_service import apply_runtime_settings
+        await apply_runtime_settings(db)
     return {"key": key, "value": typed}

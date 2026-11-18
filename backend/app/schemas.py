@@ -261,8 +261,6 @@ class SettingsUpdate(BaseModel):
     max_retries: Optional[int] = Field(default=None, ge=0, le=100)
     download_queue_order: Optional[str] = Field(default=None, pattern="^(queued|newest|oldest|shortest|longest)$")
     user_agent_rotation: Optional[bool] = None
-    youtube_api_key: Optional[str] = None
-    pot_server_enabled: Optional[bool] = None
     naming_template: Optional[str] = None
     # Webhook notifications
     telegram_bot_token: Optional[str] = None
