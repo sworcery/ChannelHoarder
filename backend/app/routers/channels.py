@@ -18,7 +18,9 @@ from app.schemas import (
     ChannelCreate, ChannelUpdate, ChannelResponse, VideoResponse,
     ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
-from app.services.channel_service import ChannelService, SHORTS_MAX_DURATION, _scanning_channels
+from app.services.channel_service import (
+    ChannelService, SHORTS_MAX_DURATION, _moving_channels, _scanning_channels, other_recorded,
+)
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -386,7 +388,10 @@ async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
 
     from app.services.naming_service import resolve_naming_template
     template = await resolve_naming_template(db, channel.naming_template)
-    renamed = await asyncio.to_thread(_renumber_channel_episodes, videos, channel, template)
+    protected, _ = await other_recorded(db, channel.id)
+    renamed = await asyncio.to_thread(
+        _renumber_channel_episodes, videos, channel, template, protected_keys=protected
+    )
 
     await db.commit()
     return {
@@ -496,8 +501,10 @@ async def repair_dates_confirm(
             from app.services.naming_service import resolve_naming_template
             template = await resolve_naming_template(db, channel.naming_template)
             try:
+                protected, _ = await other_recorded(db, channel.id)
                 renamed = await asyncio.to_thread(
-                    _renumber_channel_episodes, videos, channel, template, force_ids=corrected_ids
+                    _renumber_channel_episodes, videos, channel, template,
+                    force_ids=corrected_ids, protected_keys=protected,
                 )
             except Exception as e:
                 logger.error("Repair Dates renumber failed for %s: %s", channel.channel_name, e, exc_info=True)
@@ -1463,17 +1470,26 @@ def _remap_path(file_path: str, old_dir: str, new_dir: str) -> str | None:
 
 
 async def _move_channel_contents(
-    db: AsyncSession, channel: Channel, old_dir: str, new_dir: str
+    db: AsyncSession, channel: Channel, old_dir: str, new_dir: str,
+    skip_keys: set[str] | None = None,
+    shared_stems: set[str] | None = None,
+    overwrite: bool = True,
+    strict_sidecars: bool = False,
 ) -> tuple[int, list[str], int]:
     """Move one channel's videos and metadata from old_dir to new_dir.
 
     Each video's new file_path is committed right after its files move; a video
     whose move fails keeps its files and DB path. Nothing is deleted except
     folders left empty inside the old channel folder.
+    skip_keys: file identities (file_keys) of files that must not move.
+    shared_stems: stems another channel's video uses; sidecars of those stay.
+    overwrite: whether an equal-size file at the target may be replaced.
+    strict_sidecars: a sidecar that could not move counts as an error.
     Returns (videos moved, error messages, untracked files left behind).
     """
     from app.utils.file_utils import (
-        count_files, move_channel_metadata, move_sidecar_files, remove_empty_dirs,
+        ASSOCIATED_EXTENSIONS, count_files, file_keys, move_channel_metadata,
+        move_sidecar_files, remove_empty_dirs, stem_key,
     )
 
     from app.services.channel_service import pick_free_folder, taken_folder_keys, _folder_key
@@ -1497,9 +1513,10 @@ async def _move_channel_contents(
             Video.channel_id == channel.id, Video.file_path.isnot(None)
         )
     )
-    for video_pk, old_path in result.all():
-        if not old_path:
-            continue
+    def _plan(old_path: str):
+        """Disk work for one video, run off the event loop. None = leave it alone."""
+        if skip_keys and file_keys(old_path) & skip_keys:
+            return None  # a file another channel's video records stays where it is
         if new_folder != safe_name:
             new_path = _remap_path(old_path, old_channel_dir, new_channel_dir)
         else:
@@ -1507,14 +1524,35 @@ async def _move_channel_contents(
         if new_path is None:
             new_path = _remap_path(old_path, old_dir, new_dir)
         if new_path is None or _same_location(new_path, old_path):
+            return None
+        shared_stem = bool(shared_stems) and stem_key(old_path) in shared_stems
+        return new_path, os.path.exists(old_path), os.path.exists(new_path), shared_stem
+
+    for video_pk, old_path in result.all():
+        if not old_path:
             continue
+        plan = await asyncio.to_thread(_plan, old_path)
+        if plan is None:
+            continue
+        new_path, old_exists, new_exists, shared_stem = plan
         try:
-            if os.path.exists(old_path):
-                await asyncio.to_thread(move_video_files, old_path, new_path, True)
-            elif os.path.exists(new_path):
+            if old_exists:
+                # Sidecars named after a stem another channel's video also uses stay put.
+                extra = (False,) if shared_stem else ()
+                await asyncio.to_thread(move_video_files, old_path, new_path, overwrite, *extra)
+                if strict_sidecars and not shared_stem:
+                    base = os.path.splitext(old_path)[0]
+                    stuck = await asyncio.to_thread(
+                        lambda: [base + e for e in ASSOCIATED_EXTENSIONS if os.path.exists(base + e)]
+                    )
+                    if stuck:
+                        errors.append(f"{old_path}: sidecar not moved: " + ", ".join(
+                            os.path.basename(s) for s in stuck))
+            elif new_exists:
                 # An earlier run moved the file but didn't record it: heal the path
                 # and bring over any sidecars it left behind.
-                await asyncio.to_thread(move_sidecar_files, old_path, new_path, True)
+                if not shared_stem:
+                    await asyncio.to_thread(move_sidecar_files, old_path, new_path, overwrite)
             else:
                 continue
             video = await db.get(Video, video_pk)
@@ -1534,11 +1572,13 @@ async def _move_channel_contents(
         # Leave shared artwork and tvshow.nfo with an old channel that still uses
         # this folder; the moved channel gets its own written on its next download.
         others = await db.execute(select(Channel).where(Channel.id != channel_pk))
-        old_key = os.path.realpath(old_channel_dir).casefold()
-        shared = any(
-            os.path.realpath(os.path.join(c.download_dir or settings.DOWNLOAD_DIR,
-                                          channel_folder_name(c))).casefold() == old_key
+        other_dirs = [
+            os.path.join(c.download_dir or settings.DOWNLOAD_DIR, channel_folder_name(c))
             for c in others.scalars().all()
+        ]
+        old_key = await asyncio.to_thread(lambda: os.path.realpath(old_channel_dir).casefold())
+        shared = await asyncio.to_thread(
+            lambda: any(os.path.realpath(d).casefold() == old_key for d in other_dirs)
         )
         meta_errors = []
         if not shared:
@@ -1564,7 +1604,6 @@ def _failure_message(errors: list[str]) -> str:
 
 # Moves in flight. Two moves of the same files at once could race between one
 # task's finished copy and the other's equal-size replace, so they're refused.
-_moving_channels: set[int] = set()
 _move_all_running = False
 
 
@@ -2010,7 +2049,10 @@ async def detect_clean_shorts_confirm(
     all_videos = result.scalars().all()
     from app.services.naming_service import resolve_naming_template
     template = await resolve_naming_template(db, channel.naming_template)
-    renamed = await asyncio.to_thread(_renumber_channel_episodes, all_videos, channel, template)
+    protected, _ = await other_recorded(db, channel_id)
+    renamed = await asyncio.to_thread(
+        _renumber_channel_episodes, all_videos, channel, template, protected_keys=protected
+    )
 
     await db.commit()
     return {

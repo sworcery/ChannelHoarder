@@ -361,6 +361,9 @@ async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
+    from app.services.channel_service import _moving_channels
+    if channel.id in _moving_channels:
+        raise HTTPException(status_code=409, detail="This channel's files are being moved; try again shortly")
 
     # Mark as started and bump priority
     max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0

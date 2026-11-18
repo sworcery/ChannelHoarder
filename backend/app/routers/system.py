@@ -334,6 +334,55 @@ async def apply_library_check(body: LibraryCheckApply):
     return {"results": results}
 
 
+@router.get("/shared-folders")
+async def list_shared_folders(db: AsyncSession = Depends(get_db)):
+    """Groups of channels that share one folder (database check only)."""
+    from app.services import shared_folder_service as sfs
+    return {"groups": await sfs.find_shared_groups(db)}
+
+
+@router.get("/shared-folders/preview")
+async def preview_shared_folder_move(channel_id: int, db: AsyncSession = Depends(get_db)):
+    from app.services import shared_folder_service as sfs
+    preview = await sfs.preview_move(db, channel_id)
+    if preview is None:
+        raise HTTPException(status_code=404, detail="That channel does not share a folder")
+    return preview
+
+
+class SharedFolderMoveRequest(BaseModel):
+    channel_id: int
+
+
+@router.post("/shared-folders/move", status_code=202)
+async def move_shared_folder_channel(body: SharedFolderMoveRequest, db: AsyncSession = Depends(get_db)):
+    """Move one channel out of a shared folder into its own, in the background."""
+    from app.services import shared_folder_service as sfs
+    from app.services.channel_service import _moving_channels
+
+    if body.channel_id in _moving_channels:
+        raise HTTPException(status_code=409, detail="A move of this channel is already running")
+    # Claim the channel before the checks, so no download can start for it while they
+    # run; released by move_task, or right here if the move doesn't start.
+    _moving_channels.add(body.channel_id)
+    started = False
+    try:
+        group = await sfs.group_of(db, body.channel_id)
+        channel = await db.get(Channel, body.channel_id)
+        if group is None or channel is None:
+            raise HTTPException(status_code=404, detail="That channel does not share a folder")
+        reason = await sfs.busy_reason(db, group, body.channel_id, claimed=True)
+        if reason:
+            raise HTTPException(status_code=409, detail=reason)
+        new_folder = await sfs._new_folder(db, channel)
+        asyncio.create_task(sfs.move_task(body.channel_id))
+        started = True
+    finally:
+        if not started:
+            _moving_channels.discard(body.channel_id)
+    return {"message": f"Moving '{channel.channel_name}' to '{new_folder}'"}
+
+
 @router.post("/scan-all", status_code=202)
 async def trigger_scan_all(db: AsyncSession = Depends(get_db)):
     from app.services.channel_service import ChannelService

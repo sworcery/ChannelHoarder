@@ -1,4 +1,4 @@
-import type { Channel, Video, QueueEntry, DashboardStats, DownloadLog, MessageResponse, LibraryCheckState, LibraryCheckApplyResult } from "./types"
+import type { Channel, Video, QueueEntry, DashboardStats, DownloadLog, MessageResponse, LibraryCheckState, LibraryCheckApplyResult, SharedFolderGroup, SharedFolderPreview } from "./types"
 
 const BASE_URL = "/api/v1"
 
@@ -319,6 +319,11 @@ export const api = {
   getLibraryCheck: () => request<LibraryCheckState>("/system/library-check"),
   applyLibraryCheck: (body: { item_ids?: string[]; all_certain?: boolean; actions?: Record<string, "redownload" | "skip"> }) =>
     request<LibraryCheckApplyResult>("/system/library-check/apply", { method: "POST", body: JSON.stringify(body) }),
+  getSharedFolders: () => request<{ groups: SharedFolderGroup[] }>("/system/shared-folders"),
+  previewSharedFolderMove: (channelId: number) =>
+    request<SharedFolderPreview>(`/system/shared-folders/preview?channel_id=${channelId}`),
+  moveSharedFolderChannel: (channelId: number) =>
+    request<{ message: string }>("/system/shared-folders/move", { method: "POST", body: JSON.stringify({ channel_id: channelId }) }),
   getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
   getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
   getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),

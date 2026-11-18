@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone, timedelta
 
-from sqlalchemy import select, func
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.config import settings
@@ -90,14 +90,21 @@ async def process_download_queue():
         # Get next queued videos (fill all available slots). Over-fetch so we can drop
         # any still-running ones and still fill the slots.
         queue_order = await get_setting(db, "download_queue_order")
-        result = await db.execute(
+        from app.services.channel_service import _moving_channels
+        query = (
             select(DownloadQueue)
             # Outer joins so entries whose video is gone still reach the cleanup below
             .outerjoin(Video, DownloadQueue.video_id == Video.id)
             .outerjoin(Channel, Video.channel_id == Channel.id)
             .options(joinedload(DownloadQueue.video))
             .where(DownloadQueue.started_at.is_(None))
-            .order_by(*queue_order_by(queue_order))
+        )
+        if _moving_channels:
+            # Leave out channels whose files are being moved, in the query itself, so
+            # their entries can't take every slot and stall the rest of the queue.
+            query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(_moving_channels))))
+        result = await db.execute(
+            query.order_by(*queue_order_by(queue_order))
             .limit(slots + len(running_video_ids))
         )
         candidates = result.scalars().unique().all()
@@ -123,6 +130,10 @@ async def process_download_queue():
                 await db.delete(queue_entry)
                 await db.commit()
                 continue
+
+            from app.services.channel_service import _moving_channels
+            if channel.id in _moving_channels:
+                continue  # its files are being moved; stays queued for a later tick
 
             # Mark as started NOW so the next scheduler tick
             # sees it as active and doesn't double-pick it

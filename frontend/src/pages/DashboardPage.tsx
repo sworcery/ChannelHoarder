@@ -3,7 +3,9 @@ import { api } from "@/lib/api"
 import { formatDateTime, formatBytes, formatSpeed } from "@/lib/utils"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import {
+  X,
   Tv,
   Download,
   AlertCircle,
@@ -35,6 +37,17 @@ export default function DashboardPage() {
     staleTime: 5000,
   })
   const queue = queueData?.items
+
+  const { data: sharedData } = useQuery({
+    queryKey: ["shared-folders"],
+    queryFn: api.getSharedFolders,
+    staleTime: 60000,
+  })
+  const sharedKey = (sharedData?.groups ?? [])
+    .flatMap((g) => g.channels.map((c) => c.id))
+    .sort((a, b) => a - b)
+    .join(",")
+  const [dismissedKey, setDismissedKey] = useState(() => localStorage.getItem("shared_folders_dismissed"))
 
   const { subscribe } = useWebSocket()
   const [activeProgress, setActiveProgress] = useState<Record<string, any>>({})
@@ -74,6 +87,34 @@ export default function DashboardPage() {
         <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={`${stats.total_pending} pending`} color={stats.total_failed > 0 ? "text-red-500" : undefined} />
         <StatCard icon={HardDrive} label="Storage" value={stats.storage_used_formatted} sub={`yt-dlp ${stats.ytdlp_version}`} />
       </div>
+
+      {sharedKey && sharedKey !== dismissedKey && (
+        <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 p-4 flex items-start justify-between gap-3">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            Some channels share one folder on disk.{" "}
+            <Link
+              to="/settings"
+              onClick={() => {
+                localStorage.setItem("settings_tab", "diagnostics")
+                localStorage.setItem("diagnostics_tab", "overview")
+              }}
+              className="underline font-medium"
+            >
+              Separate them in Settings &rarr; Diagnostics
+            </Link>.
+          </p>
+          <button
+            onClick={() => {
+              localStorage.setItem("shared_folders_dismissed", sharedKey)
+              setDismissedKey(sharedKey)
+            }}
+            className="shrink-0 rounded p-1 hover:bg-yellow-200 dark:hover:bg-yellow-900"
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* Health Banner */}
       {stats.pot_status !== "enabled" && (

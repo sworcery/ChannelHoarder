@@ -216,6 +216,64 @@ def test_download_now_not_started_twice_after_stale_reset(monkeypatch):
     asyncio.run(run())
 
 
+def test_channel_being_moved_does_not_stall_the_queue(monkeypatch):
+    # Its entries are first in line, but the one free slot must go to another channel.
+    import app.tasks.process_queue as pq
+    from app.services import channel_service
+
+    async def run():
+        eng, maker = await _maker()
+        started = []
+
+        async def fake_download(video_id, channel_id, queue_id):
+            started.append(video_id)
+
+        monkeypatch.setattr(pq, "_run_download", fake_download)
+        monkeypatch.setattr(pq, "async_session", maker)
+        pq._active_tasks.clear()
+        try:
+            async with maker() as db:
+                moving = await _channel(db, "moving")
+                other = await _channel(db, "other")
+                await _queued(db, moving, "m1", date(2024, 1, 1), 100, 1)
+                await _queued(db, moving, "m2", date(2024, 1, 2), 100, 2)
+                await _queued(db, other, "o1", date(2024, 1, 3), 100, 3)
+                db.add(AppSetting(key="max_concurrent_downloads", value=json.dumps(1)))
+                await db.commit()
+                monkeypatch.setattr(channel_service, "_moving_channels", {moving.id})
+                await pq.process_download_queue()
+                await asyncio.sleep(0)
+                o1 = (await db.execute(select(Video).where(Video.video_id == "o1"))).scalar_one()
+                assert started == [o1.id]
+        finally:
+            await asyncio.gather(*pq._active_tasks, return_exceptions=True)
+            pq._active_tasks.clear()
+            await eng.dispose()
+    asyncio.run(run())
+
+
+def test_other_recorded_is_free_when_no_folder_is_shared(monkeypatch):
+    # Runs after every scan: with no shared folder it must not stat any file.
+    from app.services import channel_service
+
+    async def run():
+        eng, maker = await _maker()
+        async with maker() as db:
+            a = await _channel(db, "a")
+            b = await _channel(db, "b")
+            db.add(Video(channel_id=b.id, video_id="bv", title="b", status="completed",
+                         upload_date=date(2024, 1, 1), season=1, episode=1, file_path="/x/b/bv.mp4"))
+            await db.commit()
+
+            def no_stat(*a, **k):
+                raise AssertionError("looked at files although nothing is shared")
+
+            monkeypatch.setattr("app.utils.file_utils.file_keys", no_stat)
+            assert await channel_service.other_recorded(db, a.id) == (set(), set())
+        await eng.dispose()
+    asyncio.run(run())
+
+
 def test_migration_adds_prioritize_downloads(monkeypatch):
     async def run():
         eng = _engine()

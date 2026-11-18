@@ -5,13 +5,14 @@ import os
 
 from app.services.metadata_service import write_episode_nfo
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import channel_folder_name, move_video_files
+from app.utils.file_utils import channel_folder_name, file_keys, move_video_files
 
 logger = logging.getLogger(__name__)
 
 
 def renumber_channel_episodes(videos: list, channel, naming_template: str | None = None,
-                               force_ids: set[int] | None = None) -> int:
+                               force_ids: set[int] | None = None,
+                               protected_keys: set[str] | None = None) -> int:
     """Renumber episodes in chronological order, excluding shorts and livestreams.
 
     Videos list must be pre-sorted by upload_date ASC. Returns count of files
@@ -21,6 +22,9 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
     resolve_naming_template() - this runs in a worker thread and cannot read the
     global setting itself. It falls back to the channel's own value only so
     existing callers keep working.
+
+    protected_keys (see file_utils.file_keys) are files another channel's video also
+    records; they are never renamed here.
 
     force_ids rebuilds the file and NFO for a video even when its season and
     episode number are unchanged - needed when only the upload_date changed,
@@ -56,7 +60,7 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
                         folder_name=channel_folder_name(channel),
                     ) + (os.path.splitext(old_path)[1] or ".mp4")
 
-                    if old_path != new_path:
+                    if old_path != new_path and not (protected_keys and file_keys(old_path) & protected_keys):
                         try:
                             move_video_files(old_path, new_path)
                             video.file_path = new_path
@@ -93,7 +97,7 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
                 # and renaming one to .mp4 mislabels it - the move doesn't transcode.
                 ) + (os.path.splitext(old_path)[1] or ".mp4")
 
-                if old_path != new_path:
+                if old_path != new_path and not (protected_keys and file_keys(old_path) & protected_keys):
                     try:
                         move_video_files(old_path, new_path)
                         video.file_path = new_path

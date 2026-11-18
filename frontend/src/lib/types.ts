@@ -159,6 +159,37 @@ export interface LibraryCheckState {
   items: LibraryCheckItem[]
 }
 
+export interface SharedFolderChannel {
+  id: number
+  channel_name: string
+  platform: string
+  created_at: string | null
+  file_count: number
+}
+
+export interface SharedFolderGroup {
+  folder: string
+  path: string
+  channels: SharedFolderChannel[]
+  default_channel_id: number
+}
+
+export interface SharedFolderPreview {
+  channel_id: number
+  channel_name: string
+  old_folder: string
+  new_folder: string
+  new_path: string
+  video_files: number
+  sidecar_files: number
+  missing_files: number
+  staying_files: string[]
+  shared_sidecar_files: string[]
+  skipped_files: string[]
+  untracked_move: string[]
+  untracked_stay: string[]
+}
+
 export interface LibraryCheckApplyResult {
   results: { id: string; state: string; message: string }[]
 }

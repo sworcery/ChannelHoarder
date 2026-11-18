@@ -258,6 +258,25 @@ def move_channel_metadata(old_channel_dir: str, new_channel_dir: str) -> tuple[i
     return moved, errors
 
 
+def file_keys(path: str) -> set[str]:
+    """Identities of a file: its realpath (casefolded) and, when it exists, its device
+    and inode, so a second bind mount or a hard link of the same file matches too."""
+    keys = {os.path.realpath(path).casefold()}
+    try:
+        st = os.stat(path)
+        # Size and mtime too: union mounts (e.g. Unraid's user share) can pass through
+        # per-disk inode numbers, so dev:ino alone could match two different files.
+        keys.add(f"{st.st_dev}:{st.st_ino}:{st.st_size}:{st.st_mtime_ns}")
+    except OSError:
+        pass
+    return keys
+
+
+def stem_key(path: str) -> str:
+    """Identity of a video's sidecar stem (path without extension)."""
+    return os.path.realpath(os.path.splitext(path)[0]).casefold()
+
+
 def count_files(root: str) -> int:
     """Count files left under root."""
     return sum(len(files) for _, _, files in os.walk(root))

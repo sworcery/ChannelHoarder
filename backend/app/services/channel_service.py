@@ -21,7 +21,7 @@ from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService, channel_avatar_url
-from app.utils.file_utils import channel_folder_name, sanitize_filename
+from app.utils.file_utils import channel_folder_name, file_keys, sanitize_filename
 from app.utils.error_codes import ErrorCode, classify_error
 
 logger = logging.getLogger(__name__)
@@ -63,6 +63,50 @@ SHORTS_TAB_MAX_DURATION = 185
 
 # Track channels currently being scanned to prevent concurrent scan races
 _scanning_channels: set[int] = set()
+
+# Channels whose files are being moved. Scans, RSS checks and downloads leave them alone.
+_moving_channels: set[int] = set()
+
+
+async def other_recorded(db: AsyncSession, channel_id: int) -> tuple[set[str], set[str]]:
+    """Identity keys (path, device:inode) and sidecar-stem keys of every file another
+    channel's video records in this channel's folder. Those files must not be moved or
+    renamed for this channel.
+
+    Runs at the end of every scan, so it costs nothing unless another channel's folder
+    setting resolves to this channel's folder (only old installs have such shared
+    folders); then only those channels' files are looked at.
+    """
+    from app.utils.file_utils import channel_folder_name, file_keys, stem_key
+
+    channels = (await db.execute(select(Channel))).scalars().all()
+    me = next((c for c in channels if c.id == channel_id), None)
+    if me is None:
+        return set(), set()
+
+    def _sharing() -> list[int]:
+        mine = _folder_key(me.download_dir, channel_folder_name(me))
+        return [c.id for c in channels if c.id != channel_id
+                and _folder_key(c.download_dir, channel_folder_name(c)) == mine]
+
+    sharing = await asyncio.to_thread(_sharing)
+    if not sharing:
+        return set(), set()
+    paths = (await db.execute(
+        select(Video.file_path).where(
+            Video.channel_id.in_(sharing), Video.file_path.isnot(None), Video.file_path != ""
+        )
+    )).scalars().all()
+
+    def _build() -> tuple[set[str], set[str]]:
+        keys: set[str] = set()
+        stems: set[str] = set()
+        for p in paths:
+            keys |= file_keys(p)
+            stems.add(stem_key(p))
+        return keys, stems
+
+    return await asyncio.to_thread(_build)
 
 # Placeholder titles yt-dlp returns for videos that can't be downloaded (private,
 # deleted, or otherwise unavailable). These appear as real entries in flat playlist
@@ -382,6 +426,9 @@ class ChannelService:
         # Prevent concurrent scans on the same channel
         if channel.id in _scanning_channels:
             logger.info("Skipping scan for %s - already in progress", channel.channel_name)
+            return 0
+        if channel.id in _moving_channels:
+            logger.info("Skipping scan for %s - its files are being moved", channel.channel_name)
             return 0
         _scanning_channels.add(channel.id)
         try:
@@ -931,7 +978,10 @@ class ChannelService:
             all_videos = result.scalars().all()
             from app.services.naming_service import resolve_naming_template
             template = await resolve_naming_template(self.db, channel.naming_template)
-            renamed = await asyncio.to_thread(renumber_channel_episodes, all_videos, channel, template)
+            protected, _ = await other_recorded(self.db, channel.id)
+            renamed = await asyncio.to_thread(
+                renumber_channel_episodes, all_videos, channel, template, protected_keys=protected
+            )
             await self.db.commit()
             if renamed > 0:
                 logger.info("Renumbered %d episodes for %s after reclassification", renamed, channel.channel_name)
@@ -1324,11 +1374,15 @@ class ChannelService:
         from app.services.naming_service import resolve_naming_template
         effective_template = await resolve_naming_template(self.db, channel.naming_template)
 
+        protected, _ = await other_recorded(self.db, channel.id)
+
         renamed_count = 0
         for video in videos:
             old_path = Path(video.file_path)
             if not old_path.exists():
                 continue
+            if protected and protected & await asyncio.to_thread(file_keys, str(old_path)):
+                continue  # another channel's video records this file too
 
             # Build expected path from current naming template
             expected_base = build_output_path(
