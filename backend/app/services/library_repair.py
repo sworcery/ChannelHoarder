@@ -434,7 +434,15 @@ async def apply_fixes(
     results: list[dict[str, Any]] = []
     async with maker() as db:
         for item in wanted:
+            claimed: list[int] = []
             try:
+                busy = await _claim_item_channels(db, item, claimed)
+                if busy:
+                    # Stays "open" so it can be retried once the channel is free.
+                    msg = f"skipped: {busy}"
+                    item["result"] = msg
+                    results.append({"id": item["id"], "state": "skipped", "message": msg})
+                    continue
                 if item["kind"] == KIND_LOST:
                     status, msg = await _fix_lost(db, item, actions.get(item["id"], "redownload"))
                 else:
@@ -444,9 +452,42 @@ async def apply_fixes(
                 await db.rollback()
                 logger.exception("Library repair failed for %s", item["id"])
                 status, msg = "error", str(e)
+            finally:
+                _release_claims(claimed)
             item["state"], item["result"] = status, msg
             results.append({"id": item["id"], "state": status, "message": msg})
     return results
+
+
+async def _claim_item_channels(db, item, claimed: list[int]) -> str | None:
+    """Claim this item's channel(s), the row's and the real video's, for the fix.
+
+    Returns the busy reason when one can't be claimed (nothing stays claimed then);
+    on success the claimed ids are in ``claimed`` for the caller to release.
+    """
+    from app.services.channel_service import try_claim
+
+    channel_ids: list[int] = []
+    for key in ("video_id", "real_video_id"):
+        if item.get(key) is not None:
+            video = await db.get(Video, item[key])
+            if video is not None and video.channel_id not in channel_ids:
+                channel_ids.append(video.channel_id)
+    for cid in channel_ids:
+        reason = await try_claim(db, cid, "work")
+        if reason:
+            _release_claims(claimed)
+            claimed.clear()
+            return reason
+        claimed.append(cid)
+    return None
+
+
+def _release_claims(channel_ids: list[int]) -> None:
+    from app.services.channel_service import release_claim
+
+    for cid in channel_ids:
+        release_claim(cid, "work")
 
 
 def _queue(db, video: Video) -> None:

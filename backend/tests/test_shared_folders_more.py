@@ -56,6 +56,15 @@ async def test_endpoints_and_409_guards(monkeypatch, tmp_path):
         assert e.value.status_code == 409
         _moving_channels.clear()
 
+        # An import, rename or clean-up on either channel in the folder blocks the move.
+        for held in (ids["b"], ids["a"]):
+            channel_service._working_channels.add(held)
+            with pytest.raises(HTTPException) as e:
+                await system_router.move_shared_folder_channel(body, db)
+            assert e.value.status_code == 409
+            channel_service._working_channels.clear()
+            assert ids["b"] not in _moving_channels  # a refused move releases its claim
+
         b1 = await db.get(Video, 4)  # first video of channel b
         assert b1.channel_id == ids["b"]
         b1.status = "downloading"

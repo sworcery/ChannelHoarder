@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -66,6 +67,118 @@ _scanning_channels: set[int] = set()
 
 # Channels whose files are being moved. Scans, RSS checks and downloads leave them alone.
 _moving_channels: set[int] = set()
+
+# True while a Move All runs. Two moves of the same files at once could race between one
+# task's finished copy and the other's equal-size replace, so they're refused.
+_move_all_running = False
+
+
+# Channels with a file-touching operation in flight (renumber, rename, import, delete...).
+_working_channels: set[int] = set()
+
+
+def set_move_all_running(value: bool) -> None:
+    global _move_all_running
+    _move_all_running = value
+
+
+def _flag_reason(channel_id: int, from_move_all: bool = False) -> str | None:
+    """Busy reason from the in-memory flags alone (no await, so it can be claimed atomically)."""
+    if _move_all_running and not from_move_all:
+        return "Move All is running; try again when it finishes"
+    if channel_id in _moving_channels:
+        return "A move of this channel's files is running; try again when it finishes"
+    if channel_id in _scanning_channels:
+        return "A scan of this channel is running; try again when it finishes"
+    if channel_id in _working_channels:
+        return "Another operation on this channel is running; try again when it finishes"
+    return None
+
+
+async def _download_reason(
+    db: AsyncSession, channel_id: int, video_ids: list[int] | None = None,
+) -> str | None:
+    """A running download in the channel, or only among ``video_ids`` (row ids) when given:
+    an operation on a few videos shouldn't wait for an unrelated download to finish."""
+    from app.services.download_service import _active_downloads
+
+    query = select(Video.video_id, Video.status).where(
+        Video.channel_id == channel_id,
+        or_(Video.status == "downloading", Video.video_id.in_(list(_active_downloads) or [""])),
+    )
+    if video_ids is not None:
+        query = query.where(Video.id.in_(video_ids))
+    rows = (await db.execute(query.limit(1))).all()
+    if rows:
+        if video_ids is not None:
+            return "That video is downloading; try again when it finishes"
+        return "This channel has a download running; try again when it finishes"
+    return None
+
+
+def _claim_set(kind: str) -> set[int]:
+    return {"move": _moving_channels, "scan": _scanning_channels, "work": _working_channels}[kind]
+
+
+async def try_claim(
+    db: AsyncSession, channel_id: int, kind: str, from_move_all: bool = False,
+    video_ids: list[int] | None = None,
+) -> str | None:
+    """Claim a channel for an operation: None on success, else the busy reason.
+
+    The flags are checked and the claim added with no await in between, so two
+    concurrent requests can't both pass. The download check runs after the claim
+    (ignoring it); on busy the claim is released. kind: "move", "scan" or "work".
+    video_ids: the operation touches only these videos (row ids), so only their
+    downloads count. The caller must release_claim() when the operation ends.
+    """
+    reason = _flag_reason(channel_id, from_move_all)
+    if reason:
+        return reason
+    claim = _claim_set(kind)
+    claim.add(channel_id)
+    try:
+        reason = await _download_reason(db, channel_id, video_ids)
+    except BaseException:
+        claim.discard(channel_id)
+        raise
+    if reason:
+        claim.discard(channel_id)
+    return reason
+
+
+def release_claim(channel_id: int, kind: str) -> None:
+    _claim_set(kind).discard(channel_id)
+
+
+@asynccontextmanager
+async def claim_channel(
+    db: AsyncSession, channel_id: int, kind: str = "work", video_ids: list[int] | None = None,
+):
+    """Hold a channel's claim for the whole operation; 409 when it is busy."""
+    from fastapi import HTTPException
+
+    reason = await try_claim(db, channel_id, kind, video_ids=video_ids)
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
+    try:
+        yield
+    finally:
+        release_claim(channel_id, kind)
+
+
+async def channel_busy(
+    db: AsyncSession, channel_id: int, from_move_all: bool = False,
+) -> str | None:
+    """Short user-facing reason a channel's files must not be touched now, or None.
+
+    Busy means: being moved (alone or by Move All), being scanned, working, or downloading.
+    from_move_all: the caller is the Move All task itself, so its own flag doesn't count.
+    """
+    reason = _flag_reason(channel_id, from_move_all)
+    if reason:
+        return reason
+    return await _download_reason(db, channel_id)
 
 
 async def other_recorded(db: AsyncSession, channel_id: int) -> tuple[set[str], set[str]]:
@@ -427,8 +540,8 @@ class ChannelService:
         if channel.id in _scanning_channels:
             logger.info("Skipping scan for %s - already in progress", channel.channel_name)
             return 0
-        if channel.id in _moving_channels:
-            logger.info("Skipping scan for %s - its files are being moved", channel.channel_name)
+        if channel.id in _moving_channels or channel.id in _working_channels:
+            logger.info("Skipping scan for %s - its files are being moved or changed", channel.channel_name)
             return 0
         _scanning_channels.add(channel.id)
         try:

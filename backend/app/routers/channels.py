@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -21,8 +22,10 @@ from app.schemas import (
     ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
 from app.services.channel_service import (
-    ChannelService, SHORTS_MAX_DURATION, _moving_channels, _scanning_channels, other_recorded,
+    ChannelService, SHORTS_MAX_DURATION, _moving_channels, other_recorded,
+    claim_channel, release_claim, set_move_all_running, try_claim,
 )
+from app.services import channel_service as _channel_service
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -199,12 +202,25 @@ async def update_channel(
     return channel
 
 
+def _claim(db: AsyncSession, channel_id: int, when: bool = True, video_ids: list[int] | None = None):
+    """Hold the channel's claim for the whole operation (409 if busy); no-op when `when` is false.
+
+    video_ids: the operation touches only these videos, so only their downloads block it.
+    """
+    return claim_channel(db, channel_id, "work", video_ids) if when else nullcontext()
+
+
 @router.delete("/{channel_id}", status_code=204)
 async def delete_channel(
     channel_id: int,
     delete_files: bool = Query(False),
     db: AsyncSession = Depends(get_db),
 ):
+    async with _claim(db, channel_id, delete_files):
+        await _delete_channel(channel_id, delete_files, db)
+
+
+async def _delete_channel(channel_id: int, delete_files: bool, db: AsyncSession):
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
@@ -362,6 +378,11 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
 @router.post("/{channel_id}/renumber/confirm", status_code=200)
 async def renumber_confirm(channel_id: int, db: AsyncSession = Depends(get_db)):
     """Apply episode renumbering and rename files on disk."""
+    async with _claim(db, channel_id):
+        return await _renumber_confirm(channel_id, db)
+
+
+async def _renumber_confirm(channel_id: int, db: AsyncSession):
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
@@ -445,10 +466,9 @@ async def repair_dates_confirm(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    if channel_id in _scanning_channels:
-        raise HTTPException(status_code=409, detail="A scan is running for this channel. Try again when it finishes.")
-
-    _scanning_channels.add(channel_id)
+    reason = await try_claim(db, channel_id, "scan")
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
     try:
         # A duplicate video_id in the payload is applied once.
         seen_ids: set[int] = set()
@@ -531,7 +551,7 @@ async def repair_dates_confirm(
             "renamed": renamed,
         }
     finally:
-        _scanning_channels.discard(channel_id)
+        release_claim(channel_id, "scan")
 
 
 @router.post("/{channel_id}/scan", status_code=202)
@@ -720,6 +740,11 @@ async def bulk_delete_videos(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete selected videos. Optionally removes files from disk."""
+    async with _claim(db, channel_id, body.delete_files, video_ids=body.video_ids):
+        return await _bulk_delete_videos(channel_id, body, db)
+
+
+async def _bulk_delete_videos(channel_id: int, body: BulkDeleteRequest, db: AsyncSession):
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -765,6 +790,11 @@ async def delete_video(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a single video. Optionally removes files from disk."""
+    async with _claim(db, channel_id, delete_files, video_ids=[video_id]):
+        return await _delete_video(channel_id, video_id, delete_files, db)
+
+
+async def _delete_video(channel_id: int, video_id: int, delete_files: bool, db: AsyncSession):
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -829,6 +859,11 @@ async def delete_video_file(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete file from disk but keep the video record as pending."""
+    async with _claim(db, channel_id, video_ids=[video_id]):
+        return await _delete_video_file(channel_id, video_id, db)
+
+
+async def _delete_video_file(channel_id: int, video_id: int, db: AsyncSession):
     result = await db.execute(
         select(Video).where(Video.id == video_id, Video.channel_id == channel_id)
     )
@@ -856,6 +891,11 @@ async def rename_video_file(
     db: AsyncSession = Depends(get_db),
 ):
     """Rename video file on disk based on current naming template."""
+    async with _claim(db, channel_id, video_ids=[video_id]):
+        return await _rename_video_file(channel_id, video_id, db)
+
+
+async def _rename_video_file(channel_id: int, video_id: int, db: AsyncSession):
     from app.services.naming_service import build_output_path
 
     result = await db.execute(
@@ -1059,6 +1099,11 @@ async def bulk_rename_videos(
     db: AsyncSession = Depends(get_db),
 ):
     """Rename selected videos' files on disk to match the current naming template."""
+    async with _claim(db, channel_id):
+        return await _bulk_rename_videos(channel_id, body, db)
+
+
+async def _bulk_rename_videos(channel_id: int, body: BulkRenameRequest, db: AsyncSession):
     from app.services.naming_service import build_output_path
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -1606,11 +1651,6 @@ def _failure_message(errors: list[str]) -> str:
     return f"{len(errors)} errors, first: " + "; ".join(errors[:3])
 
 
-# Moves in flight. Two moves of the same files at once could race between one
-# task's finished copy and the other's equal-size replace, so they're refused.
-_move_all_running = False
-
-
 async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
     """Background task to move a channel's files using DB file_path as source of truth."""
     try:
@@ -1701,16 +1741,19 @@ async def move_channel_files(
     if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
         return {"message": f"'{channel.channel_name}' is already in {body.new_download_dir}"}
 
-    if channel_id in _moving_channels or _move_all_running:
-        raise HTTPException(status_code=409, detail="A move of this channel's files is already running")
-
-    # Count files to decide sync vs async
-    file_count = await db.scalar(
-        select(func.count(Video.id)).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
-    ) or 0
+    # The claim goes in _moving_channels; the background task releases it when it ends.
+    reason = await try_claim(db, channel_id, "move")
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
+    try:
+        file_count = await db.scalar(
+            select(func.count(Video.id)).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
+        ) or 0
+    except BaseException:
+        release_claim(channel_id, "move")
+        raise
 
     # Do NOT update channel.download_dir here - the background task handles it after move completes
-    _moving_channels.add(channel_id)
     asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir, old_dir))
 
     return {"message": f"Moving '{channel.channel_name}' to {body.new_download_dir} ({file_count} files)"}
@@ -1718,11 +1761,10 @@ async def move_channel_files(
 
 async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
     """Background task to move all channels."""
-    global _move_all_running
     try:
         await _move_all_task_inner(new_dir, old_dirs)
     finally:
-        _move_all_running = False
+        set_move_all_running(False)
 
 
 async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
@@ -1739,6 +1781,7 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
         channels_moved = 0
         channels_failed = 0
         renamed: list[str] = []
+        skipped: list[str] = []
 
         # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
         infos = [(c.id, c.channel_name, c.download_dir, channel_folder_name(c)) for c in channels]
@@ -1748,7 +1791,13 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
             if _same_channel_folder(cfolder, old_dir, new_dir):
                 continue
 
+            claimed = False
             try:
+                reason = await try_claim(db, cid, "move", from_move_all=True)
+                if reason:
+                    skipped.append(f"'{cname}': {reason}")
+                    continue
+                claimed = True
                 channel = await db.get(Channel, cid)
                 channel_moved, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
                 if not errors:
@@ -1764,6 +1813,9 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
                     await db.rollback()  # else every later channel fails with PendingRollbackError
                 except Exception:
                     pass
+            finally:
+                if claimed:
+                    release_claim(cid, "move")
             total_moved += channel_moved
             total_left += left
             if errors:
@@ -1785,8 +1837,12 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
                 extra += ("; folders already in use there were renamed: " + ", ".join(renamed))
             message = f"Moved {channels_moved} channels to {new_dir} ({total_moved} files{extra})"
             logger.info("Move all complete: %d channels, %d files moved", channels_moved, total_moved)
+        if skipped:
+            message += f". Skipped {len(skipped)} busy channels: " + "; ".join(skipped)
+        # A skipped channel is a warning, not plain success, so it shows as a failure toast.
         await NotificationService.broadcast(
-            "move_complete", {"message": message, "failed": bool(all_errors)}
+            "move_complete",
+            {"message": message, "failed": bool(all_errors or skipped), "skipped": skipped},
         )
 
 
@@ -1802,17 +1858,21 @@ async def move_all_channels(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    global _move_all_running
-    if _move_all_running or _moving_channels:
+    if _channel_service._move_all_running or _moving_channels:
         raise HTTPException(status_code=409, detail="A move is already running; wait for it to finish")
-
-    # Capture all old directories BEFORE any changes
-    result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
-    channels = result.scalars().all()
-    old_dirs = {ch.id: (ch.download_dir or settings.DOWNLOAD_DIR) for ch in channels}
-
-    _move_all_running = True
-    asyncio.create_task(_move_all_task(body.new_download_dir, old_dirs))
+    # Set right after the check, with no await between, so a double-click can't start two.
+    set_move_all_running(True)
+    started = False
+    try:
+        # Capture all old directories BEFORE any changes
+        result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
+        channels = result.scalars().all()
+        old_dirs = {ch.id: (ch.download_dir or settings.DOWNLOAD_DIR) for ch in channels}
+        asyncio.create_task(_move_all_task(body.new_download_dir, old_dirs))
+        started = True
+    finally:
+        if not started:
+            set_move_all_running(False)
 
     return {"message": f"Moving all channels to {body.new_download_dir}"}
 
@@ -1875,6 +1935,11 @@ async def delete_channel_shorts(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all downloaded shorts for a channel (removes files and marks as skipped)."""
+    async with _claim(db, channel_id):
+        return await _delete_channel_shorts(channel_id, db)
+
+
+async def _delete_channel_shorts(channel_id: int, db: AsyncSession):
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -2006,6 +2071,11 @@ async def detect_clean_shorts_confirm(
     db: AsyncSession = Depends(get_db),
 ):
     """Detect shorts, delete their files, mark as skipped, and renumber remaining episodes."""
+    async with _claim(db, channel_id):
+        return await _detect_clean_shorts_confirm(channel_id, db)
+
+
+async def _detect_clean_shorts_confirm(channel_id: int, db: AsyncSession):
     from app.services.naming_service import build_output_path
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -2112,6 +2182,11 @@ async def delete_channel_livestreams(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all downloaded livestreams for a channel."""
+    async with _claim(db, channel_id):
+        return await _delete_channel_livestreams(channel_id, db)
+
+
+async def _delete_channel_livestreams(channel_id: int, db: AsyncSession):
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
@@ -2184,15 +2259,14 @@ async def force_rescan(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    if channel_id in _scanning_channels:
-        raise HTTPException(status_code=409, detail="A scan is running for this channel. Try again when it finishes.")
-
     # Held for the whole run so scheduled and RSS scans skip this channel
-    _scanning_channels.add(channel_id)
+    reason = await try_claim(db, channel_id, "scan")
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
     try:
         return await _force_rescan_locked(channel, db)
     finally:
-        _scanning_channels.discard(channel_id)
+        release_claim(channel_id, "scan")
 
 
 async def _number_rebuilt_rows(db: AsyncSession, channel_id: int, kept_ids: set[int]) -> None:
@@ -2367,6 +2441,11 @@ async def confirm_import(
     db: AsyncSession = Depends(get_db),
 ):
     """Import confirmed file matches: move, rename, write metadata, update DB."""
+    async with _claim(db, channel_id):
+        return await _confirm_import(channel_id, body, db)
+
+
+async def _confirm_import(channel_id: int, body: ImportConfirmRequest, db: AsyncSession):
     from app.utils.file_utils import validate_download_path
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))

@@ -358,13 +358,14 @@ class SharedFolderMoveRequest(BaseModel):
 async def move_shared_folder_channel(body: SharedFolderMoveRequest, db: AsyncSession = Depends(get_db)):
     """Move one channel out of a shared folder into its own, in the background."""
     from app.services import shared_folder_service as sfs
-    from app.services.channel_service import _moving_channels
+    from app.services.channel_service import release_claim, try_claim
 
-    if body.channel_id in _moving_channels:
-        raise HTTPException(status_code=409, detail="A move of this channel is already running")
-    # Claim the channel before the checks, so no download can start for it while they
-    # run; released by move_task, or right here if the move doesn't start.
-    _moving_channels.add(body.channel_id)
+    # Claim the channel before the checks (refused if it's being moved, scanned, worked
+    # on or downloading), so nothing else can start on it while they run; released by
+    # move_task, or right here if the move doesn't start.
+    reason = await try_claim(db, body.channel_id, "move")
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
     started = False
     try:
         group = await sfs.group_of(db, body.channel_id)
@@ -379,7 +380,7 @@ async def move_shared_folder_channel(body: SharedFolderMoveRequest, db: AsyncSes
         started = True
     finally:
         if not started:
-            _moving_channels.discard(body.channel_id)
+            release_claim(body.channel_id, "move")
     return {"message": f"Moving '{channel.channel_name}' to '{new_folder}'"}
 
 

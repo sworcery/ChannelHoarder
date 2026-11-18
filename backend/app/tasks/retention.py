@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.database import async_session
 from app.models import Channel, Video
-from app.services.channel_service import ChannelService
+from app.services.channel_service import ChannelService, release_claim, try_claim
 from app.utils.file_utils import delete_video_files
 
 logger = logging.getLogger(__name__)
@@ -55,40 +55,52 @@ async def _apply_to_channel(channel_id: int) -> None:
         )).scalar_one_or_none()
         if not channel or not channel.retention_days:
             return
-        days = channel.retention_days
-        name = channel.channel_name
-
-        videos = (await db.execute(
-            select(Video).where(*expired_videos_filter(channel_id, days))
-        )).scalars().all()
-        if not videos:
+        busy = await try_claim(db, channel_id, "work")
+        if busy:
+            logger.info("Retention: skipping channel %s this run (%s)", channel.channel_name, busy)
             return
+        try:
+            await _apply_expired(db, channel)
+        finally:
+            release_claim(channel_id, "work")
 
-        service = ChannelService(db)
-        removed = 0
-        missing = 0
-        for video in videos:
-            # A cleared setting stops the run
-            await db.refresh(channel)
-            if not channel.retention_days:
-                break
-            path = video.file_path
-            # A missing file may just be an unmounted share; leave the row alone
-            # rather than forget a file that comes back later
-            if not await asyncio.to_thread(os.path.exists, path):
-                missing += 1
-                continue
-            await asyncio.to_thread(delete_video_files, path)
-            if await asyncio.to_thread(os.path.exists, path):
-                logger.error("Retention: could not delete %s; leaving video %s as completed",
-                             path, video.video_id)
-                continue
-            await service._auto_delete_video_files(video)
-            video.retention_removed_at = datetime.now(timezone.utc).replace(tzinfo=None)
-            await db.commit()  # release the write lock between deletions
-            removed += 1
-        logger.info("Retention: removed %d video(s) older than %d days for channel %s",
-                    removed, days, name)
-        if missing:
-            logger.info("Retention: %d expired video(s) for channel %s have no file on disk; left as-is",
-                        missing, name)
+
+async def _apply_expired(db, channel: Channel) -> None:
+    channel_id = channel.id
+    days = channel.retention_days
+    name = channel.channel_name
+
+    videos = (await db.execute(
+        select(Video).where(*expired_videos_filter(channel_id, days))
+    )).scalars().all()
+    if not videos:
+        return
+
+    service = ChannelService(db)
+    removed = 0
+    missing = 0
+    for video in videos:
+        # A cleared setting stops the run
+        await db.refresh(channel)
+        if not channel.retention_days:
+            break
+        path = video.file_path
+        # A missing file may just be an unmounted share; leave the row alone
+        # rather than forget a file that comes back later
+        if not await asyncio.to_thread(os.path.exists, path):
+            missing += 1
+            continue
+        await asyncio.to_thread(delete_video_files, path)
+        if await asyncio.to_thread(os.path.exists, path):
+            logger.error("Retention: could not delete %s; leaving video %s as completed",
+                         path, video.video_id)
+            continue
+        await service._auto_delete_video_files(video)
+        video.retention_removed_at = datetime.now(timezone.utc).replace(tzinfo=None)
+        await db.commit()  # release the write lock between deletions
+        removed += 1
+    logger.info("Retention: removed %d video(s) older than %d days for channel %s",
+                removed, days, name)
+    if missing:
+        logger.info("Retention: %d expired video(s) for channel %s have no file on disk; left as-is",
+                    missing, name)

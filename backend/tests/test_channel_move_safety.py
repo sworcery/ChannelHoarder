@@ -383,6 +383,7 @@ async def test_second_move_of_same_channel_is_refused(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(root))
     monkeypatch.setattr(settings, "EXTRA_DOWNLOAD_DIRS", str(tmp_path))
     monkeypatch.setattr(channels_router, "_moving_channels", {cid})
+    monkeypatch.setattr("app.services.channel_service._moving_channels", {cid})
     async with maker() as db:
         with pytest.raises(HTTPException) as ei:
             await channels_router.move_channel_files(

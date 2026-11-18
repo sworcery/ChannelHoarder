@@ -73,13 +73,19 @@ async def busy_reason(
     claimed: the caller has already put this channel in _moving_channels itself
     (after checking it wasn't there), so its own entry doesn't count as busy.
     """
-    from app.routers import channels as ch
+    from app.services import channel_service as cs
     from app.services.download_service import _active_downloads
 
-    if (channel_id in _moving_channels and not claimed) or ch._move_all_running:
+    if (channel_id in _moving_channels and not claimed) or cs._move_all_running:
         return "A move of this channel's files is already running"
     if any(c["id"] in _scanning_channels for c in group["channels"]):
         return "A scan of one of these channels is running; try again when it finishes"
+    # Another channel in the folder being renamed, imported, cleaned or moved could
+    # place files the move would misread as untracked.
+    if any(c["id"] in cs._working_channels
+           or (c["id"] != channel_id and c["id"] in _moving_channels)
+           for c in group["channels"]):
+        return "Another operation on one of these channels is running; try again when it finishes"
     rows = (await db.execute(
         select(Video.video_id, Video.status).where(Video.channel_id == channel_id)
     )).all()

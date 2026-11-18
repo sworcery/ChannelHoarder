@@ -11,7 +11,9 @@ from sqlalchemy import select
 
 from app.database import async_session
 from app.models import Channel, Video
-from app.services.channel_service import ChannelService, _moving_channels, _scanning_channels
+from app.services.channel_service import (
+    ChannelService, _moving_channels, _scanning_channels, _working_channels,
+)
 from app.services.settings_service import get_setting
 from app.services.ytdlp_service import YtdlpService
 from app.utils.platform_utils import is_playlist_url, supports_rss
@@ -141,7 +143,7 @@ async def rss_check_tick():
     due = sorted((c for c in channels if _next_check[c[0]] <= now), key=lambda c: _next_check[c[0]])
     fetched = 0
     for pk, feed_id, name, url, _platform in due:
-        if pk in _scanning_channels or pk in _moving_channels:
+        if pk in _scanning_channels or pk in _moving_channels or pk in _working_channels:
             continue  # a scan is reading this channel / its files are moving; check it next tick
         if fetched:
             await _pause_between_feeds()
@@ -175,7 +177,7 @@ async def rss_check_tick():
         new_ids = [v for v in feed if v not in known and v not in _handled.get(pk, {})]
         if not new_ids:
             continue
-        if pk in _scanning_channels or pk in _moving_channels:
+        if pk in _scanning_channels or pk in _moving_channels or pk in _working_channels:
             _next_check[pk] = _now()  # a scan started meanwhile; look again next tick
             continue
         logger.info("RSS check: %d new video(s) in feed for %s, scanning", len(new_ids), name)
