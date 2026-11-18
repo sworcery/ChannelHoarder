@@ -13,7 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import AppSetting, Channel, Video, DownloadQueue
 from app.schemas import ChannelCreate
-from app.services.import_service import scan_folder_for_imports, import_matched_files
+from app.services.import_service import (
+    import_matched_files, load_owned_paths, scan_folder_for_imports,
+)
 from app.services.metadata_service import write_tvshow_nfo
 from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
@@ -1307,10 +1309,12 @@ class ChannelService:
         dirs_to_scan = [channel_dir] + [d for d in channel_dir.iterdir() if d.is_dir()]
 
         total_imported = 0
+        owned_paths = await load_owned_paths(self.db)
         for scan_dir in dirs_to_scan:
             try:
                 matches = await scan_folder_for_imports(
                     self.db, channel.id, str(scan_dir), threshold=0.75,
+                    exact_id_only=True, owned_paths=owned_paths,
                 )
                 if matches:
                     result = await import_matched_files(

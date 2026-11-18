@@ -5,6 +5,7 @@ known videos for a channel, then moves/renames them into the proper
 directory structure and writes Plex-compatible NFO metadata.
 """
 
+import json
 import logging
 import os
 import re
@@ -20,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Channel, DownloadQueue, Video
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import sanitize_filename, validate_download_path
+from app.utils.file_utils import move_sidecar_files, sanitize_filename, validate_download_path
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +48,71 @@ def _match_score(file_title: str, video_title: str) -> float:
     return SequenceMatcher(None, a, b).ratio()
 
 
+def _exact_id_match(entry: Path, by_video_id: dict) -> "Video | None":
+    """Return the video whose id is in the file's [tag] or sibling .info.json."""
+    # The default template puts the id last, so check tags from last to first.
+    for tag in reversed(re.findall(r"\[([^\[\]]+)\]", entry.stem)):
+        if tag in by_video_id:
+            return by_video_id[tag]
+    info_path = entry.with_suffix(".info.json")
+    if info_path.is_file():
+        try:
+            with open(info_path, encoding="utf-8") as f:
+                info_id = json.load(f).get("id")
+        except (OSError, ValueError, AttributeError):
+            return None
+        if isinstance(info_id, str) and info_id in by_video_id:
+            return by_video_id[info_id]
+    return None
+
+
+# yt-dlp format streams left by an unfinished merge: .f137, .f251-drc, .f251-1,
+# .fhls-1080p, .fdash-..., plus .temp. Never adopt these as finished videos.
+_PARTIAL_STEM_RE = re.compile(r"\.(f[\w-]+|temp)$", re.IGNORECASE)
+
+
+def _file_key(path: str):
+    """(device, inode) of an existing file, so two paths to one file compare equal."""
+    try:
+        st = os.stat(path)
+        return (st.st_dev, st.st_ino)
+    except OSError:
+        return None
+
+
+def _is_partial_download(entry: Path) -> bool:
+    """yt-dlp part-files (.f137.mp4, .temp.mp4) and empty files are never real videos."""
+    if _PARTIAL_STEM_RE.search(entry.stem):
+        return True
+    try:
+        return entry.stat().st_size == 0
+    except OSError:
+        return True
+
+
+async def load_owned_paths(db: AsyncSession) -> set[str]:
+    """Every file path recorded on any video (any status, any channel), normalized."""
+    paths = await db.execute(select(Video.file_path).where(Video.file_path.is_not(None)))
+    return {os.path.normpath(p) for p in paths.scalars().all() if p}
+
+
 async def scan_folder_for_imports(
     db: AsyncSession,
     channel_id: int,
     folder_path: str,
     threshold: float = 0.75,
+    exact_id_only: bool = False,
+    owned_paths: set[str] | None = None,
 ) -> list[dict]:
     """Scan a folder and match files against un-downloaded videos for a channel.
 
     Returns a list of match dicts: {file_path, file_name, file_size, matched_video_id,
     video_title, match_confidence, season, episode}.
+
+    With exact_id_only (the automatic path, no user review) a file matches only
+    when its [video_id] tag or sibling .info.json id equals the video's id, and
+    files already recorded as any video's file_path are skipped (in both modes).
+    owned_paths lets a caller scanning many folders load that set once.
     """
     channel = await db.get(Channel, channel_id)
     if not channel:
@@ -77,6 +133,15 @@ async def scan_folder_for_imports(
     if not videos:
         return []
 
+    owned = owned_paths if owned_paths is not None else await load_owned_paths(db)
+    by_video_id: dict[str, Video] = {}
+    exact_candidates: dict[int, list[tuple[Path, Video]]] = {}
+    effective_template = None
+    if exact_id_only:
+        by_video_id = {v.video_id: v for v in videos if v.video_id}
+        from app.services.naming_service import resolve_naming_template
+        effective_template = await resolve_naming_template(db, channel.naming_template)
+
     # Scan folder for video files
     matches = []
     for entry in folder.iterdir():
@@ -87,6 +152,17 @@ async def scan_folder_for_imports(
             continue
 
         file_title = entry.stem  # filename without extension
+
+        if os.path.normpath(str(entry)) in owned:
+            continue
+
+        if exact_id_only:
+            if _is_partial_download(entry):
+                continue
+            exact = _exact_id_match(entry, by_video_id)
+            if exact:
+                exact_candidates.setdefault(exact.id, []).append((entry, exact))
+            continue
 
         best_match = None
         best_score = 0.0
@@ -109,6 +185,39 @@ async def scan_folder_for_imports(
                 "season": best_match.season,
                 "episode": best_match.episode,
             })
+
+    # Exact mode: at most one file per video, preferring the one already at its target.
+    for candidates in exact_candidates.values():
+        video = candidates[0][1]
+        target_base = build_output_path(
+            channel_name=channel.channel_name,
+            video_title=video.title,
+            video_id=video.video_id,
+            upload_date=video.upload_date,
+            season=video.season,
+            episode=video.episode,
+            naming_template=effective_template,
+            base_dir=channel.download_dir,
+        )
+        entry = min(
+            (e for e, _ in candidates),
+            key=lambda e: (
+                os.path.normpath(os.path.splitext(str(e))[0]) != os.path.normpath(target_base),
+                e.name,
+            ),
+        )
+        matches.append({
+            "file_path": str(entry),
+            "file_name": entry.name,
+            "file_size": entry.stat().st_size,
+            "matched_video_id": video.id,
+            "video_db_id": video.id,
+            "video_youtube_id": video.video_id,
+            "video_title": video.title,
+            "match_confidence": 100.0,
+            "season": video.season,
+            "episode": video.episode,
+        })
 
     # Sort by confidence descending
     matches.sort(key=lambda m: m["match_confidence"], reverse=True)
@@ -136,6 +245,10 @@ async def import_matched_files(
     from app.services.naming_service import resolve_naming_template
     effective_template = await resolve_naming_template(db, channel.naming_template)
 
+    rows = await db.execute(select(Video.id, Video.file_path).where(Video.file_path.is_not(None)))
+    owned = {os.path.normpath(p): vid for vid, p in rows.all() if p}
+    owned_by_key: dict | None = None  # built on first use: stats every owned file once
+
     for match in matches:
         file_path = match["file_path"]
         video_id = match["matched_video_id"]
@@ -152,9 +265,37 @@ async def import_matched_files(
                 errors.append(f"Video {video_id} doesn't belong to channel {channel_id}")
                 continue
 
+            if video.status in ("downloading", "completed"):
+                errors.append(f"Video {video_id} is {video.status}, not importing")
+                continue
+
             src = Path(file_path)
             if not src.exists():
                 errors.append(f"File not found: {file_path}")
+                continue
+
+            # Never take a file another video already records as its own, including
+            # when it is reached through another path (a second mount of the share).
+            owner = owned.get(os.path.normpath(file_path))
+            if owner is None:
+                if owned_by_key is None:
+                    owned_by_key = {}
+                    for p, vid in owned.items():
+                        key = _file_key(p)
+                        if key is not None:
+                            owned_by_key[key] = vid
+                owner = owned_by_key.get(_file_key(file_path))
+            if owner is not None and owner != video.id:
+                errors.append(
+                    f"{os.path.basename(file_path)} already belongs to another video"
+                )
+                continue
+
+            # A video that still has its own file (e.g. queued for a quality upgrade)
+            # never adopts a different file in its place.
+            if (video.file_path and os.path.exists(video.file_path)
+                    and not os.path.samefile(video.file_path, src)):
+                errors.append(f"Video {video_id} already has a file; not importing another")
                 continue
 
             ext = src.suffix
@@ -175,8 +316,37 @@ async def import_matched_files(
             # Create target directory
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
 
-            # Move the file
-            shutil.move(str(src), target_path)
+            # Never overwrite an existing file (it may belong to another video):
+            # the target name, any other video extension with the same stem, or its .nfo.
+            src_base = os.path.splitext(str(src))[0]
+            blockers = [target_path] + [target_base + e for e in sorted(VIDEO_EXTENSIONS)]
+            nfo = target_base + ".nfo"
+            if os.path.exists(nfo) and not (
+                os.path.exists(src_base + ".nfo") and os.path.samefile(nfo, src_base + ".nfo")
+            ):
+                blockers.append(nfo)
+            clash = next(
+                (b for b in blockers
+                 if os.path.exists(b) and not os.path.samefile(src, b)),
+                None,
+            )
+            if clash:
+                logger.warning(
+                    "Import skipped: %s already exists (source %s)", clash, file_path,
+                )
+                errors.append(
+                    f"Target already exists, not overwriting: {os.path.basename(clash)}"
+                )
+                continue
+
+            # Move the file (no-op when it already sits at the target), then its
+            # sidecars (info.json, thumbnail, subtitles) without overwriting.
+            if not os.path.exists(target_path):
+                shutil.move(str(src), target_path)
+                # Sidecars are found by name, so skip them while another video file
+                # with the same name stays behind: they may be that video's.
+                if not any(os.path.exists(src_base + e) for e in VIDEO_EXTENSIONS):
+                    move_sidecar_files(str(src), target_path, overwrite=False)
             logger.info("Imported %s -> %s", file_path, target_path)
 
             # Write episode NFO
@@ -215,6 +385,7 @@ async def import_matched_files(
             # is the best available assumption for a pre-existing file.
             video.status = "completed"
             video.file_path = target_path
+            owned[os.path.normpath(target_path)] = video.id
             video.file_size = os.path.getsize(target_path)
             video.quality_downloaded = channel.quality
             video.downloaded_at = datetime.now(timezone.utc)
