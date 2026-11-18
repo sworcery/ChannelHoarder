@@ -83,6 +83,34 @@ def _entry(vid):
     return {"id": vid, "title": f"Video {vid}", "upload_date": "20260901", "duration": 600}
 
 
+async def test_scheduled_scan_keeps_the_recorded_failure(monkeypatch, tmp_path):
+    # The scheduler must not overwrite "unhealthy" with its generic "warning".
+    from app.tasks import scan_channels
+
+    eng, maker = await _maker()
+    try:
+        async with maker() as db:
+            ch = await _seed(db, tmp_path)
+            ch.next_scan_at = None  # due now
+            await db.commit()
+            cid = ch.id
+        _listing(monkeypatch, ChannelListingError("videos tab: HTTP 403"))
+        monkeypatch.setattr(scan_channels, "async_session", maker)
+
+        async def no_jitter(db):
+            return False, 0
+
+        monkeypatch.setattr(scan_channels, "_get_jitter_settings", no_jitter)
+        await scan_channels.scan_due_channels()
+        async with maker() as db:
+            ch = await db.get(Channel, cid)
+            assert ch.health_status == "unhealthy"
+            assert ch.last_error_code == "SCAN_FAILED"
+            assert ch.next_scan_at is not None
+    finally:
+        await eng.dispose()
+
+
 async def test_extraction_failure_marks_scan_failed(monkeypatch, tmp_path):
     eng, maker = await _maker()
     try:

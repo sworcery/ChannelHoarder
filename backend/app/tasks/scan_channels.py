@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 
 from app.database import async_session
 from app.models import AppSetting, Channel
-from app.services.channel_service import ChannelService
+from app.services.channel_service import ChannelService, ScanFailed
 from app.services.notification_service import NotificationService
 
 from app.services.settings_service import get_setting
@@ -91,6 +91,10 @@ async def scan_due_channels():
                 total_new += new_count
                 if new_count > 0:
                     logger.info("Found %d new videos for %s", new_count, channel_name)
+        except ScanFailed as e:
+            # The scan already recorded the failure (unhealthy, SCAN_FAILED, next scan
+            # time, one notification); don't overwrite it with the generic handling.
+            logger.warning("Scan failed for %s: %s", channel_name, e)
         except Exception as e:
             logger.error("Scan failed for %s: %s", channel_name, e)
             try:
