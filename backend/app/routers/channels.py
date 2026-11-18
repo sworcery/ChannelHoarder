@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.deps import get_db
 from app.utils.file_utils import (
-    channel_folder_name, delete_video_files, escape_like, has_kept_file, move_video_files,
+    channel_folder_name, delete_video_files, escape_like, file_keys, has_kept_file, move_video_files,
 )
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
@@ -22,7 +22,7 @@ from app.schemas import (
     ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
 from app.services.channel_service import (
-    ChannelService, SHORTS_MAX_DURATION, _moving_channels, other_recorded,
+    ChannelService, SHORTS_MAX_DURATION, _moving_channels, other_recorded, is_short,
     claim_channel, release_claim, set_move_all_running, try_claim,
 )
 from app.services import channel_service as _channel_service
@@ -1974,7 +1974,7 @@ async def detect_channel_shorts(
 
     detected = 0
     for video in videos:
-        if _is_likely_short(video, threshold):
+        if _is_likely_short(video, channel.platform):
             video.is_short = True
             detected += 1
 
@@ -1982,19 +1982,10 @@ async def detect_channel_shorts(
     return {"message": f"Detected {detected} shorts (threshold: {threshold}s)", "detected": detected, "threshold": threshold}
 
 
-def _is_likely_short(video, threshold: int) -> bool:
-    """Check if a video is likely a YouTube Short using multiple signals."""
-    # Duration check (if we have it)
-    if video.duration and video.duration <= threshold:
-        return True
-
-    # Title contains #shorts or (Short) pattern
-    if video.title:
-        title_lower = video.title.lower()
-        if "#shorts" in title_lower or "#short" in title_lower:
-            return True
-
-    return False
+def _is_likely_short(video, platform: str) -> bool:
+    """Same rule as the scan (channel_service.is_short), so this never flags
+    a video the scan would call regular."""
+    return is_short(platform, video.source_url, video.title, video.duration)
 
 
 @router.post("/{channel_id}/shorts/detect-clean/preview")
@@ -2022,7 +2013,7 @@ async def detect_clean_shorts_preview(
     files_to_delete = 0
     disk_space_freed = 0
     for video in all_non_shorts:
-        if _is_likely_short(video, threshold):
+        if _is_likely_short(video, channel.platform):
             new_shorts.append({
                 "video_id": video.id,
                 "title": video.title,
@@ -2042,12 +2033,31 @@ async def detect_clean_shorts_preview(
         .where(Video.is_short == True)
         .where(Video.status == "completed")
     )
-    existing_shorts_with_files = len(result.scalars().all())
+    existing_rows = result.scalars().all()
+    existing_shorts = [
+        {
+            "video_id": v.id,
+            "title": v.title,
+            "duration": v.duration,
+            "file_size": v.file_size or 0,
+            "matches_rule": _is_likely_short(v, channel.platform),
+            "reason": (
+                "matches the Shorts rule now" if _is_likely_short(v, channel.platform)
+                # The Shorts tab and Unmark/Mark by hand can flag what the duration
+                # and hashtag rule alone wouldn't; that isn't a mistake.
+                else "flagged earlier (Shorts tab, an older rule, or by hand)"
+            ),
+        }
+        for v in existing_rows
+    ]
+    existing_shorts_with_files = len(existing_rows)
+    disk_space_freed += sum(v.file_size or 0 for v in existing_rows)
 
     return {
         "threshold": threshold,
         "new_shorts_count": len(new_shorts),
-        "new_shorts": new_shorts[:50],  # Limit preview to 50
+        "new_shorts": new_shorts,
+        "existing_shorts": existing_shorts,
         "existing_shorts_with_files": existing_shorts_with_files,
         "files_to_delete": files_to_delete + existing_shorts_with_files,
         "disk_space_freed": disk_space_freed,
@@ -2055,17 +2065,22 @@ async def detect_clean_shorts_preview(
     }
 
 
+class DetectCleanConfirm(BaseModel):
+    video_ids: list[int] = Field(..., max_length=50000)
+
+
 @router.post("/{channel_id}/shorts/detect-clean/confirm")
 async def detect_clean_shorts_confirm(
     channel_id: int,
+    body: DetectCleanConfirm,
     db: AsyncSession = Depends(get_db),
 ):
-    """Detect shorts, delete their files, mark as skipped, and renumber remaining episodes."""
+    """Detect shorts among the previewed ids, delete only those files, mark as skipped, and renumber."""
     async with _claim(db, channel_id):
-        return await _detect_clean_shorts_confirm(channel_id, db)
+        return await _detect_clean_shorts_confirm(channel_id, db, set(body.video_ids))
 
 
-async def _detect_clean_shorts_confirm(channel_id: int, db: AsyncSession):
+async def _detect_clean_shorts_confirm(channel_id: int, db: AsyncSession, video_ids: set[int]):
     from app.services.naming_service import build_output_path
 
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
@@ -2080,23 +2095,38 @@ async def _detect_clean_shorts_confirm(channel_id: int, db: AsyncSession):
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_short == False)
+        .where(Video.id.in_(video_ids))
     )
     detected = 0
     for video in result.scalars().all():
-        if _is_likely_short(video, threshold):
+        if _is_likely_short(video, channel.platform):
             video.is_short = True
             detected += 1
+            if video.status in ("pending", "queued", "failed"):
+                # A short that hasn't downloaded yet must not download afterwards:
+                # drop its queue entry unless that download has already started.
+                entry = (await db.execute(
+                    select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+                )).scalar_one_or_none()
+                if entry is None or entry.started_at is None:
+                    if entry is not None:
+                        await db.delete(entry)
+                    video.status = "skipped"
+                    video.monitored = False
 
-    # Step 2: Delete files for all shorts (including previously detected)
+    # Step 2: Delete files only for the shorts the user was shown (ids sent back).
+    # A file another channel's video also records (an old shared folder) is kept.
+    protected, _ = await other_recorded(db, channel_id)
     result = await db.execute(
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_short == True)
         .where(Video.status == "completed")
+        .where(Video.id.in_(video_ids))
     )
     deleted = 0
     for video in result.scalars().all():
-        if video.file_path:
+        if video.file_path and not (protected and file_keys(video.file_path) & protected):
             if await asyncio.to_thread(delete_video_files, video.file_path) > 0:
                 deleted += 1
         video.status = "skipped"

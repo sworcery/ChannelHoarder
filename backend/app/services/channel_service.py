@@ -63,6 +63,27 @@ SHORTS_MAX_DURATION = 60
 # a bad listing, not a Short, so it is never tagged from the tab.
 SHORTS_TAB_MAX_DURATION = 185
 
+_SHORTS_HASHTAG_RE = re.compile(r"(?<!\w)#shorts?(?!\w)", re.IGNORECASE)
+
+
+def is_short(platform: str | None, url: str | None, title: str | None,
+             duration: int | None, from_shorts_tab: bool = False) -> bool:
+    """The one Shorts rule, used by the scan, the reclassify pass and detect & clean.
+
+    Only YouTube has Shorts. There: the Shorts tab, a /shorts/ URL, a duration of
+    60 s or less, or a #short / #shorts hashtag as a whole word (not #shortfilm).
+    Every other platform: never a short.
+    """
+    if (platform or "youtube") != "youtube":
+        return False
+    if from_shorts_tab:
+        return True
+    if url and "/shorts/" in url:
+        return True
+    if duration and duration <= SHORTS_MAX_DURATION:
+        return True
+    return bool(title and _SHORTS_HASHTAG_RE.search(title))
+
 # Track channels currently being scanned to prevent concurrent scan races
 _scanning_channels: set[int] = set()
 
@@ -931,16 +952,15 @@ class ChannelService:
 
             # Pre-detect shorts and livestreams before assigning episode numbers
             # Primary signal: YouTube channel tab (definitive)
-            is_short_entry = (source_tab == "shorts")
             is_livestream_entry = (source_tab == "streams")
+            is_short_entry = False
 
-            # Fallback heuristics for API-based or single-tab scans
-            if not is_short_entry and not is_livestream_entry:
-                if duration and duration <= SHORTS_MAX_DURATION:
-                    is_short_entry = True
-                elif title and ("#shorts" in title.lower() or "#short" in title.lower()):
-                    is_short_entry = True
-                elif live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
+            if not is_livestream_entry:
+                is_short_entry = is_short(
+                    getattr(channel, "platform", "youtube"), entry.get("source_url"),
+                    title, duration, source_tab == "shorts",
+                )
+                if not is_short_entry and live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
                     is_livestream_entry = True
 
             # Only assign episode numbers to regular videos (shorts/livestreams get 0)
@@ -1422,7 +1442,11 @@ class ChannelService:
             live_status = live_status_map.get(video.video_id)
 
             # Primary: tab source
-            should_be_short = source_tab == "shorts"
+            # URL and duration are None on purpose (see below): this pass can delete files.
+            should_be_short = is_short(
+                getattr(channel, "platform", "youtube"), None,
+                None, None, source_tab == "shorts",
+            )
             should_be_livestream = source_tab == "streams"
 
             # Secondary heuristics (only apply if not already classified by tab).
@@ -1432,7 +1456,7 @@ class ChannelService:
             # live status) - never on duration alone, which would delete legitimate
             # short-but-regular videos.
             if not should_be_short and not should_be_livestream:
-                if video.title and ("#shorts" in video.title.lower() or "#short" in video.title.lower()):
+                if is_short(getattr(channel, "platform", "youtube"), None, video.title, None):
                     should_be_short = True
                 elif live_status in ("is_live", "was_live", "is_upcoming", "post_live"):
                     should_be_livestream = True

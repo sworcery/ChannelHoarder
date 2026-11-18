@@ -797,8 +797,8 @@ function MediaManagementTab() {
       <div className="rounded-lg border bg-card p-4 space-y-3">
         <h3 className="font-semibold">YouTube Shorts</h3>
         <p className="text-sm text-muted-foreground">
-          By default, YouTube Shorts (videos under 30 seconds) are excluded from downloads. Enable this
-          to allow channels to opt-in to downloading shorts. The threshold is configurable per channel via the min duration setting.
+          By default, YouTube Shorts (videos of 60 seconds or less, or on the channel's Shorts tab) are excluded from downloads. Enable this
+          to allow channels to opt-in to downloading shorts.
         </p>
         <label className="flex items-center gap-2 cursor-pointer">
           <input

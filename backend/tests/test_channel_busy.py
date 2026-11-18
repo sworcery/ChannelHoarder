@@ -126,7 +126,7 @@ async def test_endpoints_refuse_while_busy(monkeypatch, tmp_path, kind):
             cid, channels_router.BulkDeleteRequest(video_ids=[1], delete_files=True), db))
         await _expect_409(channels_router.delete_channel_shorts(cid, db))
         await _expect_409(channels_router.delete_channel_livestreams(cid, db))
-        await _expect_409(channels_router.detect_clean_shorts_confirm(cid, db))
+        await _expect_409(channels_router.detect_clean_shorts_confirm(cid, channels_router.DetectCleanConfirm(video_ids=[]), db))
         await _expect_409(channels_router.force_rescan(cid, db))
         await _expect_409(channels_router.move_channel_files(
             cid, channels_router.MoveFilesRequest(new_download_dir=str(tmp_path / "other")), db))

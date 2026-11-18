@@ -1013,6 +1013,35 @@ export default function ChannelDetailPage() {
                 </div>
               </div>
 
+              {/* Minimum length */}
+              <div>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                  Skip videos shorter than (seconds)
+                  <HelpIcon text="Videos shorter than this are skipped. Separate from Shorts (60 seconds or less, or listed on the channel's Shorts tab). No default; leave empty to skip nothing." anchor="episode-management" />
+                </label>
+                <div className="flex gap-1 max-w-[200px]">
+                  <input
+                    type="number"
+                    value={editMinDuration ?? (channel.min_video_duration || "")}
+                    placeholder=""
+                    onChange={(e) => setEditMinDuration(e.target.value)}
+                    className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
+                    min={0}
+                  />
+                  {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
+                    <button
+                      onClick={() => {
+                        updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
+                        setEditMinDuration(null)
+                      }}
+                      className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Retention */}
               <div>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">Delete videos after (days) <HelpIcon text="Deletes the downloaded files this many days after each video was downloaded. The videos stay listed as skipped and will not download again, including after Force Rescan. Leave empty to keep videos forever." anchor="channel-management" /></label>
@@ -1231,11 +1260,11 @@ export default function ChannelDetailPage() {
                             className="rounded"
                           />
                           <span className="text-sm">Include shorts when downloading</span>
-                          <HelpIcon text={`Videos under ${channel.min_video_duration || 30} seconds.`} anchor="episode-management" />
+                          <HelpIcon text={"Videos of 60 seconds or less, or listed on the channel's Shorts tab."} anchor="episode-management" />
                         </label>
                         <p className="text-xs text-muted-foreground">
                           {channel.include_shorts
-                            ? `Shorts (videos under ${channel.min_video_duration || 30}s) will be included in downloads.`
+                            ? "Shorts (60 seconds or less, or listed on the channel's Shorts tab) will be included in downloads."
                             : "Shorts are excluded from downloads for this channel."}
                         </p>
                       </>
@@ -1244,33 +1273,6 @@ export default function ChannelDetailPage() {
                         Shorts downloading is disabled globally. Enable it in Settings to allow per-channel configuration.
                       </p>
                     )}
-                    <div>
-                      <label className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                        Shorts Threshold (seconds)
-                        <HelpIcon text="Videos shorter than this are classified as shorts. Defaults to 30." anchor="episode-management" />
-                      </label>
-                      <div className="flex gap-1 max-w-[200px]">
-                        <input
-                          type="number"
-                          value={editMinDuration ?? (channel.min_video_duration || "")}
-                          placeholder="30 (default)"
-                          onChange={(e) => setEditMinDuration(e.target.value)}
-                          className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
-                          min={0}
-                        />
-                        {editMinDuration !== null && editMinDuration !== String(channel.min_video_duration || "") && (
-                          <button
-                            onClick={() => {
-                              updateMutation.mutate({ min_video_duration: Number(editMinDuration) || null })
-                              setEditMinDuration(null)
-                            }}
-                            className="px-2 py-1.5 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                          >
-                            Save
-                          </button>
-                        )}
-                      </div>
-                    </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => detectShortsMutation.mutate()}
@@ -1958,7 +1960,7 @@ export default function ChannelDetailPage() {
             <div className="space-y-2 text-sm mb-4">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Threshold:</span>
-                <span>{detectCleanPreview.threshold}s or shorter</span>
+                <span>{detectCleanPreview.threshold}s or shorter, or listed on the Shorts tab</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">New shorts to detect:</span>
@@ -1987,6 +1989,24 @@ export default function ChannelDetailPage() {
                   ))}
                 </div>
               )}
+              {(detectCleanPreview.existing_shorts?.length ?? 0) > 0 && (
+                <>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Already-flagged shorts whose downloaded files will also be deleted. To keep one, cancel and use Unmark as Short on it first.
+                  </p>
+                  <div className="max-h-32 overflow-y-auto text-xs border rounded p-2">
+                    {detectCleanPreview.existing_shorts.map((s: any) => (
+                      <div key={s.video_id} className="py-0.5">
+                        <div className="flex justify-between">
+                          <span className="truncate mr-2">{s.title}</span>
+                          <span className="text-muted-foreground whitespace-nowrap">{s.duration ?? "?"}s</span>
+                        </div>
+                        <div className={s.matches_rule ? "text-muted-foreground" : "text-amber-600"}>{s.reason}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             <div className="flex justify-end gap-2">
               <button
@@ -1998,7 +2018,11 @@ export default function ChannelDetailPage() {
               <button
                 onClick={() => {
                   setDetectCleanOpen(false)
-                  api.detectCleanShortsConfirm(channelId).then((r) => {
+                  const ids: number[] = [
+                    ...detectCleanPreview.new_shorts.map((s: any) => s.video_id),
+                    ...(detectCleanPreview.existing_shorts ?? []).map((s: any) => s.video_id),
+                  ]
+                  api.detectCleanShortsConfirm(channelId, ids).then((r) => {
                     invalidateVideos()
                     queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
                     toast(r.message)

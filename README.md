@@ -356,7 +356,7 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 <details>
 <summary><b>Known limitations</b></summary>
 
-- **YouTube Shorts** - Videos ≤60 seconds are treated as Shorts and skipped by default (toggleable per channel)
+- **YouTube Shorts** - YouTube videos of 60 seconds or less (or on the Shorts tab) are treated as Shorts and skipped by default (toggleable per channel)
 - **Livestreams / long videos** - Videos over the max duration setting are skipped by default
 - **Geo-blocked content** - Cannot download region-restricted videos
 - **Private / deleted videos** - Automatically skipped if no longer available

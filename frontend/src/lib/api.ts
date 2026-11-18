@@ -96,8 +96,8 @@ export const api = {
     request<{ detected: number }>(`/channels/${channelId}/shorts/detect`, { method: "POST" }),
   detectCleanShortsPreview: (channelId: number) =>
     request<DetectCleanPreview>(`/channels/${channelId}/shorts/detect-clean/preview`, { method: "POST" }),
-  detectCleanShortsConfirm: (channelId: number) =>
-    request<{ message: string; detected: number; deleted: number; renamed: number; threshold: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST" }),
+  detectCleanShortsConfirm: (channelId: number, videoIds: number[]) =>
+    request<{ message: string; detected: number; deleted: number; renamed: number; threshold: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST", body: JSON.stringify({ video_ids: videoIds }) }),
 
   // Livestream management
   getChannelLivestreams: (channelId: number, status?: string) => {

@@ -7,6 +7,7 @@ class _Vid:
         self.duration = duration
         self.title = title
         self.file_size = file_size
+        self.source_url = None
 
 
 class TestIsLikelyShort:
@@ -17,21 +18,21 @@ class TestIsLikelyShort:
         assert SHORTS_MAX_DURATION == 60
 
     def test_short_by_duration(self):
-        assert _is_likely_short(_Vid(duration=45), SHORTS_MAX_DURATION) is True
+        assert _is_likely_short(_Vid(duration=45), "youtube") is True
 
     def test_at_cutoff_is_short(self):
-        assert _is_likely_short(_Vid(duration=60), SHORTS_MAX_DURATION) is True
+        assert _is_likely_short(_Vid(duration=60), "youtube") is True
 
     def test_regular_length_not_short(self):
         # A 3-minute video is not a short, regardless of a large min-duration filter.
-        assert _is_likely_short(_Vid(duration=180), SHORTS_MAX_DURATION) is False
+        assert _is_likely_short(_Vid(duration=180), "youtube") is False
 
     def test_short_by_hashtag_title(self):
-        assert _is_likely_short(_Vid(duration=300, title="Cool clip #shorts"), SHORTS_MAX_DURATION) is True
+        assert _is_likely_short(_Vid(duration=300, title="Cool clip #shorts"), "youtube") is True
 
     def test_small_file_long_duration_not_short(self):
         # The removed dead block used to (never) trigger here; a small long video is not a short.
-        assert _is_likely_short(_Vid(duration=600, file_size=5 * 1024 * 1024), SHORTS_MAX_DURATION) is False
+        assert _is_likely_short(_Vid(duration=600, file_size=5 * 1024 * 1024), "youtube") is False
 
     def test_unknown_duration_no_signals_not_short(self):
-        assert _is_likely_short(_Vid(duration=None, title="Regular video"), SHORTS_MAX_DURATION) is False
+        assert _is_likely_short(_Vid(duration=None, title="Regular video"), "youtube") is False
