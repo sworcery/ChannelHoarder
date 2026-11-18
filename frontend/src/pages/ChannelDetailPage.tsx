@@ -403,6 +403,13 @@ export default function ChannelDetailPage() {
                   </span>
                 )}
                 <Circle className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                  channel.enabled
+                    ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                    : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                }`}>
+                  {!channel.enabled ? "Not scanned automatically" : channel.auto_download ? "Scanning, auto-download" : "Scanning, manual queue"}
+                </span>
               </div>
               <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5">
                 {channel.channel_url} <ExternalLink className="h-3 w-3" />
@@ -1110,7 +1117,23 @@ export default function ChannelDetailPage() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monitoring</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-xs text-muted-foreground mb-1">Auto-Download</label>
+                    <label className="block text-xs text-muted-foreground mb-1">Auto-download</label>
+                    <button
+                      onClick={() => updateMutation.mutate({ auto_download: !channel.auto_download })}
+                      className={`px-3 py-1.5 rounded-md text-sm ${
+                        channel.auto_download
+                          ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                      }`}
+                    >
+                      {channel.auto_download ? "On" : "Off"}
+                    </button>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      New videos found by scans are queued automatically. When off, they're listed and you queue them yourself.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-muted-foreground mb-1">Scan this channel</label>
                     <button
                       onClick={() => updateMutation.mutate({ enabled: !channel.enabled })}
                       className={`px-3 py-1.5 rounded-md text-sm ${
@@ -1119,12 +1142,10 @@ export default function ChannelDetailPage() {
                           : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300"
                       }`}
                     >
-                      {channel.enabled ? "Active" : "Paused"}
+                      {channel.enabled ? "On" : "Off"}
                     </button>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {channel.enabled
-                        ? "New videos will be automatically queued for download."
-                        : "New videos are discovered but not queued for download."}
+                      When off, the channel isn't scanned on schedule, by RSS checks or by Scan All. Scan Now still works.
                     </p>
                   </div>
                   <div>

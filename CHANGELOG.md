@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.0] - unreleased
 
 ### Fixed
+- **The channel's "Auto-Download" switch did something else.** In a channel's settings, it actually turned the channel's scanning off, and nothing let you change auto-download after adding a channel. There are now two switches: "Auto-download" (new videos are queued automatically, or listed for you to pick) and "Scan this channel" (scheduled, RSS and Scan All scans). The channel page shows which is on.
+- **Adding a channel says what it will download.** The Add Channel and Bulk Import dialogs now say that a channel downloads every video it has published unless you set a date, and both have a "Download from date" field. Bulk Import still starts with auto-download off, since every imported channel would otherwise queue its whole back catalogue at once.
 - **Upgraded installs get the database indexes new installs have.** Databases created by older versions never received indexes added later, which slows large libraries. They're added on startup now. If an old database holds rows that block one of them, that index is skipped with a warning, and the app still starts.
 - **Faster container start on big libraries.** The container used to re-apply file ownership to the entire download folder on every start. It now does that only when the download folder's owner is wrong.
 

@@ -76,6 +76,7 @@ export default function ChannelsPage() {
   const [moveAllPreview, setMoveAllPreview] = useState<any>(null)
   const [moveAllPreviewLoading, setMoveAllPreviewLoading] = useState(false)
   const [autoDownload, setAutoDownload] = useState(true)
+  const [addFromDate, setAddFromDate] = useState("")
   const [addTitleFilter, setAddTitleFilter] = useState("")
   const [addTitleFilterIsRegex, setAddTitleFilterIsRegex] = useState(false)
   const [addTitleFilterMode, setAddTitleFilterMode] = useState<"include" | "exclude">("include")
@@ -95,7 +96,7 @@ export default function ChannelsPage() {
   })
 
   const addMutation = useMutation({
-    mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean; title_filter?: string; title_filter_is_regex?: boolean; title_filter_mode?: string }) => api.addChannel(data),
+    mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean; download_from_date?: string; title_filter?: string; title_filter_is_regex?: boolean; title_filter_mode?: string }) => api.addChannel(data),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       setShowAdd(false)
@@ -103,6 +104,7 @@ export default function ChannelsPage() {
       setAddDownloadDir("")
       setAddTitleFilter("")
       setAddTitleFilterIsRegex(false)
+      setAddFromDate("")
       toast(`Added channel: ${data.channel_name}`)
       if (scanAfterAdd && data.id) {
         toast("Starting initial scan...")
@@ -345,15 +347,27 @@ export default function ChannelsPage() {
                   onChange={(e) => setAutoDownload(e.target.checked)}
                   className="rounded"
                 />
-                <span className="text-sm">Auto-download new videos</span>
-                <span className="text-xs text-muted-foreground">(uncheck to browse before downloading)</span>
+                <span className="text-sm">Auto-download videos</span>
               </label>
+              <p className="text-xs text-muted-foreground -mt-2">
+                Downloads every video the channel has published unless you set a date. Uncheck to list videos and pick what to download.
+              </p>
+              <div>
+                <label className="block text-sm font-medium mb-1">Download from date (optional)</label>
+                <input
+                  type="date"
+                  value={addFromDate}
+                  onChange={(e) => setAddFromDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-md border bg-background"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Leave empty to include everything.</p>
+              </div>
               {addMutation.error && (
                 <p className="text-sm text-red-500">{(addMutation.error as Error).message}</p>
               )}
               <div className="flex justify-end gap-2">
                 <button
-                  onClick={() => { setShowAdd(false); setAddUrl(""); setAddTitleFilter(""); setAddTitleFilterIsRegex(false); setAddTitleFilterMode("include") }}
+                  onClick={() => { setShowAdd(false); setAddUrl(""); setAddFromDate(""); setAddTitleFilter(""); setAddTitleFilterIsRegex(false); setAddTitleFilterMode("include") }}
                   className="px-4 py-2 rounded-md border hover:bg-accent"
                 >
                   Cancel
@@ -366,7 +380,7 @@ export default function ChannelsPage() {
                         return
                       }
                     }
-                    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex, title_filter_mode: addTitleFilterMode } : {}) })
+                    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addFromDate ? { download_from_date: addFromDate } : {}), ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex, title_filter_mode: addTitleFilterMode } : {}) })
                   }}
                   disabled={!addUrl || addMutation.isPending}
                   className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"

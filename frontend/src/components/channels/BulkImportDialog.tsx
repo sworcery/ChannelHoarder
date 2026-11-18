@@ -17,7 +17,10 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
   const [text, setText] = useState("")
   const [quality, setQuality] = useState("best")
   const [downloadDir, setDownloadDir] = useState("")
+  // Off by default: with it on, every imported channel's first scan queues its whole
+  // back catalogue at once.
   const [autoDownload, setAutoDownload] = useState(false)
+  const [fromDate, setFromDate] = useState("")
   const [running, setRunning] = useState(false)
   const [stopping, setStopping] = useState(false)
   const [haltReason, setHaltReason] = useState("")
@@ -46,6 +49,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
     setQuality("best")
     setDownloadDir("")
     setAutoDownload(false)
+    setFromDate("")
     setDone(false)
     setHaltReason("")
     setCurrent(0)
@@ -88,6 +92,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
           url,
           quality,
           auto_download: autoDownload,
+          ...(fromDate ? { download_from_date: fromDate } : {}),
           ...(downloadDir ? { download_dir: downloadDir } : {}),
         })
         results.push({ url, status: "added", detail: ch.channel_name })
@@ -197,10 +202,19 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
             <span className="text-sm">Auto-download videos</span>
           </label>
           <p className="text-xs text-muted-foreground -mt-2">
-            When on, each channel's first scan queues its entire back catalog. When off, videos are listed but not
-            downloaded; queue what you want from each channel, or turn auto-download on for a channel later so only its
-            new uploads download.
+            When on, each channel downloads every video it has published unless you set a date. Off by default for bulk imports, since every channel would queue its whole back catalogue at once; when off, videos are listed and you pick what to download, or turn auto-download on per channel later.
           </p>
+          <div>
+            <label className="block text-sm font-medium mb-1">Download from date (optional)</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              disabled={running}
+              className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Leave empty to include everything.</p>
+          </div>
 
           <p className="text-xs text-muted-foreground">
             Channels are added a few seconds apart, then scanned automatically by the scheduler one at a time. Keep this tab open until the import finishes.
