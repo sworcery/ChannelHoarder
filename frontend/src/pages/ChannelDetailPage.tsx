@@ -209,6 +209,12 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const downloadAnywayMutation = useMutation({
+    mutationFn: (videoId: number) => api.downloadAnyway(videoId),
+    onSuccess: () => { invalidateVideos(); toast("Video queued at the best available quality") },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const toggleMonitorMutation = useMutation({
     mutationFn: ({ videoId, monitored }: { videoId: number; monitored: boolean }) =>
       api.toggleVideoMonitored(channelId, videoId, monitored),
@@ -801,6 +807,11 @@ export default function ChannelDetailPage() {
                               {video.status === "failed" && (
                                 <DropdownItem onClick={() => retryMutation.mutate(video.id)}>
                                   <RotateCcw className="h-3.5 w-3.5" /> Retry
+                                </DropdownItem>
+                              )}
+                              {video.status === "failed" && video.error_code === "QUALITY_TOO_LOW" && (
+                                <DropdownItem onClick={() => downloadAnywayMutation.mutate(video.id)}>
+                                  <Download className="h-3.5 w-3.5" /> Download anyway
                                 </DropdownItem>
                               )}
                               {(video.status === "completed" || video.status === "failed") && (

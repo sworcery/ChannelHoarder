@@ -96,6 +96,10 @@ async def process_download_queue():
             .outerjoin(Channel, Video.channel_id == Channel.id)
             .options(joinedload(DownloadQueue.video))
             .where(DownloadQueue.started_at.is_(None))
+            .where(or_(
+                DownloadQueue.retry_after.is_(None),
+                DownloadQueue.retry_after <= datetime.now(timezone.utc).replace(tzinfo=None),
+            ))
         )
         if _moving_channels:
             # Leave out channels whose files are being moved, in the query itself, so

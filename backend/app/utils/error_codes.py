@@ -150,9 +150,9 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
     ErrorCode.QUALITY_TOO_LOW: ErrorInfo(
         code=ErrorCode.QUALITY_TOO_LOW,
         summary="Video quality below minimum",
-        explanation="The best available quality for this video is below the channel's minimum quality threshold.",
-        suggested_fix="Lower the minimum quality setting on the channel if you want to download this video, or wait for a higher quality version to become available.",
-        retry_strategy="none",
+        explanation="The best available quality for this video is below the channel's minimum quality threshold. New uploads often show only low formats for the first hours, so the download is retried after 1 hour, 6 hours and 24 hours.",
+        suggested_fix="If it still fails after the 24 hour retry, use \"Download anyway\" to get the best available quality, or lower the minimum quality setting on the channel.",
+        retry_strategy="scheduled",
         severity="info",
     ),
     ErrorCode.LIVESTREAM_SCHEDULED: ErrorInfo(

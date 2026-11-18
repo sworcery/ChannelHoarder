@@ -273,6 +273,16 @@ export default function DownloadsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const downloadAnywayMutation = useMutation({
+    mutationFn: (videoId: number) => api.downloadAnyway(videoId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["download-history"] })
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast("Video queued at the best available quality")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const retryAllMutation = useMutation({
     mutationFn: api.retryAllFailed,
     onSuccess: (data: any) => {
@@ -395,6 +405,13 @@ export default function DownloadsPage() {
     if (entry.started_at) {
       return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
     }
+    if (entry.retry_after && new Date(entry.retry_after).getTime() > Date.now()) {
+      return {
+        label: `Waiting for higher quality, retrying at ${formatDateTime(entry.retry_after)}`,
+        icon: <Clock className="h-3.5 w-3.5 text-yellow-500" />,
+        color: "text-yellow-500",
+      }
+    }
     return { label: "Queued", icon: <Clock className="h-3.5 w-3.5 text-muted-foreground" />, color: "text-muted-foreground" }
   }
 
@@ -452,7 +469,9 @@ export default function DownloadsPage() {
           <div>
             <p className="text-sm font-medium text-yellow-500">Queue Paused</p>
             <p className="text-xs text-muted-foreground">
-              No new downloads will start. In-flight downloads will finish.
+              {pauseStatus?.reason === "disk_full"
+                ? "Paused: disk full. Free space, then Resume."
+                : "No new downloads will start. In-flight downloads will finish."}
             </p>
           </div>
         </div>
@@ -903,6 +922,15 @@ export default function DownloadsPage() {
                                 title="Retry download"
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            {video.status === "failed" && video.error_code === "QUALITY_TOO_LOW" && (
+                              <button
+                                onClick={() => downloadAnywayMutation.mutate(video.id)}
+                                className="px-2 py-1 text-xs hover:bg-accent rounded border"
+                                title="Download at the best available quality"
+                              >
+                                Download anyway
                               </button>
                             )}
                           </div>

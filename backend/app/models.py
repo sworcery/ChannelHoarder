@@ -131,6 +131,12 @@ class DownloadQueue(Base):
     eta_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     target_quality: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
     estimated_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    # Not dispatched before this time (minimum-quality wait)
+    retry_after: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Minimum-quality waits used so far; advances the 1h / 6h / 24h schedule
+    quality_attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    # "Download anyway": skip the channel's minimum-quality check for this download
+    skip_min_quality: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     video: Mapped["Video"] = relationship("Video", back_populates="queue_entry")
 

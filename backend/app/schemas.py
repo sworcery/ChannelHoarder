@@ -207,6 +207,7 @@ class QueueEntryResponse(UTCBaseModel):
     eta_seconds: Optional[int]
     target_quality: Optional[str]
     estimated_size: Optional[int]
+    retry_after: Optional[datetime] = None
     video: VideoSummary
 
 

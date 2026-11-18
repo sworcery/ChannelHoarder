@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -123,6 +123,12 @@ def _remove_replaced_file(old_path: str, new_path: str) -> None:
         delete_video_files(old_path)
 
 
+# Minimum-quality waits: a fresh upload may only offer low formats for a while.
+QUALITY_RETRY_DELAYS = (timedelta(hours=1), timedelta(hours=6), timedelta(hours=24))
+# A failed format lookup that has no clearer cause is retried after a short pause.
+LOOKUP_FAILED_MARKER = "could not read the available formats"
+LOOKUP_RETRY_DELAY = timedelta(minutes=10)
+
 # Errors that mean this video can't be fetched again (as opposed to cookies, yt-dlp
 # or disk trouble that a later run can get past).
 _VIDEO_GONE_CODES = frozenset({
@@ -162,6 +168,7 @@ class DownloadService:
                 return False
 
             video_url = video.source_url or build_video_url(channel.platform, video.video_id)
+            skip_min_quality = bool(queue_entry.skip_min_quality)
             video.status = "downloading"
             if not queue_entry.started_at:
                 queue_entry.started_at = datetime.now(timezone.utc)
@@ -311,17 +318,24 @@ class DownloadService:
             await wait_for_rate_limit()
 
             # Check minimum quality requirement before downloading
-            if cdata.min_quality:
+            # ("Download anyway" skips it.) A failed lookup is a failure to retry, not a pass.
+            if cdata.min_quality and not skip_min_quality:
                 from app.utils.quality_utils import best_available_quality, quality_rank
-                info = await asyncio.to_thread(
-                    self.ytdlp.get_video_info, vdata.video_id, cdata.platform, video_url
+                info, lookup_error = await asyncio.to_thread(
+                    self.ytdlp.get_video_info_or_error, vdata.video_id, cdata.platform, video_url
                 )
-                if info:
-                    best_q = best_available_quality(info.get("formats") or [])
-                    if best_q and quality_rank(best_q) < quality_rank(cdata.min_quality):
-                        raise Exception(
-                            f"Best available quality ({best_q}) is below minimum ({cdata.min_quality})"
-                        )
+                if not info:
+                    # Carry yt-dlp's own error text so the classifier sees the real cause
+                    # (cookies, private, geo-blocked, premiere ...).
+                    raise Exception(
+                        f"Could not read the available formats to check the minimum quality: "
+                        f"{lookup_error or 'no metadata returned'}"
+                    )
+                best_q = best_available_quality(info.get("formats") or [])
+                if best_q and quality_rank(best_q) < quality_rank(cdata.min_quality):
+                    raise Exception(
+                        f"Best available quality ({best_q}) is below minimum ({cdata.min_quality})"
+                    )
 
             logger.info(
                 "Starting download: %s (video_id=%s, quality=%s, output=%s, cookies=%s, pot=%s)",
@@ -597,6 +611,8 @@ class DownloadService:
         """Record a download error with diagnostics (opens its own session)."""
         error_str = str(error)
 
+        disk_full_alert = False
+        quality_waiting = False
         async with async_session() as db:
             diagnostics = DiagnosticsService(db)
             diagnosis = diagnostics.classify_download_error(error_str)
@@ -633,6 +649,10 @@ class DownloadService:
             ))
 
             info = ERROR_CATALOG.get(code, ERROR_CATALOG[ErrorCode.UNKNOWN])
+            try:
+                kept_file = bool(video.file_path) and os.path.getsize(video.file_path) > 0
+            except OSError:
+                kept_file = False
 
             if code in (ErrorCode.VIDEO_UNAVAILABLE, ErrorCode.VIDEO_PRIVATE, ErrorCode.VIDEO_REMOVED, ErrorCode.GEO_BLOCKED):
                 video.status = "skipped"
@@ -649,15 +669,39 @@ class DownloadService:
                     await db.delete(queue_entry)
 
             elif code == ErrorCode.DISK_FULL:
-                video.status = "failed"
+                # Pause the queue and keep this download queued; it is not a retry.
                 if queue_entry:
-                    await db.delete(queue_entry)
-                await self.notification.broadcast("critical_alert", {
-                    "type": "disk_full",
-                    "message": "Disk is full. All downloads paused.",
-                })
+                    video.status = "queued"
+                    queue_entry.started_at = None
+                    queue_entry.progress_percent = 0
+                    queue_entry.speed_bps = None
+                    queue_entry.eta_seconds = None
+                else:
+                    video.status = "failed"  # row was removed mid-download
+                await queue_state.pause_queue(db, queue_state.REASON_DISK_FULL)
+                disk_full_alert = True
 
-            elif info.retry_strategy != "none" and video.retry_count < settings.MAX_RETRIES:
+            elif code == ErrorCode.QUALITY_TOO_LOW and not kept_file and (
+                queue_entry is not None and queue_entry.quality_attempts < len(QUALITY_RETRY_DELAYS)
+            ):
+                # Fresh uploads often show only low formats at first: wait and look again.
+                delay = QUALITY_RETRY_DELAYS[queue_entry.quality_attempts]
+                queue_entry.quality_attempts += 1
+                queue_entry.retry_after = (
+                    datetime.now(timezone.utc) + delay
+                ).replace(tzinfo=None)
+                queue_entry.started_at = None
+                queue_entry.progress_percent = 0
+                queue_entry.speed_bps = None
+                queue_entry.eta_seconds = None
+                video.status = "queued"
+                quality_waiting = True
+
+            elif (
+                info.retry_strategy != "none"
+                and code != ErrorCode.QUALITY_TOO_LOW  # its waits ran out: fail for good
+                and video.retry_count < settings.MAX_RETRIES
+            ):
                 video.retry_count += 1
                 video.status = "queued"
                 if queue_entry:
@@ -666,6 +710,10 @@ class DownloadService:
                     queue_entry.speed_bps = None
                     queue_entry.eta_seconds = None
                     queue_entry.priority = max(queue_entry.priority - 1, -10)
+                    if LOOKUP_FAILED_MARKER in error_str.lower():
+                        queue_entry.retry_after = (
+                            datetime.now(timezone.utc) + LOOKUP_RETRY_DELAY
+                        ).replace(tzinfo=None)
 
             else:
                 video.status = "failed"
@@ -674,10 +722,6 @@ class DownloadService:
 
             # A failed re-download or quality upgrade must not strand a video whose
             # old file is still on disk: give it back as completed.
-            try:
-                kept_file = bool(video.file_path) and os.path.getsize(video.file_path) > 0
-            except OSError:
-                kept_file = False
             if kept_file and video.status in ("failed", "skipped"):
                 video.status = "completed"
                 if code in _VIDEO_GONE_CODES:
@@ -729,6 +773,16 @@ class DownloadService:
             await self.notification.broadcast("cookies_expired", {
                 "message": "YouTube cookies have expired. Queue paused. Re-export and upload fresh cookies.",
             })
+
+        if disk_full_alert:
+            await self.notification.broadcast("critical_alert", {
+                "type": "disk_full",
+                "message": "Disk is full. Downloads are paused. Free up space, then press Resume.",
+            })
+
+        if quality_waiting:
+            logger.info("Quality below minimum for %s; waiting before the next look", vdata.title)
+            return
 
         if kept_file:
             logger.info("Re-download/upgrade failed for %s but the existing file was kept: %s",

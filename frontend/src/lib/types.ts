@@ -72,6 +72,7 @@ export interface QueueEntry {
   eta_seconds: number | null
   target_quality: string | null
   estimated_size: number | null
+  retry_after: string | null
   video: Video
 }
 

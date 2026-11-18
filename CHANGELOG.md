@@ -7,7 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - unreleased
 
+### Added
+- **"Download anyway" for videos below a channel's minimum quality.** Fresh uploads often show only low resolutions for their first hours. A video below the minimum now waits and checks again after 1, 6 and 24 hours, and the Downloads page shows when the next check is. If it is still too low after that, it fails with a "Download anyway" button that downloads the best quality available.
+
 ### Fixed
+- **A full disk pauses the queue instead of failing everything in it.** When the disk filled up, every queued download failed in turn. Now the queue pauses, the download stays queued, and a message says to free space and press Resume.
+- **Minimum quality no longer lets videos through when the check itself fails.** If the formats couldn't be read, the video downloaded anyway at whatever quality was offered. The real error is now handled like any other download error: expired cookies pause the queue, removed videos are skipped, and other errors retry after a short wait.
 - **Nothing touches a channel's files while another job is working on them.** Moving a channel, Force Rescan, renumbering, repairing dates, renaming, importing, cleaning up Shorts or livestreams, deleting with files, Library check fixes and retention now each wait their turn. Before, two of them could run at once, for example a Force Rescan during a move, and leave files where the app didn't expect them. If the channel is busy, the button explains why instead of starting. Move All skips a busy channel and tells you which ones it skipped. Renaming or deleting one video only waits for that video's own download, not the rest of the channel's.
 - **A queue paused for expired cookies stayed paused after a restart.** Restarting the container while the queue was paused for cookies broke the automatic resume, so uploading fresh cookies no longer restarted downloads. That works again, including on databases saved by older versions.
 - **Uploading cookies no longer lifts a pause you set yourself.** Uploading cookies, dropping them in the watch folder, or the automatic cookie check used to resume the queue whatever the reason for the pause. Now only a pause for expired cookies resumes on its own, and the message says "Queue resumed" only when it did. Pressing Resume clears the pause reason, so a later manual pause is no longer mistaken for a cookie pause.

@@ -58,7 +58,9 @@ function GlobalNotifications() {
   const { toast } = useToast()
   useEffect(() => {
     return subscribe((msg) => {
-      if (msg.type === "move_complete") {
+      if (msg.type === "critical_alert") {
+        toast(msg.payload.message || "Critical alert", "error")
+      } else if (msg.type === "move_complete") {
         if (msg.payload.failed) {
           toast(msg.payload.message || "File move failed", "error")
         } else {

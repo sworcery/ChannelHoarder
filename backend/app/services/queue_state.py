@@ -21,6 +21,7 @@ FLAG_KEYS = (PAUSED_KEY, REASON_KEY, COOKIES_KEY)
 
 REASON_MANUAL = "manual"
 REASON_COOKIES = "cookies_expired"
+REASON_DISK_FULL = "disk_full"
 
 
 def _decode(raw):

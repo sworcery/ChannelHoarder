@@ -195,6 +195,18 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE download_queue ADD COLUMN estimated_size BIGINT")
             )
+        if "retry_after" not in queue_columns:
+            await conn.execute(
+                text("ALTER TABLE download_queue ADD COLUMN retry_after DATETIME")
+            )
+        if "quality_attempts" not in queue_columns:
+            await conn.execute(
+                text("ALTER TABLE download_queue ADD COLUMN quality_attempts INTEGER DEFAULT 0 NOT NULL")
+            )
+        if "skip_min_quality" not in queue_columns:
+            await conn.execute(
+                text("ALTER TABLE download_queue ADD COLUMN skip_min_quality BOOLEAN DEFAULT 0 NOT NULL")
+            )
 
         # Clean up orphan records: videos whose channel no longer exists
         orphan_count = await conn.execute(text(

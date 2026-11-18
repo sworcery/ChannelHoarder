@@ -203,6 +203,37 @@ async def retry_download(video_id: int, db: AsyncSession = Depends(get_db)):
     return {"message": f"Video '{video.title}' queued for retry"}
 
 
+@router.post("/download-anyway/{video_id}", status_code=202)
+async def download_anyway(video_id: int, db: AsyncSession = Depends(get_db)):
+    """Queue a video that failed the minimum-quality check, skipping that check."""
+    video = (await db.execute(select(Video).where(Video.id == video_id))).scalar_one_or_none()
+    if not video:
+        raise HTTPException(status_code=404, detail="Video not found")
+    if video.status != "failed" or video.error_code != "QUALITY_TOO_LOW":
+        raise HTTPException(
+            status_code=409,
+            detail="Only a video that failed the minimum-quality check can be downloaded anyway",
+        )
+
+    video.status = "queued"
+    video.retention_removed_at = None
+    video.error_code = None
+    video.error_message = None
+    video.error_details = None
+
+    entry = (await db.execute(
+        select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+    )).scalar_one_or_none()
+    if entry:
+        entry.skip_min_quality = True
+        entry.retry_after = None
+    else:
+        db.add(DownloadQueue(video_id=video.id, skip_min_quality=True))
+
+    await db.commit()
+    return {"message": f"Video '{video.title}' queued at the best available quality"}
+
+
 @router.post("/retry-all-failed", status_code=202)
 async def retry_all_failed(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Video).where(Video.status == "failed"))
@@ -246,8 +277,8 @@ async def get_active_downloads(db: AsyncSession = Depends(get_db)):
 @router.get("/paused")
 async def get_pause_status(db: AsyncSession = Depends(get_db)):
     """Check if the download queue is paused."""
-    paused, _reason = await queue_state.get_pause_state(db)
-    return {"paused": paused}
+    paused, reason = await queue_state.get_pause_state(db)
+    return {"paused": paused, "reason": reason}
 
 
 @router.post("/pause")
