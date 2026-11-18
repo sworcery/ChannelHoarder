@@ -2,7 +2,8 @@ import { useEffect, useState } from "react"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import type { SharedFolderGroup, SharedFolderPreview } from "@/lib/types"
+import type { SharedFolderChannel, SharedFolderGroup, SharedFolderPreview } from "@/lib/types"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
@@ -10,6 +11,19 @@ import { EmptyState } from "@/components/ui/EmptyState"
 import { Select } from "@/components/ui/Input"
 import { useToast } from "@/components/ui/toaster"
 import { Loader2, Folders } from "lucide-react"
+
+const PLATFORM_LABELS: Record<string, string> = {
+  youtube: "YouTube",
+  rumble: "Rumble",
+  twitch: "Twitch",
+  dailymotion: "Dailymotion",
+  vimeo: "Vimeo",
+  odysee: "Odysee",
+}
+
+/** The folder the move creates for this channel: "Name (Platform)". */
+const newFolderName = (c: SharedFolderChannel) =>
+  `${c.channel_name} (${PLATFORM_LABELS[c.platform] ?? c.platform})`
 
 export default function SharedFoldersCard() {
   const qc = useQueryClient()
@@ -66,11 +80,16 @@ export default function SharedFoldersCard() {
   }
 
   return (
-    <Card icon={<Folders />} title="Shared folders" as="h2">
+    <Card
+      icon={<Folders />}
+      title="Shared Folders"
+      as="h2"
+      id="shared-folders"
+      help={<HelpIcon text="Channels with the same name added before 1.9.50 share one folder; this moves one into its own." anchor="library-repair" />}
+    >
       <p className="text-sm text-muted-foreground">
-        Channels added before 1.9.50 with the same name share one folder. Pick the channel to move into its own
-        "Name (Platform)" folder. Only that channel's own videos and their sidecar files move; a file another
-        channel's video records stays put. Shared artwork stays with the channel that keeps the folder.
+        Pick the channel to move into its own "Name (Platform)" folder. Only that channel's own videos and extra files
+        (thumbnails, subtitles, NFO) move. Files another channel uses, and shared artwork, stay where they are.
       </p>
 
       {groups.length === 0 && <EmptyState title="No channels share a folder." />}
@@ -89,7 +108,7 @@ export default function SharedFoldersCard() {
               >
                 {g.channels.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.channel_name} ({c.platform}, {c.file_count} files)
+                    {newFolderName(c)}: {c.file_count} files
                   </option>
                 ))}
               </Select>
@@ -108,18 +127,24 @@ export default function SharedFoldersCard() {
             )}
           </div>
 
+          {!preview && (
+            <p className="text-xs text-muted-foreground">
+              The chosen channel gets a folder named like "{newFolderName(g.channels.find((c) => c.id === chosen(g)) ?? g.channels[0])}".
+            </p>
+          )}
+
           {preview && g.channels.some((c) => c.id === preview.channel_id) && (
             <div className="rounded bg-muted/50 p-2 space-y-1">
               <p>
                 New folder: <span className="font-mono">{preview.new_folder}</span>
               </p>
               <p className="text-xs">
-                {preview.video_files} video file(s) and {preview.sidecar_files} sidecar file(s) will move.
+                {preview.video_files} video file(s) and {preview.sidecar_files} extra file(s) will move.
                 {preview.missing_files > 0 && ` ${preview.missing_files} recorded file(s) are missing on disk.`}
               </p>
               {preview.shared_sidecar_files.length > 0 && (
                 <div className="text-xs">
-                  <p>{preview.shared_sidecar_files.length} video(s) share a file name with another channel's video, so their sidecars stay (shared name):</p>
+                  <p>{preview.shared_sidecar_files.length} video(s) use a file name another channel's video also uses, so their extra files stay:</p>
                   {preview.shared_sidecar_files.map((f) => (
                     <p key={f} className="font-mono break-all text-muted-foreground">{f}</p>
                   ))}
@@ -135,7 +160,7 @@ export default function SharedFoldersCard() {
               )}
               {preview.untracked_move.length > 0 && (
                 <div className="text-xs">
-                  <p>{preview.untracked_move.length} unrecorded file(s) tagged with this channel's video ids will move too:</p>
+                  <p>{preview.untracked_move.length} file(s) the app has no record of, but whose names carry this channel's video ids, will move too:</p>
                   {preview.untracked_move.map((f) => (
                     <p key={f} className="font-mono break-all text-muted-foreground">{f}</p>
                   ))}
@@ -143,7 +168,7 @@ export default function SharedFoldersCard() {
               )}
               {preview.untracked_stay.length > 0 && (
                 <div className="text-xs">
-                  <p>{preview.untracked_stay.length} unrecorded video file(s) cannot be matched to this channel and will stay:</p>
+                  <p>{preview.untracked_stay.length} video file(s) the app has no record of cannot be matched to this channel and will stay:</p>
                   {preview.untracked_stay.map((f) => (
                     <p key={f} className="font-mono break-all text-muted-foreground">{f}</p>
                   ))}
@@ -151,7 +176,7 @@ export default function SharedFoldersCard() {
               )}
               {preview.staying_files.length > 0 && (
                 <div className="text-xs">
-                  <p>{preview.staying_files.length} file(s) another channel records will stay:</p>
+                  <p>{preview.staying_files.length} file(s) another channel uses will stay:</p>
                   {preview.staying_files.map((f) => (
                     <p key={f} className="font-mono break-all text-muted-foreground">{f}</p>
                   ))}

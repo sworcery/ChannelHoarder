@@ -13,6 +13,19 @@ from app.services.ytdlp_service import YtdlpService
 logger = logging.getLogger(__name__)
 
 
+def disk_space_status() -> tuple[float, str, str]:
+    """(free GB, " in the temp folder" or "", healthy|warning|critical) for the
+    tighter of the download and temp folders. Blocking; run it in a thread."""
+    free_gb = shutil.disk_usage(settings.DOWNLOAD_DIR).free / (1024 ** 3)
+    where = ""
+    if settings.TEMP_DIR:
+        temp_free_gb = shutil.disk_usage(settings.TEMP_DIR).free / (1024 ** 3)
+        if temp_free_gb < free_gb:
+            free_gb, where = temp_free_gb, " in the temp folder"
+    status = "healthy" if free_gb > 5 else ("warning" if free_gb > 1 else "critical")
+    return free_gb, where, status
+
+
 async def check_system_health():
     """Scheduled task: check PO tokens, disk space, yt-dlp functionality."""
     logger.info("Running system health check")
@@ -43,13 +56,7 @@ async def check_system_health():
 
         # Check disk space (the temp folder too when it's on its own drive)
         try:
-            free_gb = shutil.disk_usage(settings.DOWNLOAD_DIR).free / (1024 ** 3)
-            where = ""
-            if settings.TEMP_DIR:
-                temp_free_gb = shutil.disk_usage(settings.TEMP_DIR).free / (1024 ** 3)
-                if temp_free_gb < free_gb:
-                    free_gb, where = temp_free_gb, " in the temp folder"
-            disk_status = "healthy" if free_gb > 5 else ("warning" if free_gb > 1 else "critical")
+            free_gb, where, disk_status = disk_space_status()
 
             db.add(SystemHealthLog(
                 component="disk",

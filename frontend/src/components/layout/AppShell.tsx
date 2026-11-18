@@ -1,56 +1,24 @@
 import { ReactNode, useState, useEffect } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { Link } from "react-router-dom"
-import { X } from "lucide-react"
-import { api } from "@/lib/api"
-import { Banner } from "@/components/ui/Banner"
-import { Button } from "@/components/ui/Button"
+import { useLocation } from "react-router-dom"
+import { AlertStrip } from "@/components/AlertStrip"
 import { Dialog } from "@/components/ui/Dialog"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useToast } from "@/components/ui/toaster"
 import Sidebar from "./Sidebar"
 import Header from "./Header"
 
-function CookieBanner() {
-  const [dismissed, setDismissed] = useState(false)
-  const [wsTriggered, setWsTriggered] = useState(false)
-
-  const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
-    queryFn: api.getStats,
-    refetchInterval: 30000,
-  })
-
-  // Listen for real-time cookies_expired WebSocket events
-  const { subscribe } = useWebSocket()
-  useEffect(() => {
-    return subscribe((msg) => {
-      if (msg.type === "cookies_expired") {
-        setWsTriggered(true)
-        setDismissed(false) // Re-show if previously dismissed
-      }
-    })
-  }, [subscribe])
-
-  const expired = wsTriggered || stats?.cookies_expired
-  if (!expired || dismissed) return null
-
+/** The one alert slot: hidden on the Dashboard, which shows the full list itself.
+ *  The Downloads page explains a paused queue in its own banner, so skip those there. */
+function SlimAlerts() {
+  const { pathname } = useLocation()
+  if (pathname === "/") return null
+  // Only the paused kinds: a "disk almost full" without a pause must still show there
+  const onDownloads = pathname.startsWith("/downloads")
   return (
-    <Banner
-      tone="danger"
-      className="rounded-none border-x-0 border-t-0 px-4 py-3"
-      action={
-        <Button variant="ghost" size="icon" onClick={() => setDismissed(true)} title="Dismiss" aria-label="Dismiss">
-          <X className="h-4 w-4" />
-        </Button>
-      }
-    >
-      <strong>YouTube cookies have expired.</strong>{" "}
-      Downloads will fail until you re-export cookies from your browser and upload them in{" "}
-      <Link to="/settings" className="underline font-medium">
-        Settings &rarr; Authentication
-      </Link>.
-    </Banner>
+    <AlertStrip
+      variant="slim"
+      hide={(a) => onDownloads && a.action.kind === "resume_queue"}
+    />
   )
 }
 
@@ -106,7 +74,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuClick={() => setSidebarOpen(true)} />
-        <CookieBanner />
+        <SlimAlerts />
         <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6">{children}</main>
       </div>
     </div>

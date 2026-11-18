@@ -1,4 +1,4 @@
-import type { Channel, Video, QueueEntry, DashboardStats, DownloadLog, MessageResponse, LibraryCheckState, LibraryCheckApplyResult, SharedFolderGroup, SharedFolderPreview } from "./types"
+import type { DashboardAlert, Channel, Video, QueueEntry, DashboardStats, DownloadLog, MessageResponse, LibraryCheckState, LibraryCheckApplyResult, SharedFolderGroup, SharedFolderPreview } from "./types"
 
 const BASE_URL = "/api/v1"
 
@@ -235,7 +235,22 @@ export const api = {
     return request<PaginatedResponse<Video>>(`/downloads/history?${qs}`)
   },
   retryDownload: (videoId: number) => request<MessageResponse>(`/downloads/retry/${videoId}`, { method: "POST" }),
-  retryAllFailed: () => request<MessageResponse>("/downloads/retry-all-failed", { method: "POST" }),
+  retryAllFailed: (opts?: { retryableOnly?: boolean; errorCode?: string }) => {
+    const qs = new URLSearchParams()
+    if (opts?.retryableOnly) qs.set("retryable_only", "true")
+    if (opts?.errorCode) qs.set("error_code", opts.errorCode)
+    const q = qs.toString()
+    return request<MessageResponse & { count?: number }>(
+      `/downloads/retry-all-failed${q ? `?${q}` : ""}`,
+      { method: "POST" },
+    )
+  },
+  getErrorCatalog: () =>
+    request<Record<string, { label: string; tip: string; explanation: string; suggested_fix: string; severity: string; retryable: boolean }>>(
+      "/downloads/error-catalog",
+    ),
+  getHeldChannels: () =>
+    request<{ id: number; name: string; reason: string }[]>("/downloads/held-channels"),
   getActiveDownloads: () => request<QueueEntry[]>("/downloads/active"),
   downloadAnyway: (videoId: number) => request<MessageResponse>(`/downloads/download-anyway/${videoId}`, { method: "POST" }),
   getPauseStatus: () => request<{ paused: boolean; reason: string | null }>("/downloads/paused"),
@@ -259,6 +274,7 @@ export const api = {
 
   // Dashboard
   getStats: () => request<DashboardStats>("/dashboard/stats"),
+  getAlerts: () => request<DashboardAlert[]>("/dashboard/alerts"),
   getRecentDownloads: (limit = 20) => request<Video[]>(`/dashboard/recent?limit=${limit}`),
   getStorage: () => request<StorageInfo>("/dashboard/storage"),
 
@@ -302,7 +318,7 @@ export const api = {
     request<MessageResponse>(`/settings/webhook/test?provider=${provider}`, { method: "POST" }),
 
   // System
-  getHealth: () => request<{ status: string; version: string }>("/system/health"),
+  getHealth: () => request<{ status: string; version: string; download_dir?: string; temp_dir?: string }>("/system/health"),
   getLiveLogs: (params?: { level?: string; limit?: number }) => {
     const qs = new URLSearchParams()
     if (params?.level) qs.set("level", params.level)
@@ -329,7 +345,7 @@ export const api = {
   moveSharedFolderChannel: (channelId: number) =>
     request<{ message: string }>("/system/shared-folders/move", { method: "POST", body: JSON.stringify({ channel_id: channelId }) }),
   getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
-  getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
+  getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; disk_status: string; disk_where: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
   getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),
   getLogs: (params?: { skip?: number; limit?: number; error_code?: string; event?: string; search?: string }) => {
     const qs = new URLSearchParams()

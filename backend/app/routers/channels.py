@@ -60,19 +60,22 @@ async def list_channels(
     counts_result = await db.execute(
         select(
             Video.channel_id,
-            func.count(Video.id).filter(Video.status != "skipped", Video.monitored == True).label("total"),
+            func.count(Video.id).filter(Video.status != "skipped").label("total"),
             func.count(Video.id).filter(Video.status == "completed").label("downloaded"),
+            func.count(Video.id).filter(Video.status == "skipped").label("skipped"),
         )
         .where(Video.channel_id.in_(channel_ids))
         .group_by(Video.channel_id)
     )
-    counts_map = {row[0]: (row[1], row[2]) for row in counts_result.all()}
+    counts_map = {row[0]: (row[1], row[2], row[3]) for row in counts_result.all()}
 
     # Override stale cached values with live counts
     for ch in channels:
-        total, downloaded = counts_map.get(ch.id, (0, 0))
+        total, downloaded, skipped = counts_map.get(ch.id, (0, 0, 0))
         ch.total_videos = total
         ch.downloaded_count = downloaded
+        ch.skipped_count = skipped
+        ch.folder_path = os.path.join(ch.download_dir or settings.DOWNLOAD_DIR, channel_folder_name(ch))
         ch.activity = channel_activity.activity(ch.id)
 
     return channels
@@ -155,13 +158,16 @@ async def get_channel(channel_id: int, db: AsyncSession = Depends(get_db)):
     # Compute live counts from Video table
     counts = await db.execute(
         select(
-            func.count(Video.id).filter(Video.status != "skipped", Video.monitored == True),
+            func.count(Video.id).filter(Video.status != "skipped"),
             func.count(Video.id).filter(Video.status == "completed"),
+            func.count(Video.id).filter(Video.status == "skipped"),
         ).where(Video.channel_id == channel.id)
     )
     row = counts.one()
     channel.total_videos = row[0] or 0
     channel.downloaded_count = row[1] or 0
+    channel.skipped_count = row[2] or 0
+    channel.folder_path = os.path.join(channel.download_dir or settings.DOWNLOAD_DIR, channel_folder_name(channel))
     channel.activity = channel_activity.activity(channel.id)
 
     return channel

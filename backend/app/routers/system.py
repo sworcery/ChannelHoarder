@@ -26,7 +26,12 @@ router = APIRouter()
 async def health_check(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(select(func.count()).select_from(Channel))
-        return {"status": "healthy", "version": settings.APP_VERSION}
+        return {
+            "status": "healthy",
+            "version": settings.APP_VERSION,
+            "download_dir": settings.DOWNLOAD_DIR,
+            "temp_dir": settings.TEMP_DIR,
+        }
     except Exception:
         return JSONResponse(
             status_code=503,

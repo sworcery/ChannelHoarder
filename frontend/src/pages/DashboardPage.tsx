@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatBytes, formatSpeed } from "@/lib/utils"
-import { Banner } from "@/components/ui/Banner"
-import { Button } from "@/components/ui/Button"
+import { AlertStrip } from "@/components/AlertStrip"
+import { buttonClasses } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { DateTime } from "@/components/ui/DateTime"
 import { EmptyState } from "@/components/ui/EmptyState"
@@ -11,7 +11,8 @@ import { useWebSocket } from "@/hooks/useWebSocket"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  X,
+  Plus,
+  ListOrdered,
   Tv,
   Download,
   AlertCircle,
@@ -44,16 +45,11 @@ export default function DashboardPage() {
   })
   const queue = queueData?.items
 
-  const { data: sharedData } = useQuery({
-    queryKey: ["shared-folders"],
-    queryFn: api.getSharedFolders,
-    staleTime: 60000,
+  const { data: health } = useQuery({
+    queryKey: ["system-health"],
+    queryFn: api.getHealth,
+    staleTime: 300000,
   })
-  const sharedKey = (sharedData?.groups ?? [])
-    .flatMap((g) => g.channels.map((c) => c.id))
-    .sort((a, b) => a - b)
-    .join(",")
-  const [dismissedKey, setDismissedKey] = useState(() => localStorage.getItem("shared_folders_dismissed"))
 
   const { subscribe } = useWebSocket()
   const [activeProgress, setActiveProgress] = useState<Record<string, any>>({})
@@ -86,52 +82,45 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <PageHeader title="Dashboard" />
 
+      {/* What needs attention, above the cards so it is the first thing read */}
+      <AlertStrip variant="full" />
+
+      {stats.total_channels === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<Tv />}
+            title="Welcome to ChannelHoarder"
+            text={
+              <>
+                It watches the channels you add, finds their new videos and downloads them in a
+                Plex-compatible layout. Downloaded files go to{" "}
+                <code className="font-mono text-foreground">{health?.download_dir || "the download folder"}</code>
+                {health?.temp_dir ? (
+                  <>
+                    , and downloads in progress use{" "}
+                    <code className="font-mono text-foreground">{health.temp_dir}</code> until they finish
+                  </>
+                ) : null}
+                . Add your first channel to begin.
+              </>
+            }
+            action={
+              <Link to="/channels?add=1" className={buttonClasses("primary")}>
+                <Plus className="h-4 w-4" /> Add Channel
+              </Link>
+            }
+          />
+        </Card>
+      ) : (
+      <>
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard icon={Tv} label="Channels" value={stats.total_channels} sub={`${stats.active_channels} active`} />
         <StatCard icon={Download} label="Downloaded" value={stats.total_downloaded} sub={`of ${stats.total_videos_known} known`} />
-        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={`${stats.total_pending} pending`} color={stats.total_failed > 0 ? "text-danger" : undefined} />
-        <StatCard icon={HardDrive} label="Storage" value={stats.storage_used_formatted} sub={`yt-dlp ${stats.ytdlp_version}`} />
+        <StatCard icon={ListOrdered} label="Queued" value={stats.queued_count} sub={`${stats.active_downloads} downloading`} />
+        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={stats.total_failed > 0 ? "see Downloads → Failed" : "none"} color={stats.total_failed > 0 ? "text-danger" : undefined} />
+        <StatCard icon={HardDrive} label="Storage" value={`${formatBytes(stats.free_space_bytes)} free`} sub={`${stats.storage_used_formatted} used`} />
       </div>
-
-      {sharedKey && sharedKey !== dismissedKey && (
-        <Banner
-          tone="warning"
-          action={
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => {
-                localStorage.setItem("shared_folders_dismissed", sharedKey)
-                setDismissedKey(sharedKey)
-              }}
-              title="Dismiss"
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          }
-        >
-          Some channels share one folder on disk.{" "}
-          <Link
-            to="/settings"
-            onClick={() => {
-              localStorage.setItem("settings_tab", "diagnostics")
-              localStorage.setItem("diagnostics_tab", "overview")
-            }}
-            className="underline font-medium"
-          >
-            Separate them in Settings &rarr; Diagnostics
-          </Link>.
-        </Banner>
-      )}
-
-      {/* Health Banner */}
-      {stats.pot_status !== "enabled" && (
-        <Banner tone="warning">
-          PO token server is {stats.pot_status}. Downloads may fail without PO tokens.
-        </Banner>
-      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Download Queue */}
@@ -178,7 +167,12 @@ export default function DashboardPage() {
               )}
             </div>
           ) : (
-            <EmptyState title="No downloads in queue" />
+            <EmptyState
+              icon={<Download />}
+              title="No downloads in queue"
+              text="New videos from your channels appear here while they download."
+              action={<Link to="/downloads" className={buttonClasses("outline")}>Open Downloads</Link>}
+            />
           )}
         </Card>
 
@@ -202,7 +196,12 @@ export default function DashboardPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="No downloads yet" />
+            <EmptyState
+              icon={<CheckCircle2 />}
+              title="No downloads yet"
+              text="Finished downloads are listed here. Open a channel to pick videos to download."
+              action={<Link to="/channels" className={buttonClasses("outline")}>Open Channels</Link>}
+            />
           )}
         </Card>
       </div>
@@ -213,6 +212,8 @@ export default function DashboardPage() {
           <Clock className="h-4 w-4" />
           Last scan: <DateTime value={stats.last_scan_at} />
         </p>
+      )}
+      </>
       )}
     </div>
   )

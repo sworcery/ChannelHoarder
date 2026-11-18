@@ -77,7 +77,11 @@ class DiagnosticsService:
             })
 
         # Disk info
-        disk = shutil.disk_usage(settings.DOWNLOAD_DIR)
+        # The tighter of the download and temp folders, with the same thresholds as the health check
+        import asyncio
+        from app.tasks.health_check import disk_space_status
+        free_gb, disk_where, disk_status = await asyncio.to_thread(disk_space_status)
+        disk_free = int(free_gb * 1024 ** 3)
 
         # PO token status
         pot_healthy = await self._check_pot_health()
@@ -90,8 +94,10 @@ class DiagnosticsService:
             pot_status=pot_status,
             cookies_status="present" if settings.has_cookies else "not configured",
             api_key_configured=settings.has_youtube_api_key,
-            disk_free_bytes=disk.free,
-            disk_free_formatted=self._format_bytes(disk.free),
+            disk_free_bytes=disk_free,
+            disk_free_formatted=self._format_bytes(disk_free),
+            disk_status=disk_status,
+            disk_where=disk_where,
             total_channels=channel_count or 0,
             total_downloads=download_count or 0,
             total_failed=failed_count or 0,

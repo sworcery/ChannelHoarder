@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import type { LibraryCheckItem, LibraryCheckKind } from "@/lib/types"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { Banner } from "@/components/ui/Banner"
+import { HelpIcon } from "@/components/ui/HelpIcon"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { Select } from "@/components/ui/Input"
@@ -15,6 +16,13 @@ const GROUPS: { kind: LibraryCheckKind; title: string; hint: string }[] = [
   { kind: "lost", title: "Missing: completed videos whose file is gone", hint: "Re-download them, or skip them." },
   { kind: "manual", title: "Check by hand", hint: "Wrong length and no match found. Never fixed automatically." },
 ]
+
+const STATE_LABELS: Record<LibraryCheckItem["state"], string> = {
+  open: "",
+  fixed: "Fixed",
+  skipped: "Left as it was",
+  error: "Could not be fixed",
+}
 
 export default function LibraryCheckCard() {
   const qc = useQueryClient()
@@ -76,21 +84,19 @@ export default function LibraryCheckCard() {
   return (
     <Card
       icon={<FolderSearch />}
-      title="Library check"
+      title="Library Check"
       as="h2"
+      id="library-check"
+      help={<HelpIcon text="Finds files filed under the wrong video, left behind by versions before 1.9.50." anchor="library-repair" />}
       actions={
         <Button onClick={start} disabled={running}>
-          {running ? "Checking..." : "Start check"}
+          {running ? "Checking..." : "Start Check"}
         </Button>
       }
     >
-
       <p className="text-sm text-muted-foreground">
-        Before version 1.9.50, a scan could move a downloaded file onto a newer video with a similar title
-        (for example "Week 11" and "Week 12") and rename it. This check finds files that sit under the wrong
-        video, files whose length does not fit their video, and completed videos whose file is missing.
-        Nothing changes until you press a fix button. A fix moves the file to the video it really belongs to,
-        then queues the video it was wrongly filed under to download again, since that video's own file is gone.
+        Finds files filed under the wrong video, files whose length does not fit, and completed videos whose file is missing.
+        Nothing changes until you press a fix button.
       </p>
 
       {error && <Banner tone="danger">{error}</Banner>}
@@ -176,7 +182,7 @@ export default function LibraryCheckCard() {
                         </Button>
                       </div>
                     )}
-                    {i.state !== "open" && <p className="text-xs text-muted-foreground">Done: {i.state}</p>}
+                    {i.state !== "open" && <p className="text-xs text-muted-foreground">{STATE_LABELS[i.state]}</p>}
                   </div>
                 ))}
               </div>

@@ -1,8 +1,8 @@
-import { useParams, useNavigate } from "react-router-dom"
+import { useParams, useNavigate, useLocation } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { cn, formatDate, formatBytes, formatDuration } from "@/lib/utils"
-import { HEALTH_COLORS } from "@/lib/types"
+import { cn, formatDate, formatBytes, formatDuration, formatVideoCounts } from "@/lib/utils"
+import { HEALTH_COLORS, HEALTH_LABELS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
@@ -47,7 +47,7 @@ import {
   Pencil,
   CalendarDays,
 } from "lucide-react"
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 
 export default function ChannelDetailPage() {
   const { id } = useParams()
@@ -121,10 +121,15 @@ export default function ChannelDetailPage() {
 
   const { toast } = useToast()
 
+  // Set once scanMutation exists (below); the polls read it through this ref because they
+  // are created before the mutation.
+  const scanPendingRef = useRef(false)
+
   const { data: channel } = useQuery({
     queryKey: ["channel", channelId],
     queryFn: () => api.getChannel(channelId),
-    refetchInterval: (q) => (q.state.data?.activity?.scanning || q.state.data?.activity?.exclusive) ? 5000 : false,
+    // Also poll during the page's own scan call, so the running scan shows up
+    refetchInterval: (q) => (q.state.data?.activity?.scanning || q.state.data?.activity?.exclusive || scanPendingRef.current) ? 5000 : false,
   })
 
   const { data: videosData, isLoading: videosLoading } = useQuery({
@@ -136,6 +141,14 @@ export default function ChannelDetailPage() {
       search: searchQuery || undefined,
     }),
     placeholderData: keepPreviousData,
+    // New videos appear while a scan runs
+    refetchInterval: () => (channel?.activity?.scanning || scanPendingRef.current) ? 5000 : false,
+  })
+
+  const { data: errorCatalog } = useQuery({
+    queryKey: ["error-catalog"],
+    queryFn: api.getErrorCatalog,
+    staleTime: Infinity,
   })
 
   const { data: appSettings } = useQuery({
@@ -183,6 +196,28 @@ export default function ChannelDetailPage() {
     onSuccess: (data: any) => { invalidateVideos(); toast(data.message || "Scan complete") },
     onError: (e: Error) => toast(e.message, "error"),
   })
+  scanPendingRef.current = scanMutation.isPending
+
+  // Arriving from Add Channel with "Scan after adding" on: start the scan here, so the page
+  // shows it running ("Scan started" until the call returns, then the polled activity.scanning).
+  const location = useLocation()
+  const scanAfterAddDone = useRef(false)
+  useEffect(() => {
+    if ((location.state as { scanAfterAdd?: boolean } | null)?.scanAfterAdd && !scanAfterAddDone.current) {
+      scanAfterAddDone.current = true
+      scanMutation.mutate()
+      navigate(location.pathname, { replace: true, state: null })
+    }
+  }, [location, navigate, scanMutation])
+
+  // Open with the newest season expanded (once; later collapsing is the user's choice)
+  const seasonsOpened = useRef(false)
+  useEffect(() => {
+    if (!seasonsOpened.current && seasons.length > 0) {
+      seasonsOpened.current = true
+      setExpandedSeasons(new Set([seasons[0]]))
+    }
+  }, [seasons])
 
   const downloadAllMutation = useMutation({
     mutationFn: () => api.downloadAllChannel(channelId),
@@ -421,7 +456,10 @@ export default function ChannelDetailPage() {
                 {channel.platform && channel.platform !== "youtube" && (
                   <Badge tone="info" className="capitalize">{channel.platform}</Badge>
                 )}
-                <Circle className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
+                <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Circle className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} aria-hidden="true" />
+                  {HEALTH_LABELS[channel.health_status] || HEALTH_LABELS.unknown}
+                </span>
                 <Badge>
                   {!channel.enabled
                     ? "Not scanned automatically"
@@ -429,9 +467,11 @@ export default function ChannelDetailPage() {
                       ? "Scans automatically · downloads new videos"
                       : "Scans automatically · you pick what to download"}
                 </Badge>
-                {(channel.activity?.scanning || channel.activity?.exclusive) && (
+                {(channel.activity?.scanning || channel.activity?.exclusive) ? (
                   <Badge tone="success">Scanning…</Badge>
-                )}
+                ) : scanMutation.isPending ? (
+                  <Badge tone="success">Scan started…</Badge>
+                ) : null}
               </div>
               <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5 min-w-0">
                 <span className="truncate">{channel.channel_url}</span> <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -453,7 +493,7 @@ export default function ChannelDetailPage() {
           )}
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:flex sm:flex-wrap sm:items-center text-sm text-muted-foreground mt-3">
-            <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
+            <span>{formatVideoCounts(channel)}, {channel.downloaded_count} downloaded</span>
             {totalChannelSize > 0 && (
               <>
                 <span className="text-border hidden sm:inline">|</span>
@@ -472,9 +512,15 @@ export default function ChannelDetailPage() {
             )}
           </div>
 
+          {channel.folder_path && (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Folder: <code className="font-mono text-xs break-all text-foreground">{channel.folder_path}</code>
+            </p>
+          )}
+
           {channel.last_error_code && (
             <Banner tone="danger" className="mt-3 px-3 py-2">
-              Last error: {channel.last_error_code}
+              Last error: {errorCatalog?.[channel.last_error_code]?.label ?? "an error occurred while scanning (code " + channel.last_error_code + ")"}
             </Banner>
           )}
 
@@ -552,7 +598,7 @@ export default function ChannelDetailPage() {
           <h2 className="text-lg font-semibold">
             Episodes
             <span className="text-sm font-normal text-muted-foreground ml-2">
-              ({typeFilter ? `${filteredVideos.length} of ${totalVideos}` : totalVideos})
+              ({typeFilter || statusFilter || searchQuery ? `${filteredVideos.length} shown` : formatVideoCounts(channel)})
             </span>
           </h2>
         </div>
@@ -640,9 +686,11 @@ export default function ChannelDetailPage() {
                       const seasonVideos = seasonGroups[season]
                       const isCollapsed = !expandedSeasons.has(season)
                       const downloaded = seasonVideos.filter((v: any) => v.status === "completed").length
+                      // Same rule as the header: skipped videos are not part of the total
+                      const seasonTotal = seasonVideos.filter((v: any) => v.status !== "skipped").length
                       const monitored = seasonVideos.filter((v: any) => v.monitored).length
                       const seasonSize = seasonVideos.reduce((sum: number, v: any) => sum + (v.file_size || 0), 0)
-                      const pct = seasonVideos.length > 0 ? Math.round((downloaded / seasonVideos.length) * 100) : 0
+                      const pct = seasonTotal > 0 ? Math.min(100, Math.round((downloaded / seasonTotal) * 100)) : 0
 
                       const rows: React.ReactNode[] = []
 
@@ -663,7 +711,7 @@ export default function ChannelDetailPage() {
                                 <ChevronDown className={`h-4 w-4 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                                 <span className="font-semibold text-sm">Season {season}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  {downloaded}/{seasonVideos.length} episodes
+                                  {downloaded} of {seasonTotal} downloaded
                                   {seasonSize > 0 && <> &middot; {formatBytes(seasonSize)}</>}
                                   {` · ${monitored} monitored`}
                                 </span>
@@ -1051,6 +1099,11 @@ export default function ChannelDetailPage() {
                   </>
                 )}
               </div>
+              {channel.folder_path && (
+                <p className="sm:col-span-2 -mt-2 text-xs text-muted-foreground">
+                  This channel's folder: <code className="font-mono break-all">{channel.folder_path}</code>
+                </p>
+              )}
             </div>
           </div>
 
@@ -1923,7 +1976,7 @@ export default function ChannelDetailPage() {
                   invalidateVideos()
                   queryClient.invalidateQueries({ queryKey: ["channel", channelId] })
                   setEditDownloadDir(null)
-                  toast(r.message)
+                  toast(`${r.message} Rescan your Plex or Jellyfin library so it finds the new folder.`)
                 }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingFiles(false))
               }}
             >
@@ -1950,6 +2003,9 @@ export default function ChannelDetailPage() {
               <span className="text-muted-foreground">Total size:</span>
               <span>{formatBytes(movePreview.total_size)}</span>
             </div>
+            <p className="text-xs text-muted-foreground">
+              Afterwards, rescan your Plex or Jellyfin library so it finds the new folder.
+            </p>
             {movePreview.missing_count > 0 && (
               <p className="text-xs text-warning">
                 {movePreview.missing_count} files in database but missing from disk (paths will be updated anyway)

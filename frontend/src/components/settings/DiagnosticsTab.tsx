@@ -112,10 +112,11 @@ export default function DiagnosticsTab() {
           storageKey="diagnostics_tab"
           label="Diagnostics sections"
           idPrefix="diag"
+          variant="inline"
           className="min-w-0 basis-full sm:basis-0 sm:flex-1"
         />
         {subTab === "overview" && diagnostics && (
-          <Button onClick={copyReport} className="w-full sm:w-auto sm:ml-4 whitespace-nowrap">
+          <Button id="diagnostic-report" onClick={copyReport} className="w-full sm:w-auto sm:ml-4 whitespace-nowrap">
             <ClipboardCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Diagnostic Report"}
           </Button>
@@ -135,12 +136,16 @@ export default function DiagnosticsTab() {
               <StatusCard label="yt-dlp" status="ok" value={diagnostics.ytdlp_version} />
               <StatusCard
                 label="Disk Space"
-                status={parseInt(diagnostics.disk_free_formatted) < 5 ? "warning" : "ok"}
-                value={diagnostics.disk_free_formatted + " free"}
+                status={
+                  diagnostics.disk_status === "critical" ? "error"
+                  : diagnostics.disk_status === "warning" ? "warning"
+                  : "ok"
+                }
+                value={`${diagnostics.disk_free_formatted} free${diagnostics.disk_where ?? ""}`}
               />
             </div>
 
-            <Card title="Statistics" as="h2" className="space-y-3">
+            <Card title="Statistics" as="h2" className="space-y-3" id="diagnostic-statistics">
               <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-x-8">
                 <div className="flex justify-between sm:justify-start sm:gap-2">
                   <span className="text-muted-foreground">Channels</span>
@@ -163,8 +168,10 @@ export default function DiagnosticsTab() {
 
             <SharedFoldersCard />
 
-            {diagnostics.recent_errors.length > 0 && (
-              <Card title="Recent Errors" as="h2" className="space-y-3">
+            <Card title="Recent Errors" as="h2" className="space-y-3" id="recent-errors">
+              {diagnostics.recent_errors.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent errors.</p>
+              ) : (
                 <div className="space-y-2">
                   {diagnostics.recent_errors.map((error: any) => (
                     <div key={error.id} className="flex items-start gap-2 text-sm">
@@ -178,8 +185,8 @@ export default function DiagnosticsTab() {
                     </div>
                   ))}
                 </div>
-              </Card>
-            )}
+              )}
+            </Card>
           </div>
         ) : null
       )}

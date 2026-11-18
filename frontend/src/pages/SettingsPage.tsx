@@ -1,1344 +1,292 @@
-import { useState, useRef, useEffect } from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
-import { useToast } from "@/components/ui/toaster"
-import { HelpIcon } from "@/components/ui/HelpIcon"
-import { Banner } from "@/components/ui/Banner"
-import { Button, buttonClasses } from "@/components/ui/Button"
-import { Card } from "@/components/ui/Card"
-import { DateTime } from "@/components/ui/DateTime"
-import { Field } from "@/components/ui/Field"
-import { Input, Select, Textarea } from "@/components/ui/Input"
-import { Checkbox } from "@/components/ui/Checkbox"
+import { useState, useEffect, useMemo, useRef } from "react"
+import { useBlocker, useSearchParams } from "react-router-dom"
+import { Search } from "lucide-react"
+import { Button } from "@/components/ui/Button"
+import { Dialog } from "@/components/ui/Dialog"
+import { Input } from "@/components/ui/Input"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
+import GeneralTab from "@/components/settings/GeneralTab"
+import ScanningTab from "@/components/settings/ScanningTab"
+import MediaTab from "@/components/settings/MediaTab"
+import AuthTab from "@/components/settings/AuthTab"
+import AntiDetectTab from "@/components/settings/AntiDetectTab"
+import NotificationsTab from "@/components/settings/NotificationsTab"
 import DiagnosticsTab from "@/components/settings/DiagnosticsTab"
-import {
-  Upload,
-  Key,
-  Shield,
-  FileText,
-  RefreshCw,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Save,
-  Bell,
-  Send,
-  Download,
-  Clock,
-  ExternalLink,
-  Globe,
-  Settings,
-} from "lucide-react"
+import { SettingsFormContext, type FormStatus } from "@/components/settings/settingsForm"
+import { TAB_LABELS, searchSettings, type SettingsTab } from "@/components/settings/searchIndex"
 
-type SettingsTab = "general" | "media" | "auth" | "antidetect" | "connect" | "diagnostics"
+const STORAGE_KEY = "settings_tab"
+
+const TABS: readonly TabItem<SettingsTab>[] = (
+  ["general", "scanning", "media", "auth", "antidetect", "notifications", "diagnostics"] as const
+).map((key) => ({ key, label: TAB_LABELS[key] }))
+const TAB_KEYS = TABS.map((t) => t.key)
+
+// Old saved tab keys -> current ones
+const MIGRATIONS: Record<string, SettingsTab> = { naming: "media", ytdlp: "general", connect: "notifications" }
+
+const isTab = (v: string | null): v is SettingsTab => !!v && (TAB_KEYS as string[]).includes(v)
+
+function remember(tab: SettingsTab) {
+  try { localStorage.setItem(STORAGE_KEY, tab) } catch { /* ignore */ }
+}
+
+/** Scroll to a setting and ring it for a moment. Waits briefly for tabs that load their content. */
+function useReveal(anchor: string | null, onDone: () => void, deps: unknown[]) {
+  useEffect(() => {
+    if (!anchor) return
+    let tries = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const ring = ["ring-2", "ring-primary", "ring-offset-2", "ring-offset-background", "rounded-md"]
+    const run = () => {
+      const el = document.getElementById(anchor)
+      if (el) {
+        el.scrollIntoView({ block: "center" })
+        el.classList.add(...ring)
+        setTimeout(() => el.classList.remove(...ring), 2000)
+        onDone()
+        return
+      }
+      if (++tries < 20) timer = setTimeout(run, 150)
+      else onDone()
+    }
+    run()
+    // The ring timer is left running: it removes the ring even after the anchor state resets.
+    return () => {
+      clearTimeout(timer)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor, ...deps])
+}
 
 export default function SettingsPage() {
-  const tabs: readonly TabItem<SettingsTab>[] = [
-    { key: "general", label: "General" },
-    { key: "media", label: "Media Management" },
-    { key: "auth", label: "Authentication" },
-    { key: "antidetect", label: "Anti-Detection" },
-    { key: "connect", label: "Connect" },
-    { key: "diagnostics", label: "Diagnostics" },
-  ]
+  const [params, setParams] = useSearchParams()
+  const rawUrlTab = params.get("tab")
+  const urlAnchor = params.get("anchor")
+  // Old keys work in links too (?tab=connect opens Notifications)
+  const urlTab = rawUrlTab ? (MIGRATIONS[rawUrlTab] ?? rawUrlTab) : null
 
-  const [tab, setTab] = useState<SettingsTab>(() =>
-    // Migrate old tab keys to new ones
-    readSavedTab(
-      "settings_tab",
-      tabs.map((t) => t.key),
-      "general",
-      { naming: "media", ytdlp: "general", notifications: "connect" },
-    ),
+  const [tab, setTab] = useState<SettingsTab>(() => {
+    if (isTab(urlTab)) {
+      remember(urlTab)
+      return urlTab
+    }
+    return readSavedTab(STORAGE_KEY, TAB_KEYS, "general", MIGRATIONS)
+  })
+  const [form, setForm] = useState<FormStatus | null>(null)
+  const [pending, setPending] = useState<{ tab: SettingsTab; anchor?: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [anchor, setAnchor] = useState<string | null>(null)
+  const [panelKey, setPanelKey] = useState(0)
+  const [query, setQuery] = useState("")
+
+  const results = useMemo(() => searchSettings(query), [query])
+
+  const doSwitch = (next: SettingsTab, to?: string) => {
+    setTab(next)
+    remember(next)
+    setAnchor(to ?? null)
+    if (next === "diagnostics" && to) {
+      // The settings in Diagnostics sit on its overview; a remount shows it even if a log view was open.
+      try { localStorage.setItem("diagnostics_tab", "overview") } catch { /* ignore */ }
+      setPanelKey((k) => k + 1)
+    }
+  }
+
+  const goTo = (next: SettingsTab, to?: string) => {
+    if (next !== tab && form?.dirty) {
+      setPending({ tab: next, anchor: to })
+      return
+    }
+    doSwitch(next, to)
+  }
+
+  // /settings?tab=<key> (links from the dashboard alerts): switch, then drop the parameter
+  useEffect(() => {
+    if (!rawUrlTab) return
+    if (isTab(urlTab)) goTo(urlTab, urlAnchor ?? undefined)
+    setParams((p) => { p.delete("tab"); p.delete("anchor"); return p }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawUrlTab, urlAnchor])
+
+  // Close the search results on an outside click
+  const searchRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!query) return
+    const onDown = (e: PointerEvent) => {
+      if (!searchRef.current?.contains(e.target as Node)) setQuery("")
+    }
+    document.addEventListener("pointerdown", onDown)
+    return () => document.removeEventListener("pointerdown", onDown)
+  }, [query])
+
+  useReveal(anchor, () => setAnchor(null), [tab, panelKey])
+
+  // Leaving the page (reload, close tab, address bar) with unsaved changes
+  useEffect(() => {
+    if (!form?.dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [form?.dirty])
+
+  const save = async () => {
+    if (!form) return false
+    setSaving(true)
+    try {
+      return await form.save()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const pick = (entryTab: SettingsTab, anchorId: string) => {
+    setQuery("")
+    goTo(entryTab, anchorId)
+  }
+
+  // Leaving Settings inside the app (sidebar, links) with unsaved changes asks first.
+  const blocker = useBlocker(({ currentLocation, nextLocation }) =>
+    !!form?.dirty && currentLocation.pathname !== nextLocation.pathname,
   )
+  const leaving = blocker.state === "blocked"
+
+  const closePending = () => {
+    setPending(null)
+    if (blocker.state === "blocked") blocker.reset()
+  }
+  const continueAfterSave = (p: typeof pending) => {
+    closePending()
+    if (p) doSwitch(p.tab, p.anchor)
+  }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Settings" />
+    <SettingsFormContext.Provider value={setForm}>
+      <div className="space-y-6">
+        <PageHeader title="Settings" />
 
-      <Tabs tabs={tabs} value={tab} onChange={setTab} storageKey="settings_tab" label="Settings sections" idPrefix="settings" />
+        <div
+          ref={searchRef}
+          className="relative max-w-md"
+          onBlur={(e) => {
+            // Keyboard focus moving out of the search box and its results closes the list
+            if (e.relatedTarget && !e.currentTarget.contains(e.relatedTarget as Node)) setQuery("")
+          }}
+        >
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+          <Input
+            type="search"
+            aria-label="Search settings"
+            placeholder="Search settings (e.g. cookies, quality, Discord)"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setQuery("")
+              else if (e.key === "Enter" && results[0]) pick(results[0].tab, results[0].anchorId)
+            }}
+            className="pl-9"
+          />
+          {query.trim() && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+              {results.length === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">No settings match "{query.trim()}".</p>
+              ) : (
+                <ul>
+                  {results.map((r) => (
+                    <li key={r.anchorId}>
+                      <button
+                        type="button"
+                        onClick={() => pick(r.tab, r.anchorId)}
+                        className="flex min-h-10 w-full items-center justify-between gap-3 rounded px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0"
+                      >
+                        <span>{r.label}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{TAB_LABELS[r.tab]}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
 
-      <div role="tabpanel" id={panelId("settings", tab)} aria-labelledby={tabId("settings", tab)}>
-        {tab === "general" && <GeneralTab />}
-        {tab === "media" && <MediaManagementTab />}
-        {tab === "auth" && <AuthTab />}
-        {tab === "antidetect" && <AntiDetectTab />}
-        {tab === "connect" && <NotificationsTab />}
-        {tab === "diagnostics" && <DiagnosticsTab />}
+        <Tabs tabs={TABS} value={tab} onChange={(k) => goTo(k)} label="Settings sections" idPrefix="settings" />
+
+        <div key={panelKey} role="tabpanel" id={panelId("settings", tab)} aria-labelledby={tabId("settings", tab)}>
+          {tab === "general" && <GeneralTab />}
+          {tab === "scanning" && <ScanningTab />}
+          {tab === "media" && <MediaTab />}
+          {tab === "auth" && <AuthTab />}
+          {tab === "antidetect" && <AntiDetectTab />}
+          {tab === "notifications" && <NotificationsTab />}
+          {tab === "diagnostics" && <DiagnosticsTab />}
+        </div>
+
+        {form?.dirty && (
+          <div
+            role="region"
+            aria-label="Unsaved changes"
+            className="sticky bottom-0 z-20 -mx-4 -mb-4 flex flex-wrap items-center justify-between gap-3 border-t bg-background px-4 py-3 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] sm:-mx-6 sm:-mb-6 sm:px-6"
+          >
+            <p className="text-sm font-medium">You have unsaved changes</p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={form.discard} disabled={saving || form.saving}>
+                Discard
+              </Button>
+              <Button variant="primary" onClick={save} loading={saving || form.saving}>
+                Save
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  )
-}
 
-function GeneralTab() {
-  const { toast } = useToast()
-  const queryClient = useQueryClient()
-  const importRef = useRef<HTMLInputElement>(null)
-  const { data: stats } = useQuery({ queryKey: ["dashboard-stats"], queryFn: api.getStats })
-  const { data: ytdlpVersion } = useQuery({
-    queryKey: ["ytdlp-version"],
-    queryFn: api.getYtdlpVersion,
-  })
-
-  // Settings state
-  const [scanMinIntervalHours, setScanMinIntervalHours] = useState<number>(12)
-  const [rssCheckMinutes, setRssCheckMinutes] = useState<number>(0)
-  const [defaultQuality, setDefaultQuality] = useState("best")
-  const [maxConcurrent, setMaxConcurrent] = useState(1)
-  const [maxRetries, setMaxRetries] = useState(3)
-  const [logLevel, setLogLevel] = useState("info")
-
-  const { data: settings } = useQuery({
-    queryKey: ["app-settings"],
-    queryFn: api.getSettings,
-  })
-
-  useEffect(() => {
-    if (settings) {
-      if (settings.scan_min_interval_hours != null) setScanMinIntervalHours(Number(settings.scan_min_interval_hours))
-      if (settings.rss_check_minutes != null) setRssCheckMinutes(Number(settings.rss_check_minutes))
-      if (settings.default_quality) setDefaultQuality(String(settings.default_quality))
-      if (settings.max_concurrent_downloads != null) setMaxConcurrent(Number(settings.max_concurrent_downloads))
-      if (settings.max_retries != null) setMaxRetries(Number(settings.max_retries))
-      if (settings.log_level) setLogLevel(String(settings.log_level))
-    }
-  }, [settings])
-
-  const scanAllMutation = useMutation({
-    mutationFn: api.scanAll,
-    onSuccess: (data: any) => toast(data.message || "Scan started"),
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const saveSettingsMutation = useMutation({
-    mutationFn: () =>
-      api.updateSettings({
-        scan_min_interval_hours: scanMinIntervalHours,
-        rss_check_minutes: rssCheckMinutes,
-        default_quality: defaultQuality,
-        max_concurrent_downloads: maxConcurrent,
-        max_retries: maxRetries,
-        log_level: logLevel,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Settings saved  - changes take effect immediately")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const handleExport = async () => {
-    try {
-      const data = await api.exportConfig()
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `channelhoarder-config-${new Date().toISOString().slice(0, 10)}.json`
-      a.click()
-      URL.revokeObjectURL(url)
-      toast("Config exported")
-    } catch (e: any) {
-      toast(e.message, "error")
-    }
-  }
-
-  const handleImport = async (file: File) => {
-    try {
-      const result = await api.importConfig(file)
-      const skippedSettings: { key: string; reason: string }[] = result.skipped_settings ?? []
-      const skippedChannels: { channel_id: string; channel_name?: string; reason: string }[] = result.skipped_channels ?? []
-      const existing = skippedChannels.filter((c) => c.reason === "already exists").length
-      const notImported = skippedChannels.filter((c) => c.reason !== "already exists")
-      toast(`Imported ${result.imported_settings} settings, ${result.imported_channels} channels (${existing} already existed)`)
-      if (skippedSettings.length || notImported.length) {
-        // Group channels by reason so a restore onto an install missing a volume
-        // reads as one line per reason, not one long line per channel.
-        const byReason = new Map<string, string[]>()
-        for (const c of notImported) {
-          const names = byReason.get(c.reason) ?? []
-          names.push(c.channel_name || c.channel_id)
-          byReason.set(c.reason, names)
+      <Dialog
+        open={pending !== null || leaving}
+        onClose={closePending}
+        title="Unsaved changes"
+        description={`You have unsaved changes on ${TAB_LABELS[tab]}. Save them before you leave, or discard them.`}
+        size="sm"
+        footer={
+          <>
+            <Button variant="outline" onClick={closePending}>Keep Editing</Button>
+            <Button
+              variant="danger-outline"
+              onClick={() => {
+                if (leaving) {
+                  setPending(null)
+                  blocker.proceed?.()
+                  return
+                }
+                continueAfterSave(pending)
+              }}
+            >
+              Discard
+            </Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                if (leaving) {
+                  if (await save()) {
+                    setPending(null)
+                    blocker.proceed?.()
+                  }
+                  return
+                }
+                const p = pending
+                if (p && (await save())) continueAfterSave(p)
+              }}
+              loading={saving}
+            >
+              Save
+            </Button>
+          </>
         }
-        const parts = [
-          ...skippedSettings.map((s) => `Setting ${s.key}: ${s.reason}`),
-          ...[...byReason].map(([reason, names]) => {
-            const shown = names.slice(0, 3).join(", ")
-            const more = names.length > 3 ? ` and ${names.length - 3} more` : ""
-            return `${names.length} channel${names.length === 1 ? "" : "s"} (${shown}${more}): ${reason}`
-          }),
-        ]
-        toast(`Skipped: ${parts.join(" | ")}`, "error")
-      }
-    } catch (e: any) {
-      toast(e.message, "error")
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Scan Controls */}
-      <Card
-        icon={<Clock />}
-        title="Scan Schedule"
-        as="h2"
-        help={<HelpIcon text="How often each channel is checked for new uploads." anchor="automatic-scanning" />}
-      >
-        <div>
-          <label htmlFor="scan-min-interval-hours" className="block text-sm font-medium mb-1">Scan each channel every</label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="scan-min-interval-hours"
-              type="number"
-              value={scanMinIntervalHours}
-              onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
-              min={1}
-              max={168}
-              className="w-32"
-            />
-            <span className="text-sm text-muted-foreground">hours</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Each channel gets its own random scan time, between this many hours and twice that (never more than 12 hours extra) after its last scan, so channels aren't all scanned at once. With a scan window set, a scan that comes due outside it waits for the window to open. A new interval applies from each channel's next scan; Scan All Channels Now applies it right away. To keep scans to certain hours of the day, set a scan window under Anti-Detection.
-          </p>
-        </div>
-        <div>
-          <label htmlFor="rss-check-minutes" className="block text-sm font-medium mb-1">Check YouTube feeds every</label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="rss-check-minutes"
-              type="number"
-              value={rssCheckMinutes}
-              onChange={(e) => {
-                const n = Math.round(Number(e.target.value) || 0)
-                setRssCheckMinutes(Math.max(0, Math.min(1440, n)))
-              }}
-              onBlur={() => {
-                if (rssCheckMinutes > 0 && rssCheckMinutes < 15) setRssCheckMinutes(15)
-              }}
-              min={0}
-              max={1440}
-              className="w-32"
-            />
-            <span className="text-sm text-muted-foreground">minutes (0 = off, otherwise 15 to 1440)</span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Checks each YouTube channel's feed and scans only when a new video appears, so new uploads are found sooner without extra scans. Interval scans still run as the backup. With many channels it checks less often to stay under YouTube's daily feed limit, and with a scan window set it only checks inside the window.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => scanAllMutation.mutate()}
-          disabled={scanAllMutation.isPending}
-        >
-          {scanAllMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          Scan All Channels Now
-        </Button>
-      </Card>
-
-      {/* Download & System Settings */}
-      <Card icon={<Settings />} title="Download Settings" as="h2">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Default Quality" hint="Default quality for new channels">
-            <Select value={defaultQuality} onChange={(e) => setDefaultQuality(e.target.value)}>
-              <option value="best">Best Available</option>
-              <option value="2160p">4K (2160p)</option>
-              <option value="1080p">1080p</option>
-              <option value="720p">720p</option>
-              <option value="480p">480p</option>
-            </Select>
-          </Field>
-          <Field label="Max Concurrent Downloads" hint="Simultaneous downloads (1-5)">
-            <Input
-              type="number"
-              min={1}
-              max={5}
-              value={maxConcurrent}
-              onChange={(e) => setMaxConcurrent(Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Max Retries" hint="Retry attempts for failed downloads">
-            <Input
-              type="number"
-              min={1}
-              max={10}
-              value={maxRetries}
-              onChange={(e) => setMaxRetries(Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Log Level" hint="Set to debug for troubleshooting">
-            <Select value={logLevel} onChange={(e) => setLogLevel(e.target.value)}>
-              <option value="debug">Debug</option>
-              <option value="info">Info</option>
-              <option value="warning">Warning</option>
-              <option value="error">Error</option>
-            </Select>
-          </Field>
-        </div>
-      </Card>
-
-      {/* Save button */}
-      <Button
-        variant="primary"
-        onClick={() => saveSettingsMutation.mutate()}
-        disabled={saveSettingsMutation.isPending}
-      >
-        {saveSettingsMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Save Settings
-      </Button>
-
-      {/* System Info */}
-      <Card title="System Info" as="h2" className="space-y-2">
-        <div className="grid gap-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Total Channels</span>
-            <span>{stats?.total_channels || 0}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Total Downloaded</span>
-            <span>{stats?.total_downloaded || 0}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Storage Used</span>
-            <span>{stats?.storage_used_formatted || "0 B"}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* yt-dlp */}
-      <Card
-        title="yt-dlp"
-        as="h2"
-        help={<HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />}
-      >
-        <div>
-          <p className="text-sm">Current version: <span className="font-mono">{ytdlpVersion?.version || "unknown"}</span></p>
-          <p className="text-xs text-muted-foreground">
-            yt-dlp is bundled with the app and updated with each release
-          </p>
-        </div>
-      </Card>
-
-      {/* Backup & Restore */}
-      <Card title="Backup & Restore" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Export all settings and channel subscriptions as JSON. Import to restore on a new instance.
-        </p>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4" />
-            Export Config
-          </Button>
-          <input
-            ref={importRef}
-            type="file"
-            accept=".json"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) handleImport(file)
-            }}
-            className="hidden"
-          />
-          <Button onClick={() => importRef.current?.click()}>
-            <Upload className="h-4 w-4" />
-            Import Config
-          </Button>
-        </div>
-      </Card>
-    </div>
-  )
-}
-
-function AuthTab() {
-  const { toast } = useToast()
-  const fileRef = useRef<HTMLInputElement>(null)
-  const [apiKey, setApiKey] = useState("")
-  const queryClient = useQueryClient()
-
-  const { data: authStatus, refetch: refetchAuth, error: authError, isLoading: authLoading } = useQuery({
-    queryKey: ["auth-status"],
-    queryFn: api.getAuthStatus,
-    retry: 2,
-  })
-
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => api.uploadCookies(file),
-    onSuccess: (data: any) => {
-      refetchAuth()
-      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
-      toast(data.message || "Cookies uploaded")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const apiKeyMutation = useMutation({
-    mutationFn: (key: string) => api.setApiKey(key),
-    onSuccess: (data: any) => { refetchAuth(); setApiKey(""); toast(data.valid ? "API key saved and validated" : "API key saved but validation failed - check the key") },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const validateMutation = useMutation({
-    mutationFn: api.validateCookies,
-    onSuccess: (data: any) => {
-      refetchAuth()
-      toast(data.status === "healthy" ? "Cookies are valid" : `Cookies: ${data.message}`, data.status === "healthy" ? "success" : "error")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const deleteCookiesMutation = useMutation({
-    mutationFn: api.deleteCookies,
-    onSuccess: () => { refetchAuth(); toast("Cookies removed") },
-  })
-
-  const playerClientMutation = useMutation({
-    mutationFn: (strategy: string) => api.setPlayerClient(strategy),
-    onSuccess: (data: any) => { refetchAuth(); toast(data.message || "Player client updated") },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const isExpired = authStatus?.cookies_status === "expired"
-  const hasCookies = authStatus?.cookies_status === "present" || authStatus?.cookies_status === "warning" || isExpired
-
-  return (
-    <div className="space-y-6">
-      {/* Error banner */}
-      {authError && (
-        <Banner
-          tone="danger"
-          title="Failed to load auth status"
-          action={<Button variant="link" size="sm" onClick={() => refetchAuth()}>Retry</Button>}
-        >
-          {(authError as Error).message}
-        </Banner>
-      )}
-
-      {/* Cookie expired warning */}
-      {isExpired && (
-        <Banner tone="warning" title="Cookies Expired">
-          Your YouTube cookies have expired and the download queue has been auto-paused.
-          Export fresh cookies from your browser and upload them below to resume downloads.
-        </Banner>
-      )}
-
-      {/* PO Tokens */}
-      <Card
-        icon={<Shield />}
-        title="PO Tokens"
-        as="h2"
-        help={<HelpIcon text="Auto-generated tokens for YouTube auth. Cookies take priority when available." anchor="authentication" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          PO tokens are generated automatically by the built-in server. When cookies are available, they take priority.
-        </p>
-        <div className="flex items-center gap-2">
-          {authLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : authStatus?.pot_status === "enabled" ? (
-            <CheckCircle2 className="h-4 w-4 text-success" />
-          ) : (
-            <XCircle className="h-4 w-4 text-danger" />
-          )}
-          <span className="text-sm">{authLoading ? "Checking..." : authStatus?.pot_message || "Unknown"}</span>
-        </div>
-      </Card>
-
-      {/* Cookie Upload */}
-      <Card
-        icon={<FileText />}
-        title="Cookie Authentication"
-        as="h2"
-        help={<HelpIcon text="Upload cookies from your browser for YouTube auth." anchor="cookie-authentication-optional" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Export cookies from your browser using a browser extension (e.g. "Get cookies.txt LOCALLY") and upload the file here.
-        </p>
-        <div className="flex items-center gap-2">
-          {authLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : isExpired ? (
-            <>
-              <XCircle className="h-4 w-4 text-danger" />
-              <span className="text-sm text-danger">{authStatus?.cookies_message}</span>
-            </>
-          ) : hasCookies ? (
-            <>
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <span className="text-sm">{authStatus?.cookies_message}</span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">{authStatus?.cookies_message || "No cookies uploaded"}</span>
-          )}
-        </div>
-
-        {/* Cookie health bar */}
-        {hasCookies && authStatus?.cookies_age_hours != null && (
-          <div className="space-y-1">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                Cookie Age
-              </span>
-              <span>
-                {authStatus.cookies_age_hours < 24
-                  ? `${Math.round(authStatus.cookies_age_hours)}h`
-                  : `${Math.round(authStatus.cookies_age_hours / 24)}d`}
-              </span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${
-                  isExpired ? "bg-red-500" :
-                  authStatus.cookies_age_hours > 168 ? "bg-red-500" :
-                  authStatus.cookies_age_hours > 72 ? "bg-amber-500" :
-                  "bg-green-500"
-                }`}
-                style={{ width: `${Math.min(100, (authStatus.cookies_age_hours / 168) * 100)}%` }}
-              />
-            </div>
-            {authStatus.last_successful_auth && (
-              <p className="text-xs text-muted-foreground">
-                Last successful download: <DateTime value={authStatus.last_successful_auth} />
-              </p>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2 flex-wrap">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".txt"
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              if (file) uploadMutation.mutate(file)
-            }}
-            className="hidden"
-          />
-          <Button variant="outline" onClick={() => fileRef.current?.click()}>
-            <Upload className="h-4 w-4" />
-            Upload cookies.txt
-          </Button>
-          {hasCookies && (
-            <>
-              <Button onClick={() => validateMutation.mutate()} disabled={validateMutation.isPending}>
-                {validateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                Validate
-              </Button>
-              <Button variant="danger-outline" onClick={() => deleteCookiesMutation.mutate()}>
-                Remove
-              </Button>
-            </>
-          )}
-        </div>
-        {isExpired && (
-          <p className="text-xs text-muted-foreground">
-            Tip: After uploading fresh cookies, the queue will automatically resume.
-          </p>
-        )}
-      </Card>
-
-      {/* Browser Cookie Sync (Tampermonkey) */}
-      <Card
-        icon={<Globe />}
-        title="Browser Cookie Sync"
-        as="h2"
-        help={<HelpIcon text="Auto-sync cookies from your browser using Tampermonkey." anchor="cookie-authentication-optional" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Automatically sync your browser cookies to ChannelHoarder using a Tampermonkey userscript.
-          Cookies are exported each time you load or refresh a YouTube page.
-        </p>
-        <div className="flex gap-2 flex-wrap items-center">
-          <a
-            href="/api/v1/settings/userscript.user.js"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={buttonClasses("outline", "md")}
-          >
-            <ExternalLink className="h-4 w-4" />
-            Install Tampermonkey Script
-          </a>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Requires the{" "}
-          <a
-            href="https://www.tampermonkey.net/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:text-foreground"
-          >
-            Tampermonkey
-          </a>{" "}
-          browser extension. The script comes pre-configured with this server's address.
-        </p>
-      </Card>
-
-      {/* YouTube API Key */}
-      <Card
-        icon={<Key />}
-        title="YouTube Data API Key (Optional)"
-        as="h2"
-        help={<HelpIcon text="Free API key from Google Cloud Console. 10,000 units/day." anchor="youtube-data-api-key-optional" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Provides more reliable channel discovery, thumbnails, and video metadata. Falls back to yt-dlp if not set.
-        </p>
-        <div className="flex items-center gap-2">
-          {authLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : authStatus?.api_key_configured ? (
-            <>
-              <CheckCircle2 className="h-4 w-4 text-success" />
-              <span className="text-sm">API key configured</span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground">Not configured</span>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Input
-            type="text"
-            aria-label="YouTube Data API key"
-            placeholder="Paste your API key here..."
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            className="flex-1"
-          />
-          <Button
-            variant="primary"
-            onClick={() => apiKeyMutation.mutate(apiKey)}
-            disabled={!apiKey || apiKeyMutation.isPending}
-          >
-            Save
-          </Button>
-        </div>
-        {apiKeyMutation.error && (
-          <p className="text-sm text-danger">{(apiKeyMutation.error as Error).message}</p>
-        )}
-      </Card>
-
-      {/* yt-dlp Player Client */}
-      <Card
-        icon={<Key />}
-        title="yt-dlp Player Client"
-        as="h2"
-        help={<HelpIcon text="The YouTube client yt-dlp uses when fetching formats. Leave on Default (automatic) - yt-dlp picks a working client and adapts to YouTube's changes. Only override if a specific video fails; 'ios' and 'web_safari' are good fallbacks." anchor="player-client" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Controls which YouTube player API yt-dlp uses to list downloadable formats. Change this if downloads fail with a format error.
-        </p>
-        <Select
-          aria-label="Player client"
-          value={authStatus?.player_client || "default"}
-          onChange={(e) => playerClientMutation.mutate(e.target.value)}
-          disabled={authLoading || playerClientMutation.isPending}
-        >
-          <option value="default">Default (automatic - recommended)</option>
-          <option value="ios">ios</option>
-          <option value="web_safari">web_safari</option>
-          <option value="tv">tv</option>
-          <option value="web">web</option>
-          <option value="web_creator">web_creator</option>
-          <option value="mweb">mweb</option>
-          <option value="android">android</option>
-          <option value="android_vr">android_vr</option>
-          <option value="mediaconnect">mediaconnect</option>
-        </Select>
-      </Card>
-    </div>
-  )
-}
-
-function MediaManagementTab() {
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
-
-  const [template, setTemplate] = useState(
-    "{channel_name}/Season {season}/S{season}E{episode} - {title} - {upload_date} - [{video_id}]"
-  )
-  const [shortsEnabled, setShortsEnabled] = useState(false)
-  const [livestreamsEnabled, setLivestreamsEnabled] = useState(false)
-  const [subtitlesEnabled, setSubtitlesEnabled] = useState(false)
-  const [chaptersEnabled, setChaptersEnabled] = useState(false)
-  const [sponsorblockMode, setSponsorblockMode] = useState("off")
-  const [setPermissions, setSetPermissions] = useState(false)
-  const [chmodFolder, setChmodFolder] = useState("755")
-  const [chmodFile, setChmodFile] = useState("644")
-  const [chownGroup, setChownGroup] = useState("")
-  const [maxDuration, setMaxDuration] = useState(0)
-
-  const { data: settings } = useQuery({
-    queryKey: ["app-settings"],
-    queryFn: api.getSettings,
-  })
-
-  useEffect(() => {
-    if (settings) {
-      if (settings.naming_template) setTemplate(String(settings.naming_template))
-      if (settings.shorts_enabled != null) setShortsEnabled(settings.shorts_enabled === true || settings.shorts_enabled === "true")
-      if (settings.livestreams_enabled != null) setLivestreamsEnabled(settings.livestreams_enabled === true || settings.livestreams_enabled === "true")
-      if (settings.subtitles_enabled != null) setSubtitlesEnabled(settings.subtitles_enabled === true || settings.subtitles_enabled === "true")
-      if (settings.chapters_enabled != null) setChaptersEnabled(settings.chapters_enabled === true || settings.chapters_enabled === "true")
-      if (settings.sponsorblock_mode != null) setSponsorblockMode(String(settings.sponsorblock_mode))
-      if (settings.set_permissions != null) setSetPermissions(settings.set_permissions === true || settings.set_permissions === "true")
-      if (settings.chmod_folder) setChmodFolder(String(settings.chmod_folder))
-      if (settings.chmod_file) setChmodFile(String(settings.chmod_file))
-      if (settings.chown_group) setChownGroup(String(settings.chown_group))
-      if (settings.max_video_duration != null) setMaxDuration(Math.round(Number(settings.max_video_duration) / 3600))
-    }
-  }, [settings])
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      api.updateSettings({
-        naming_template: template,
-        shorts_enabled: shortsEnabled,
-        livestreams_enabled: livestreamsEnabled,
-        subtitles_enabled: subtitlesEnabled,
-        chapters_enabled: chaptersEnabled,
-        sponsorblock_mode: sponsorblockMode,
-        set_permissions: setPermissions,
-        chmod_folder: chmodFolder,
-        chmod_file: chmodFile,
-        chown_group: chownGroup || null,
-        max_video_duration: maxDuration > 0 ? maxDuration * 3600 : 0,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Media settings saved")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const previewMutation = useMutation({
-    mutationFn: (tmpl: string) => api.previewNaming({ template: tmpl }),
-  })
-
-  return (
-    <div className="space-y-6">
-      {/* Naming Template */}
-      <Card
-        title="Default Naming Template"
-        as="h2"
-        help={<HelpIcon text="Controls how downloaded files are named and organized." anchor="file-organization" />}
-      >
-        <p className="text-sm text-muted-foreground">
-          Available variables: {"{channel_name}"}, {"{season}"}, {"{episode}"}, {"{title}"}, {"{upload_date}"}, {"{video_id}"}
-        </p>
-        <Textarea
-          aria-label="Default naming template"
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          rows={2}
-          className="font-mono"
-        />
-        <div className="flex gap-2">
-          <Button onClick={() => previewMutation.mutate(template)}>
-            Preview
-          </Button>
-        </div>
-        {previewMutation.data && (
-          <div className="rounded-md bg-muted p-3">
-            <p className="text-sm font-mono">{previewMutation.data.full_path}</p>
-          </div>
-        )}
-      </Card>
-
-      {/* YouTube Shorts */}
-      <Card title="YouTube Shorts" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          By default, YouTube Shorts (videos of 60 seconds or less, or on the channel's Shorts tab) are excluded from downloads. Enable this
-          to allow channels to opt-in to downloading shorts.
-        </p>
-        <Checkbox
-          label="Allow shorts downloading (per-channel opt-in)"
-          checked={shortsEnabled}
-          onChange={(e) => setShortsEnabled(e.target.checked)}
-        />
-        <p className="text-xs text-muted-foreground">
-          {shortsEnabled
-            ? "Channels can individually enable shorts downloading in their settings."
-            : "Shorts are excluded from all channel downloads."}
-        </p>
-      </Card>
-
-      {/* Livestreams */}
-      <Card title="Livestreams" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          By default, YouTube livestreams and premieres are excluded from downloads. Enable this to allow channels to opt-in to downloading livestreams. Scheduled livestreams that haven't started will be automatically skipped.
-        </p>
-        <Checkbox
-          label="Allow livestream downloading (per-channel opt-in)"
-          checked={livestreamsEnabled}
-          onChange={(e) => setLivestreamsEnabled(e.target.checked)}
-        />
-        <p className="text-xs text-muted-foreground">
-          {livestreamsEnabled
-            ? "Now open a channel's page and turn on \"Include livestreams when downloading\" in its Livestreams section - livestreams stay excluded until you opt in per channel."
-            : "Livestreams are excluded from all channel downloads."}
-        </p>
-      </Card>
-
-      {/* Subtitles */}
-      <Card
-        title="Subtitles / Captions"
-        as="h2"
-        help={<HelpIcon text="Downloads English subtitles and auto-generated captions alongside videos." anchor="episode-management" />}
-        className="space-y-3"
-      >
-        <Checkbox
-          label="Download subtitles and auto-generated captions"
-          checked={subtitlesEnabled}
-          onChange={(e) => setSubtitlesEnabled(e.target.checked)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
-        </p>
-      </Card>
-
-      {/* Chapters */}
-      <Card
-        title="Chapters"
-        as="h2"
-        help={<HelpIcon text="Embeds chapter markers into the MP4 file so players like Plex and VLC can display them." anchor="episode-management" />}
-        className="space-y-3"
-      >
-        <Checkbox
-          label="Embed chapter markers in downloaded videos"
-          checked={chaptersEnabled}
-          onChange={(e) => setChaptersEnabled(e.target.checked)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Only applies to videos that have chapter markers set by the uploader.
-        </p>
-      </Card>
-
-      {/* SponsorBlock */}
-      <Card
-        title="SponsorBlock"
-        as="h2"
-        help={<HelpIcon text="Uses the crowdsourced SponsorBlock database to handle sponsor, self-promotion, and interaction-reminder segments. 'Mark' adds them as chapters you can skip; 'Remove' cuts them out of the file. YouTube only." anchor="episode-management" />}
-        className="space-y-3"
-      >
-        <div className="max-w-xs">
-          <Select
-            aria-label="SponsorBlock mode"
-            value={sponsorblockMode}
-            onChange={(e) => setSponsorblockMode(e.target.value)}
-          >
-            <option value="off">Off</option>
-            <option value="mark">Mark segments as chapters</option>
-            <option value="remove">Remove segments from video</option>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {sponsorblockMode === "remove"
-            ? "Sponsor, self-promo, and interaction-reminder segments will be cut out of downloaded YouTube videos."
-            : sponsorblockMode === "mark"
-            ? "Segments are added as skippable chapters; the video is left intact."
-            : "SponsorBlock is disabled."}
-        </p>
-      </Card>
-
-      {/* File Permissions */}
-      <Card
-        title="File Permissions"
-        as="h2"
-        help={<HelpIcon text="Apply chmod/chown after downloading files." anchor="configuration" />}
-        className="space-y-3"
-      >
-        <Checkbox
-          label="Set permissions on downloaded files"
-          checked={setPermissions}
-          onChange={(e) => setSetPermissions(e.target.checked)}
-        />
-        {setPermissions && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Field label="Folder chmod">
-              <Input
-                type="text"
-                value={chmodFolder}
-                onChange={(e) => setChmodFolder(e.target.value)}
-                placeholder="755"
-              />
-            </Field>
-            <Field label="File chmod">
-              <Input
-                type="text"
-                value={chmodFile}
-                onChange={(e) => setChmodFile(e.target.value)}
-                placeholder="644"
-              />
-            </Field>
-            <Field label="chown group">
-              <Input
-                type="text"
-                value={chownGroup}
-                onChange={(e) => setChownGroup(e.target.value)}
-                placeholder="Group name or GID"
-              />
-            </Field>
-          </div>
-        )}
-      </Card>
-
-      {/* Max Duration Filter */}
-      <Card title="Max Video Duration Filter" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Skip auto-downloading videos longer than this duration. They'll be flagged for manual review
-          and you'll get a push notification (if configured). Set to 0 to disable.
-        </p>
-        <Field
-          label="Max Duration (hours)"
-          hint={maxDuration > 0
-            ? `Videos over ${maxDuration}h will need manual approval`
-            : "Disabled  - all videos auto-queue"}
-          className="max-w-xs"
-        >
-          <Input
-            type="number"
-            min={0}
-            value={maxDuration}
-            onChange={(e) => setMaxDuration(Number(e.target.value))}
-          />
-        </Field>
-      </Card>
-
-      <Button variant="primary" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Save Settings
-      </Button>
-    </div>
-  )
-}
-
-function AntiDetectTab() {
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
-  const [minDelay, setMinDelay] = useState(10)
-  const [maxDelay, setMaxDelay] = useState(30)
-  const [uaRotation, setUaRotation] = useState(true)
-  const [jitter, setJitter] = useState(true)
-  const [scanJitterEnabled, setScanJitterEnabled] = useState(true)
-  const [scanJitterMaxSeconds, setScanJitterMaxSeconds] = useState(300)
-  const [scanWindowEnabled, setScanWindowEnabled] = useState(false)
-  const [scanWindowStartHour, setScanWindowStartHour] = useState<number>(22)
-  const [scanWindowEndHour, setScanWindowEndHour] = useState<number>(6)
-  const [manualScanCooldownMinutes, setManualScanCooldownMinutes] = useState<number>(5)
-
-  const { data: settings } = useQuery({
-    queryKey: ["app-settings"],
-    queryFn: api.getSettings,
-  })
-
-  useEffect(() => {
-    if (settings) {
-      if (settings.download_delay_min != null) setMinDelay(Number(settings.download_delay_min))
-      if (settings.download_delay_max != null) setMaxDelay(Number(settings.download_delay_max))
-      if (settings.user_agent_rotation != null) setUaRotation(settings.user_agent_rotation === true || settings.user_agent_rotation === "true")
-      if (settings.jitter_enabled != null) setJitter(settings.jitter_enabled === true || settings.jitter_enabled === "true")
-      if (settings.scan_jitter_enabled != null) setScanJitterEnabled(settings.scan_jitter_enabled === true || settings.scan_jitter_enabled === "true")
-      if (settings.scan_jitter_max_seconds != null) setScanJitterMaxSeconds(Number(settings.scan_jitter_max_seconds))
-      if (settings.scan_window_start_hour != null) {
-        setScanWindowStartHour(Number(settings.scan_window_start_hour))
-        setScanWindowEnabled(true)
-      }
-      if (settings.scan_window_end_hour != null) {
-        setScanWindowEndHour(Number(settings.scan_window_end_hour))
-        setScanWindowEnabled(true)
-      }
-      if (settings.manual_scan_cooldown_minutes != null) setManualScanCooldownMinutes(Number(settings.manual_scan_cooldown_minutes))
-    }
-  }, [settings])
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      api.updateSettings({
-        download_delay_min: minDelay,
-        download_delay_max: maxDelay,
-        user_agent_rotation: uaRotation,
-        jitter_enabled: jitter,
-        scan_jitter_enabled: scanJitterEnabled,
-        scan_jitter_max_seconds: scanJitterMaxSeconds,
-        scan_window_start_hour: scanWindowEnabled ? scanWindowStartHour : null,
-        scan_window_end_hour: scanWindowEnabled ? scanWindowEndHour : null,
-        manual_scan_cooldown_minutes: manualScanCooldownMinutes,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Anti-detection settings saved")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  return (
-    <div className="space-y-6">
-      <Card
-        title="Download Delays"
-        as="h2"
-        help={<HelpIcon text="Random delay between downloads to avoid rate limiting." anchor="anti-detection" />}
-      >
-        <p className="text-sm text-muted-foreground">
-          Add delays between downloads to avoid YouTube rate limiting.
-        </p>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Min Delay (seconds)">
-            <Input
-              type="number"
-              value={minDelay}
-              onChange={(e) => setMinDelay(Number(e.target.value))}
-            />
-          </Field>
-          <Field label="Max Delay (seconds)">
-            <Input
-              type="number"
-              value={maxDelay}
-              onChange={(e) => setMaxDelay(Number(e.target.value))}
-            />
-          </Field>
-        </div>
-      </Card>
-
-      <Card title="User-Agent Rotation" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Rotate user-agent strings between downloads to appear as different browsers.
-        </p>
-        <Checkbox
-          label="Enable user-agent rotation"
-          checked={uaRotation}
-          onChange={(e) => setUaRotation(e.target.checked)}
-        />
-      </Card>
-
-      <Card title="Random Jitter" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Add random extra delay (0-10s) to make download timing less predictable.
-        </p>
-        <Checkbox
-          label="Enable jitter"
-          checked={jitter}
-          onChange={(e) => setJitter(e.target.checked)}
-        />
-      </Card>
-
-      <Card title="Scan Schedule" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          How often each channel is scanned is set under General. By default scans spread across the full 24 hours for the most organic traffic pattern. You can optionally constrain them to a specific local-time window (e.g. 10 PM to 6 AM); a scan that comes due outside the window waits for the next one. Windows must be at least 8 hours wide to avoid clustering.
-        </p>
-        <Checkbox
-          label="Limit scans to a time window"
-          checked={scanWindowEnabled}
-          onChange={(e) => setScanWindowEnabled(e.target.checked)}
-        />
-        {scanWindowEnabled && (() => {
-          const width = scanWindowEndHour > scanWindowStartHour
-            ? scanWindowEndHour - scanWindowStartHour
-            : (24 - scanWindowStartHour) + scanWindowEndHour
-          const tooNarrow = scanWindowStartHour !== scanWindowEndHour && width < 8
-          return (
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <Field label="Start (local time)">
-                  <Select
-                    value={scanWindowStartHour}
-                    onChange={(e) => setScanWindowStartHour(Number(e.target.value))}
-                    className="w-32"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field label="End (local time)">
-                  <Select
-                    value={scanWindowEndHour}
-                    onChange={(e) => setScanWindowEndHour(Number(e.target.value))}
-                    className="w-32"
-                  >
-                    {Array.from({ length: 24 }, (_, i) => (
-                      <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <p className={`text-xs ${tooNarrow ? "text-danger" : "text-muted-foreground"}`}>
-                {tooNarrow
-                  ? `Window is only ${width} hours. Must be at least 8 hours.`
-                  : `Scans only run between ${String(scanWindowStartHour).padStart(2, "0")}:00 and ${String(scanWindowEndHour).padStart(2, "0")}:00 (${width === 0 ? 24 : width} hour window).`}
-              </p>
-            </div>
-          )
-        })()}
-        <div className="pt-3 border-t space-y-3">
-          <Field
-            label={<>Manual "Scan Now" cooldown</>}
-            help={<HelpIcon text="Prevents spam-clicking the Scan Now button. Attempts within this window are rejected with a 429 response." anchor="channel-management" />}
-            hint="Minutes. Set to 0 to disable the cooldown."
-          >
-            <Input
-              type="number"
-              value={manualScanCooldownMinutes}
-              onChange={(e) => setManualScanCooldownMinutes(Math.max(0, Math.min(1440, Number(e.target.value) || 0)))}
-              min={0}
-              max={1440}
-              className="w-32"
-            />
-          </Field>
-        </div>
-      </Card>
-
-      <Card title="Scan Jitter" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          When multiple channels become due at the same tick, this adds a random delay between each scan so they don't all fire at once.
-        </p>
-        <Checkbox
-          label="Enable scan jitter"
-          checked={scanJitterEnabled}
-          onChange={(e) => setScanJitterEnabled(e.target.checked)}
-        />
-        {scanJitterEnabled && (
-          <Field
-            label="Max jitter between channels (seconds)"
-            hint={`Each channel waits a random 0 to ${scanJitterMaxSeconds}s before its scan begins. Channel scan order is also randomized.`}
-          >
-            <Input
-              type="number"
-              value={scanJitterMaxSeconds}
-              onChange={(e) => setScanJitterMaxSeconds(Math.max(0, Number(e.target.value) || 0))}
-              min={0}
-              max={3600}
-              className="w-32"
-            />
-          </Field>
-        )}
-      </Card>
-
-      <Button variant="primary" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Save Settings
-      </Button>
-    </div>
-  )
-}
-
-const WEBHOOK_EVENTS = [
-  { key: "download_complete", label: "Download Complete" },
-  { key: "download_failed", label: "Download Failed" },
-  { key: "cookies_expired", label: "Cookies Expired" },
-  { key: "cookies_refreshed", label: "Cookies Refreshed" },
-  { key: "health_alert", label: "Health Alerts" },
-  { key: "critical_alert", label: "Critical Alerts" },
-  { key: "review_required", label: "Long Video Review Required" },
-  { key: "move_complete", label: "File Move Complete" },
-  { key: "scan_complete", label: "Channel Scan Complete" },
-  { key: "scan_failed", label: "Channel Scan Failed" },
-  { key: "quality_upgrade", label: "Quality Upgrade" },
-]
-
-function NotificationsTab() {
-  const queryClient = useQueryClient()
-  const { toast } = useToast()
-  const [telegramToken, setTelegramToken] = useState("")
-  const [telegramChatId, setTelegramChatId] = useState("")
-  const [pushoverAppToken, setPushoverAppToken] = useState("")
-  const [pushoverUserKey, setPushoverUserKey] = useState("")
-  const [discordWebhookUrl, setDiscordWebhookUrl] = useState("")
-  const [enabledEvents, setEnabledEvents] = useState<string[]>(WEBHOOK_EVENTS.map(e => e.key))
-
-  const { data: settings } = useQuery({
-    queryKey: ["app-settings"],
-    queryFn: api.getSettings,
-  })
-
-  useEffect(() => {
-    if (settings) {
-      if (settings.telegram_bot_token) setTelegramToken(String(settings.telegram_bot_token))
-      if (settings.telegram_chat_id) setTelegramChatId(String(settings.telegram_chat_id))
-      if (settings.pushover_app_token) setPushoverAppToken(String(settings.pushover_app_token))
-      if (settings.pushover_user_key) setPushoverUserKey(String(settings.pushover_user_key))
-      if (settings.discord_webhook_url) setDiscordWebhookUrl(String(settings.discord_webhook_url))
-      if (settings.webhook_events && Array.isArray(settings.webhook_events)) {
-        setEnabledEvents(settings.webhook_events)
-      }
-    }
-  }, [settings])
-
-  const saveMutation = useMutation({
-    mutationFn: () =>
-      api.updateSettings({
-        telegram_bot_token: telegramToken || null,
-        telegram_chat_id: telegramChatId || null,
-        pushover_app_token: pushoverAppToken || null,
-        pushover_user_key: pushoverUserKey || null,
-        discord_webhook_url: discordWebhookUrl || null,
-        webhook_events: enabledEvents,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["app-settings"] })
-      toast("Notification settings saved")
-    },
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const testTelegramMutation = useMutation({
-    mutationFn: () => api.testWebhook("telegram"),
-    onSuccess: (data: any) => toast(data.success ? data.message : data.error, data.success ? "success" : "error"),
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const testPushoverMutation = useMutation({
-    mutationFn: () => api.testWebhook("pushover"),
-    onSuccess: (data: any) => toast(data.success ? data.message : data.error, data.success ? "success" : "error"),
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const testDiscordMutation = useMutation({
-    mutationFn: () => api.testWebhook("discord"),
-    onSuccess: (data: any) => toast(data.success ? data.message : data.error, data.success ? "success" : "error"),
-    onError: (e: Error) => toast(e.message, "error"),
-  })
-
-  const toggleEvent = (key: string) => {
-    setEnabledEvents(prev =>
-      prev.includes(key) ? prev.filter(e => e !== key) : [...prev, key]
-    )
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* Telegram */}
-      <Card
-        icon={<Send />}
-        title="Telegram"
-        as="h2"
-        help={<HelpIcon text="Get notified via Telegram bot." anchor="notifications" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Create a bot via @BotFather, then use the bot token and your chat ID.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Bot Token">
-            <Input
-              type="password"
-              placeholder="123456:ABC-DEF..."
-              value={telegramToken}
-              onChange={(e) => setTelegramToken(e.target.value)}
-            />
-          </Field>
-          <Field label="Chat ID">
-            <Input
-              type="text"
-              placeholder="-1001234567890"
-              value={telegramChatId}
-              onChange={(e) => setTelegramChatId(e.target.value)}
-            />
-          </Field>
-        </div>
-        <Button
-          onClick={() => testTelegramMutation.mutate()}
-          disabled={!telegramToken || !telegramChatId || testTelegramMutation.isPending}
-        >
-          {testTelegramMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-          Test Telegram
-        </Button>
-      </Card>
-
-      {/* Pushover */}
-      <Card
-        icon={<Bell />}
-        title="Pushover"
-        as="h2"
-        help={<HelpIcon text="Push notifications to your phone." anchor="notifications" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Create an app at pushover.net to get your tokens.
-        </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Application Token">
-            <Input
-              type="password"
-              placeholder="azGDORePK8gMaC0QOYAMyEEuzJnyUi"
-              value={pushoverAppToken}
-              onChange={(e) => setPushoverAppToken(e.target.value)}
-            />
-          </Field>
-          <Field label="User Key">
-            <Input
-              type="password"
-              placeholder="uQiRzpo4DXghDmr9QzzfQu27cmVRsG"
-              value={pushoverUserKey}
-              onChange={(e) => setPushoverUserKey(e.target.value)}
-            />
-          </Field>
-        </div>
-        <Button
-          onClick={() => testPushoverMutation.mutate()}
-          disabled={!pushoverAppToken || !pushoverUserKey || testPushoverMutation.isPending}
-        >
-          {testPushoverMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-          Test Pushover
-        </Button>
-      </Card>
-
-      {/* Discord */}
-      <Card
-        icon={<Globe />}
-        title="Discord"
-        as="h2"
-        help={<HelpIcon text="Send notifications to a Discord channel via webhook. Uses embeds with color-coded status." anchor="notifications" />}
-        className="space-y-3"
-      >
-        <p className="text-sm text-muted-foreground">
-          Create a webhook in your Discord channel settings under Integrations.
-        </p>
-        <Field label="Webhook URL">
-          <Input
-            type="password"
-            placeholder="https://discord.com/api/webhooks/..."
-            value={discordWebhookUrl}
-            onChange={(e) => setDiscordWebhookUrl(e.target.value)}
-          />
-        </Field>
-        <Button
-          onClick={() => testDiscordMutation.mutate()}
-          disabled={!discordWebhookUrl || testDiscordMutation.isPending}
-        >
-          {testDiscordMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Bell className="h-4 w-4" />}
-          Test Discord
-        </Button>
-      </Card>
-
-      {/* Event Selection */}
-      <Card title="Notification Events" as="h2" className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          Choose which events trigger push notifications.
-        </p>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {WEBHOOK_EVENTS.map((evt) => (
-            <Checkbox
-              key={evt.key}
-              label={evt.label}
-              checked={enabledEvents.includes(evt.key)}
-              onChange={() => toggleEvent(evt.key)}
-            />
-          ))}
-        </div>
-      </Card>
-
-      <Button variant="primary" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-        {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-        Save Notification Settings
-      </Button>
-    </div>
+      />
+    </SettingsFormContext.Provider>
   )
 }

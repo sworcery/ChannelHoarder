@@ -23,6 +23,13 @@ export function buildVideoUrl(platform: string, videoId: string): string {
   return template.replace("{video_id}", vid)
 }
 
+/** The one wording for a channel's counts: "14 videos, 1 skipped".
+ *  total_videos already leaves skipped and unmonitored videos out. */
+export function formatVideoCounts(c: { total_videos: number; skipped_count?: number }): string {
+  const base = `${c.total_videos} ${c.total_videos === 1 ? "video" : "videos"}`
+  return c.skipped_count ? `${base}, ${c.skipped_count} skipped` : base
+}
+
 export function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return "0 B"
   const k = 1024

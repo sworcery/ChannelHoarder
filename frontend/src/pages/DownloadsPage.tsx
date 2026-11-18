@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react"
+import { Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDate, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed, buildVideoUrl } from "@/lib/utils"
-import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/components/ui/toaster"
@@ -31,7 +31,6 @@ import {
   Clock,
   ChevronDown,
   ChevronUp,
-  Info,
   ExternalLink,
   CheckSquare,
   Square,
@@ -40,81 +39,137 @@ import {
   ArrowUpToLine,
 } from "lucide-react"
 
-/** Human-readable error descriptions shown inline */
-const ERROR_DESCRIPTIONS: Record<string, { label: string; color: string; tip: string }> = {
-  AUTH_EXPIRED: {
-    label: "Authentication Required",
-    color: "text-danger",
-    tip: "YouTube is requiring sign-in. Upload fresh cookies in Settings > Authentication.",
-  },
-  RATE_LIMITED: {
-    label: "Rate Limited",
-    color: "text-warning",
-    tip: "Too many requests. Will auto-retry with increased delay.",
-  },
-  GEO_BLOCKED: {
-    label: "Geo-Blocked",
-    color: "text-muted-foreground",
-    tip: "Video not available in your region.",
-  },
-  VIDEO_UNAVAILABLE: {
-    label: "Unavailable",
-    color: "text-muted-foreground",
-    tip: "Video was removed or made unavailable by YouTube.",
-  },
-  VIDEO_PRIVATE: {
-    label: "Private",
-    color: "text-muted-foreground",
-    tip: "Video is set to private by the uploader.",
-  },
-  VIDEO_REMOVED: {
-    label: "Removed",
-    color: "text-muted-foreground",
-    tip: "Video has been permanently removed from YouTube.",
-  },
-  NETWORK_ERROR: {
-    label: "Network Error",
-    color: "text-warning",
-    tip: "Connection issue. Will auto-retry.",
-  },
-  YTDLP_OUTDATED: {
-    label: "yt-dlp Outdated",
-    color: "text-orange-700 dark:text-orange-300",
-    tip: "Update yt-dlp in Settings > System.",
-  },
-  FFMPEG_ERROR: {
-    label: "Processing Error",
-    color: "text-orange-700 dark:text-orange-300",
-    tip: "Video/audio merge failed. Will auto-retry.",
-  },
-  DISK_FULL: {
-    label: "Disk Full",
-    color: "text-danger",
-    tip: "No disk space remaining. Free space and retry.",
-  },
-  PO_TOKEN_FAILURE: {
-    label: "PO Token Failed",
-    color: "text-orange-700 dark:text-orange-300",
-    tip: "Token server issue. Check PO token server status in Settings.",
-  },
-  FORMAT_UNAVAILABLE: {
-    label: "Format Unavailable",
-    color: "text-warning",
-    tip: "Requested quality not available. Try 'best' quality.",
-  },
-  AGE_RESTRICTED: {
-    label: "Age Restricted",
-    color: "text-warning",
-    tip: "Requires cookies from a logged-in account.",
-  },
-  UNKNOWN: {
-    label: "Unknown Error",
-    color: "text-danger",
-    tip: "Check diagnostics for details.",
-  },
+/** One error code as the backend catalogue describes it (label and tip are plain words). */
+interface ErrorCatalogEntry {
+  label: string
+  tip: string
+  explanation: string
+  suggested_fix: string
+  severity: string
+  retryable: boolean
+}
+type ErrorCatalog = Record<string, ErrorCatalogEntry>
+
+const fetchErrorCatalog = (): Promise<ErrorCatalog> => api.getErrorCatalog()
+const retryFixableFailed = () => api.retryAllFailed({ retryableOnly: true })
+
+const PLATFORM_NAMES: Record<string, string> = {
+  youtube: "YouTube",
+  rumble: "Rumble",
+  twitch: "Twitch",
+  dailymotion: "Dailymotion",
+  vimeo: "Vimeo",
+  odysee: "Odysee",
+}
+
+function platformName(platform: string | null | undefined): string {
+  const key = (platform || "youtube").toLowerCase()
+  return PLATFORM_NAMES[key] || key.charAt(0).toUpperCase() + key.slice(1)
+}
+
+/** "SOME_CODE" -> "Some code", for a code the catalogue does not know. */
+function humanizeCode(code: string): string {
+  const words = code.toLowerCase().replace(/_/g, " ")
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+function errorLabel(catalog: ErrorCatalog | undefined, code: string | null | undefined): string {
+  if (!code) return "Unknown error"
+  return catalog?.[code]?.label || humanizeCode(code)
+}
+
+/** The group's tip with "{site}" filled in: the platform's name, or "The site" when mixed. */
+function errorTip(catalog: ErrorCatalog | undefined, code: string | null | undefined, platforms: string[]): string {
+  return fillSite(code ? catalog?.[code]?.tip : undefined, platforms)
+}
+
+/** "{site}" is the platform's name, or "The site" when the group mixes platforms (tips start with it). */
+function fillSite(raw: string | undefined, platforms: string[]): string {
+  if (!raw) return ""
+  const unique = Array.from(new Set(platforms.map((p) => (p || "youtube").toLowerCase())))
+  const site = unique.length === 1 ? platformName(unique[0]) : "The site"
+  return raw.replace(/\{site\}/g, site)
+}
+
+function errorColor(catalog: ErrorCatalog | undefined, code: string | null | undefined): string {
+  switch (code ? catalog?.[code]?.severity : undefined) {
+    case "info": return "text-muted-foreground"
+    case "warning": return "text-warning"
+    default: return "text-danger"
+  }
+}
+
+/** The pause banner text for each reason the API reports. */
+function pauseExplanation(reason: string | null | undefined): { title: string; text: ReactNode } {
+  if (reason === "disk_full") {
+    return {
+      title: "Queue paused: the disk is full",
+      text: "Free space on the downloads volume, then press Resume. Downloads in progress finish if they can.",
+    }
+  }
+  if (reason === "cookies_expired") {
+    return {
+      title: "Queue paused: your cookies expired",
+      text: (
+        <>
+          The site is asking for sign-in. Upload fresh cookies in{" "}
+          <Link to="/settings?tab=auth" className="underline">Settings &gt; Authentication</Link>
+          ; the queue resumes by itself once they work. Downloads in progress finish.
+        </>
+      ),
+    }
+  }
+  return {
+    title: "Queue paused by you",
+    text: "Nothing new starts until you press Resume. Downloads in progress finish.",
+  }
 }
 
 type DownloadsTab = "queue" | "history" | "failed"
+
+/** One row for the queue, history and failed lists: same padding, title size and layout. */
+function DownloadRow({
+  lead, thumbnail, title, status, meta, details, actions, footer, selected,
+}: {
+  lead?: ReactNode
+  thumbnail?: string | null
+  title: ReactNode
+  status?: ReactNode
+  meta?: ReactNode
+  details?: ReactNode
+  actions?: ReactNode
+  footer?: ReactNode
+  selected?: boolean
+}) {
+  return (
+    <Card className={`overflow-hidden p-0 space-y-0 ${selected ? "ring-2 ring-primary/50" : ""}`}>
+      <div className="p-4">
+        <div className="flex flex-wrap items-start gap-3">
+          {lead}
+          {thumbnail && (
+            <img
+              src={thumbnail}
+              alt=""
+              className="hidden sm:block w-28 h-16 object-cover rounded shrink-0 bg-muted"
+            />
+          )}
+          <div className="flex-1 min-w-[10rem]">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <p className="font-medium break-words sm:truncate flex-1 min-w-0 basis-40">{title}</p>
+              {status}
+            </div>
+            {meta && <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 flex-wrap">{meta}</div>}
+            {details}
+          </div>
+          {actions && (
+            <div className="flex flex-wrap items-center justify-end gap-0.5 w-full sm:w-auto sm:shrink-0">{actions}</div>
+          )}
+        </div>
+        {footer}
+      </div>
+    </Card>
+  )
+}
 
 export default function DownloadsPage() {
   const queryClient = useQueryClient()
@@ -131,7 +186,7 @@ export default function DownloadsPage() {
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set())
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null)
-  const [confirmAction, setConfirmAction] = useState<(() => void) | null>(null)
+  const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel: string; run: () => void } | null>(null)
 
   // Smoothing state: max percent (no-backward), speed history (rolling avg)
   const maxPercentRef = useRef<Record<string, number>>({})
@@ -199,7 +254,7 @@ export default function DownloadsPage() {
 
   const PAGE_SIZE = 25
 
-  const { data: queueData, isFetching: queueFetching, isPlaceholderData } = useQuery({
+  const { data: queueData, isFetching: queueFetching } = useQuery({
     queryKey: ["download-queue", queuePage, debouncedQueueSearch],
     queryFn: () => api.getQueue({ skip: queuePage * PAGE_SIZE, limit: PAGE_SIZE, search: debouncedQueueSearch || undefined }),
     refetchInterval: 15000,
@@ -229,6 +284,23 @@ export default function DownloadsPage() {
     staleTime: 10000,
   })
 
+  const { data: errorCatalog } = useQuery({
+    queryKey: ["error-catalog"],
+    queryFn: fetchErrorCatalog,
+    staleTime: Infinity,
+  })
+
+  // Channels whose queued videos are held back (a move, file work, a scan, or a finishing download)
+  const { data: heldChannels } = useQuery({
+    queryKey: ["download-held-channels"],
+    queryFn: api.getHeldChannels,
+    refetchInterval: 15000,
+    staleTime: 5000,
+    enabled: tab === "queue",
+  })
+  const busyChannels = heldChannels ?? []
+  const busyReasonById = new Map(busyChannels.map((c) => [c.id, c.reason]))
+
   const { data: history, isLoading: historyLoading } = useQuery({
     queryKey: ["download-history", page, debouncedSearch, tab === "failed" ? "failed" : undefined],
     queryFn: () =>
@@ -250,6 +322,7 @@ export default function DownloadsPage() {
     mutationFn: api.pauseQueue,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["download-paused"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-alerts"] })
       toast("Queue paused")
     },
     onError: (e: Error) => toast(e.message, "error"),
@@ -259,6 +332,7 @@ export default function DownloadsPage() {
     mutationFn: api.resumeQueue,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["download-paused"] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard-alerts"] })
       toast("Queue resumed")
     },
     onError: (e: Error) => toast(e.message, "error"),
@@ -293,12 +367,22 @@ export default function DownloadsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
-  const retryAllMutation = useMutation({
-    mutationFn: api.retryAllFailed,
-    onSuccess: (data: any) => {
+  const retryFixableMutation = useMutation({
+    mutationFn: retryFixableFailed,
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["download-history"] })
       queryClient.invalidateQueries({ queryKey: ["download-queue"] })
-      toast(data.message || "All failed downloads queued for retry")
+      toast(data.message || "Failed downloads queued for retry")
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
+  const retryGroupMutation = useMutation({
+    mutationFn: (code: string) => api.retryAllFailed({ errorCode: code }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["download-history"] })
+      queryClient.invalidateQueries({ queryKey: ["download-queue"] })
+      toast(data.message || "Failed downloads queued for retry")
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -357,6 +441,34 @@ export default function DownloadsPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  /** Ask before clearing: count what is waiting (downloads in progress stay). */
+  const askClearQueue = async () => {
+    // Clear removes every waiting row, whatever the search box shows, so count without the search.
+    let total = queueTotal
+    let inProgress = 0
+    try {
+      const [all, active] = await Promise.all([api.getQueue({ limit: 1 }), api.getActiveDownloads()])
+      total = all.total
+      inProgress = active.filter((e: any) => e.running).length
+    } catch { /* fall back to the numbers on screen */ }
+    const waiting = Math.max(0, total - inProgress)
+    if (waiting === 0) {
+      toast("Nothing is waiting in the queue")
+      return
+    }
+    const searching = !!debouncedQueueSearch
+    setConfirm({
+      title: "Clear the queue?",
+      message:
+        (searching ? `Clear removes all ${waiting} waiting ${waiting === 1 ? "video" : "videos"}, not just the ones shown. ` : "") +
+        `Remove ${waiting} waiting ${waiting === 1 ? "video" : "videos"} from the queue. ` +
+        "They go back to pending and nothing is deleted; you can queue them again later. " +
+        "Downloads in progress are left alone.",
+      confirmLabel: "Clear Queue",
+      run: () => clearQueueMutation.mutate(),
+    })
+  }
+
   // Clear selection when switching tabs
   const handleTabChange = useCallback((newTab: typeof tab) => {
     setTab(newTab)
@@ -410,7 +522,7 @@ export default function DownloadsPage() {
       return { label: "Processing...", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-success" />, color: "text-success" }
     }
     if (progress && progress.percent > 0) {
-      return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
+      return { label: "In progress", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
     }
     if (entry.stuck && !progress) {
       return { label: "Stuck - remove it or download now", icon: <Clock className="h-3.5 w-3.5 text-danger" />, color: "text-danger" }
@@ -419,7 +531,11 @@ export default function DownloadsPage() {
       return { label: "Starting...", icon: <Clock className="h-3.5 w-3.5 text-warning animate-pulse" />, color: "text-warning" }
     }
     if (entry.started_at) {
-      return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
+      return { label: "In progress", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
+    }
+    const busy = busyReasonById.get(entry.video?.channel_id)
+    if (busy) {
+      return { label: `Waiting: channel ${busy}`, icon: <Clock className="h-3.5 w-3.5 text-warning" />, color: "text-warning" }
     }
     if (entry.retry_after && new Date(entry.retry_after).getTime() > Date.now()) {
       return {
@@ -433,52 +549,199 @@ export default function DownloadsPage() {
     return { label: "Queued", icon: <Clock className="h-3.5 w-3.5 text-muted-foreground" />, color: "text-muted-foreground" }
   }
 
+  /** One history or failed row. */
+  const renderHistoryRow = (video: any) => {
+    const isExpanded = expandedRows.has(video.id)
+    const code: string | null = video.error_code || null
+    let errorDetails: any = null
+    if (video.error_details) {
+      try { errorDetails = JSON.parse(video.error_details) } catch { /* ignore */ }
+    }
+    const color = errorColor(errorCatalog, code)
+    const platform = platformName(video.platform)
+    const tip = errorTip(errorCatalog, code, [video.platform])
+    // On Failed the tip is shown once per group, so it doesn't count as a row detail there.
+    const hasDetails = !!(errorDetails?.explanation || errorDetails?.suggested_fix || (tab !== "failed" && tip))
+    const showDetails = hasDetails && isExpanded
+
+    return (
+      <DownloadRow
+        key={video.id}
+        thumbnail={video.thumbnail_url}
+        title={video.title}
+        status={
+          <span className="inline-flex items-center gap-1 shrink-0">
+            <StatusIcon
+              status={video.status}
+              monitored={true}
+              errorCode={video.error_code}
+              errorMessage={video.error_message}
+            />
+            <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
+          </span>
+        }
+        meta={
+          <>
+            {video.channel_name && <span className="font-medium text-foreground/70">{video.channel_name}</span>}
+            {video.upload_date && <span>Uploaded {formatDate(video.upload_date)}</span>}
+            {video.duration != null && video.duration > 0 && <span>{formatDuration(video.duration)}</span>}
+            {video.file_size ? <span>{formatBytes(video.file_size)}</span> : null}
+            {video.downloaded_at ? (
+              <span>Downloaded <DateTime value={video.downloaded_at} /></span>
+            ) : video.discovered_at ? (
+              <span>Found <DateTime value={video.discovered_at} /></span>
+            ) : null}
+            {video.retry_count > 0 && <span className="text-warning">Retries: {video.retry_count}</span>}
+          </>
+        }
+        details={
+          <>
+            {code && (
+              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+                <span className={`text-xs font-medium ${color}`}>{errorLabel(errorCatalog, code)}</span>
+                <span className="text-xs text-muted-foreground truncate">{video.error_message}</span>
+                {hasDetails && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleExpanded(video.id)}
+                    aria-expanded={isExpanded}
+                    className="ml-auto shrink-0 gap-0.5 px-1 py-0 text-muted-foreground hover:text-foreground"
+                  >
+                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    Details
+                  </Button>
+                )}
+              </div>
+            )}
+            {showDetails && (
+              <div className="mt-2 rounded-md bg-muted/50 border p-3 text-xs space-y-2">
+                {errorDetails?.explanation && (
+                  <div>
+                    <p className="font-medium text-foreground mb-0.5">What happened</p>
+                    <p className="text-muted-foreground">{errorDetails.explanation}</p>
+                  </div>
+                )}
+                {errorDetails?.suggested_fix && (
+                  <div>
+                    <p className="font-medium text-foreground mb-0.5">Suggested fix</p>
+                    <p className="text-muted-foreground">{errorDetails.suggested_fix}</p>
+                  </div>
+                )}
+                {tab !== "failed" && tip && <p className="text-muted-foreground">{tip}</p>}
+              </div>
+            )}
+          </>
+        }
+        actions={
+          <>
+            <a
+              href={buildVideoUrl(video.platform || "youtube", video.video_id)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonClasses("ghost", "icon")}
+              aria-label={`Open on ${platform}`}
+              title={`Open on ${platform}`}
+            >
+              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+            </a>
+            {(video.status === "failed" || video.status === "skipped") && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => retryMutation.mutate(video.id)}
+                disabled={retryMutation.isPending}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                Retry
+              </Button>
+            )}
+            {video.status === "failed" && video.error_code === "QUALITY_TOO_LOW" && (
+              <Button
+                size="sm"
+                onClick={() => downloadAnywayMutation.mutate(video.id)}
+                title="Download at the best available quality"
+              >
+                Download anyway
+              </Button>
+            )}
+          </>
+        }
+      />
+    )
+  }
+
+  /** Failed rows grouped by cause (largest group first), one tip per group. */
+  const failedGroups = (() => {
+    if (tab !== "failed" || !history) return []
+    const groups = new Map<string, any[]>()
+    for (const v of history.items) {
+      const key = v.error_code || "UNKNOWN"
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(v)
+    }
+    return Array.from(groups.entries()).sort((a, b) => b[1].length - a[1].length)
+  })()
+
   return (
     <div className="space-y-6">
       <PageHeader
         title={
           <span className="inline-flex items-center gap-2">
             Downloads
-            <HelpIcon text="Pause stops new downloads; in-progress downloads finish." anchor="downloads" />
+            <HelpIcon text="Pause stops new downloads; downloads in progress finish." anchor="downloads" />
           </span>
         }
         actions={
-          <>
-            {isPaused ? (
+          tab === "queue" ? (
+            <>
+              {isPaused ? (
+                <Button
+                  variant="success"
+                  onClick={() => resumeMutation.mutate()}
+                  disabled={resumeMutation.isPending}
+                >
+                  <Play className="h-4 w-4" />
+                  Resume
+                </Button>
+              ) : (
+                <Button variant="warning" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>
+                  <Pause className="h-4 w-4" />
+                  Pause
+                </Button>
+              )}
               <Button
-                variant="success"
-                onClick={() => resumeMutation.mutate()}
-                disabled={resumeMutation.isPending}
+                variant="danger-outline"
+                onClick={askClearQueue}
+                disabled={clearQueueMutation.isPending}
               >
-                <Play className="h-4 w-4" />
-                Resume
+                <Trash2 className="h-4 w-4" />
+                Clear Queue
               </Button>
-            ) : (
-              <Button variant="warning" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>
-                <Pause className="h-4 w-4" />
-                Pause
-              </Button>
-            )}
-            <Button
-              variant="danger-outline"
-              onClick={() => setConfirmAction(() => () => clearQueueMutation.mutate())}
-              disabled={clearQueueMutation.isPending}
-            >
-              <Trash2 className="h-4 w-4" />
-              Clear Queue
-            </Button>
-          </>
+            </>
+          ) : undefined
         }
       />
 
-      {/* Paused banner */}
-      {isPaused && (
-        <Banner tone="warning" title="Queue Paused">
-          {pauseStatus?.reason === "disk_full"
-            ? "Paused: disk full. Free space, then Resume."
-            : "No new downloads will start. In-flight downloads will finish."}
-        </Banner>
-      )}
+      {/* Paused banner: why, and what fixes it */}
+      {isPaused && (() => {
+        const why = pauseExplanation(pauseStatus?.reason)
+        return (
+          <Banner
+            tone="warning"
+            title={why.title}
+            action={tab !== "queue" ? (
+              <Button variant="success" size="sm" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>
+                <Play className="h-3.5 w-3.5" />
+                Resume
+              </Button>
+            ) : undefined}
+          >
+            {why.text}
+          </Banner>
+        )
+      })()}
 
       {/* Tabs */}
       <Tabs
@@ -493,12 +756,29 @@ export default function DownloadsPage() {
       {/* Queue Tab */}
       {tab === "queue" && (
         <div role="tabpanel" id={panelId("downloads", "queue")} aria-labelledby={tabId("downloads", "queue")} className="space-y-3">
+          {/* Channels holding their queued videos back (a hung move keeps its claim) */}
+          {busyChannels.length > 0 && (
+            <Banner tone="warning" title="Some channels are not starting downloads">
+              <ul className="space-y-0.5">
+                {busyChannels.map((c) => (
+                  <li key={c.id}>
+                    <Link to={`/channels/${c.id}`} className="font-medium underline">{c.name}</Link> {c.reason}.
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1">
+                Their queued videos start when that finishes. If one has been stuck for a long time, open the channel
+                to see what it is doing.
+              </p>
+            </Banner>
+          )}
+
           {/* Queue summary */}
           {queueTotal > 0 && (
             <div className="flex items-center gap-4 text-sm text-muted-foreground px-1">
               <span>{queueTotal} in queue</span>
               {queue && (
-                <span>{queue.filter((e: any) => e.running).length} downloading</span>
+                <span>{queue.filter((e: any) => e.running).length} in progress</span>
               )}
             </div>
           )}
@@ -556,7 +836,14 @@ export default function DownloadsPage() {
               {selectedQueueIds.size > 0 && (
                 <Button
                   variant="danger-outline"
-                  onClick={() => setConfirmAction(() => () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)))}
+                  onClick={() => setConfirm({
+                    title: "Remove selected videos?",
+                    message:
+                      `Remove ${selectedQueueIds.size} selected ${selectedQueueIds.size === 1 ? "video" : "videos"} from the queue. ` +
+                      "They go back to pending. Downloads in progress are left alone.",
+                    confirmLabel: "Remove",
+                    run: () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)),
+                  })}
                   disabled={bulkRemoveMutation.isPending}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -578,201 +865,193 @@ export default function DownloadsPage() {
                 const state = getQueueEntryState(entry, progress)
                 const video = entry.video
                 const isSelected = selectedQueueIds.has(entry.id)
+                const prevCode: string | null = video?.error_code && video?.status === "queued" ? video.error_code : null
 
                 return (
-                  <Card key={entry.id} className={`overflow-hidden p-0 space-y-0 ${isSelected ? "ring-2 ring-primary/50" : ""}`}>
-                    <div className="p-4">
-                      <div className="flex flex-wrap items-start gap-3">
-                        {/* Position + Checkbox */}
-                        <div className="flex flex-col items-center gap-0.5 shrink-0 mt-1">
-                          <span className="text-[10px] font-mono text-muted-foreground w-5 text-center">
-                            {queuePage * PAGE_SIZE + idx + 1}
-                          </span>
+                  <DownloadRow
+                    key={entry.id}
+                    selected={isSelected}
+                    lead={
+                      <div className="flex flex-col items-center gap-0.5 shrink-0 mt-1">
+                        <span className="text-[10px] font-mono text-muted-foreground w-5 text-center">
+                          {queuePage * PAGE_SIZE + idx + 1}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="p-0"
+                          aria-label={isSelected ? "Deselect video" : "Select video"}
+                          aria-pressed={isSelected}
+                          onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Square className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
+                      </div>
+                    }
+                    thumbnail={video?.thumbnail_url}
+                    title={video?.title || "Unknown"}
+                    status={
+                      <div className={`flex items-center gap-1 text-xs font-medium shrink-0 ${state.color}`}>
+                        {state.icon}
+                        {state.label}
+                      </div>
+                    }
+                    meta={
+                      <>
+                        {video?.channel_name && (
+                          <span className="font-medium text-foreground/70">{video.channel_name}</span>
+                        )}
+                        {video?.upload_date && (
+                          <span>Uploaded {formatDate(video.upload_date)}</span>
+                        )}
+                        {video?.duration != null && video.duration > 0 && (
+                          <span>{formatDuration(video.duration)}</span>
+                        )}
+                        <span>Queued <DateTime value={entry.queued_at} /></span>
+                        {entry.started_at && (
+                          <span>Started <DateTime value={entry.started_at} /></span>
+                        )}
+                        {entry.target_quality && (
+                          <Badge tone="info" className="px-1.5">{entry.target_quality}</Badge>
+                        )}
+                        {entry.estimated_size && (
+                          <span>{formatBytes(entry.estimated_size)}</span>
+                        )}
+                        {entry.priority !== 0 && (
+                          <span className="text-primary">Priority: {entry.priority}</span>
+                        )}
+                      </>
+                    }
+                    details={
+                      <a
+                        href={buildVideoUrl(video?.platform || "youtube", video?.video_id || "")}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-1"
+                      >
+                        {video?.video_id}
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    }
+                    actions={
+                      <>
+                        {!entry.started_at && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="p-0"
-                            aria-label={isSelected ? "Deselect video" : "Select video"}
-                            aria-pressed={isSelected}
-                            onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}
+                            onClick={() => moveToTopMutation.mutate(entry.id)}
+                            title="Move to top"
+                            aria-label="Move to top"
                           >
-                            {isSelected ? (
-                              <CheckSquare className="h-4 w-4 text-primary" />
-                            ) : (
-                              <Square className="h-4 w-4 text-muted-foreground" />
-                            )}
+                            <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
                           </Button>
-                        </div>
-
-                        {/* Thumbnail */}
-                        {video?.thumbnail_url && (
-                          <img
-                            src={video.thumbnail_url}
-                            alt=""
-                            className="hidden sm:block w-28 h-16 object-cover rounded shrink-0 bg-muted"
-                          />
                         )}
-                        <div className="flex-1 min-w-[10rem]">
-                          {/* Title + state badge */}
-                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                            <p className="font-medium break-words sm:truncate flex-1 min-w-0 basis-40">{video?.title || "Unknown"}</p>
-                            <div className={`flex items-center gap-1 text-xs font-medium shrink-0 ${state.color}`}>
-                              {state.icon}
-                              {state.label}
-                            </div>
-                          </div>
-
-                          {/* Meta row */}
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
-                            {video?.channel_name && (
-                              <span className="font-medium text-foreground/70">{video.channel_name}</span>
-                            )}
-                            {video?.upload_date && (
-                              <span>Uploaded: {formatDate(video.upload_date)}</span>
-                            )}
-                            {video?.duration != null && video.duration > 0 && (
-                              <span>{formatDuration(video.duration)}</span>
-                            )}
-                            <span>Queued <DateTime value={entry.queued_at} /></span>
-                            {entry.started_at && (
-                              <span>Started <DateTime value={entry.started_at} /></span>
-                            )}
-                            {entry.target_quality && (
-                              <Badge tone="info" className="px-1.5">{entry.target_quality}</Badge>
-                            )}
-                            {entry.estimated_size && (
-                              <span>{formatBytes(entry.estimated_size)}</span>
-                            )}
-                            {entry.priority !== 0 && (
-                              <span className="text-primary">Priority: {entry.priority}</span>
-                            )}
-                          </div>
-
-                          {/* Video ID link */}
-                          <a
-                            href={buildVideoUrl(video?.platform || "youtube", video?.video_id || "")}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mt-1"
+                        {!entry.started_at && entry.quality_attempts > 0 && entry.retry_after && (
+                          <Button
+                            size="sm"
+                            onClick={() => downloadAnywayMutation.mutate(video.id)}
+                            title="Download at the best available quality"
                           >
-                            {video?.video_id}
-                            <ExternalLink className="h-3 w-3" />
-                          </a>
-                        </div>
-
-                        {/* Queue controls */}
-                        <div className="flex flex-wrap items-center justify-end gap-0.5 w-full sm:w-auto sm:shrink-0">
-                          {!entry.started_at && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => moveToTopMutation.mutate(entry.id)}
-                              title="Move to top"
-                              aria-label="Move to top"
-                            >
-                              <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          )}
-                          {!entry.started_at && entry.quality_attempts > 0 && entry.retry_after && (
-                            <Button
-                              size="sm"
-                              onClick={() => downloadAnywayMutation.mutate(video.id)}
-                              title="Download at the best available quality"
-                            >
-                              Download anyway
-                            </Button>
-                          )}
-                          {(!entry.started_at || entry.stuck) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => downloadNowMutation.mutate(entry.id)}
-                              title="Download now"
-                              aria-label="Download now"
-                            >
-                              <Zap className="h-4 w-4 text-success" />
-                            </Button>
-                          )}
-                          {(!entry.started_at || entry.stuck) && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeFromQueue.mutate(entry.id)}
-                              title="Remove from queue"
-                              aria-label="Remove from queue"
-                            >
-                              <XCircle className="h-4 w-4 text-muted-foreground" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Progress bar */}
-                      {(progress || entry.started_at) && (
-                        <div className="mt-3">
-                          <div className="h-3 bg-secondary rounded-full overflow-hidden relative">
-                            <div
-                              className={`h-full rounded-full transition-all duration-700 ease-out ${
-                                progress?.percent >= 99.5
-                                  ? "bg-gradient-to-r from-green-500 to-emerald-400"
-                                  : progress?.percent > 0
-                                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400"
-                                    : "bg-yellow-500/50 animate-pulse"
-                              }`}
-                              style={{ width: `${progress?.percent || (entry.started_at ? 2 : 0)}%` }}
-                            />
-                            {progress?.percent > 15 && (
-                              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-sm">
-                                {progress.percent}%
-                              </span>
-                            )}
-                          </div>
-                          {progress ? (
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1.5">
-                              {progress.percent < 15 && (
-                                <span className="font-semibold text-foreground">{progress.percent}%</span>
-                              )}
-                              {progress.downloaded_bytes > 0 && (
-                                <span>
-                                  {formatBytes(progress.downloaded_bytes)}
-                                  {progress.total_bytes > 0 && <> / {formatBytes(progress.total_bytes)}</>}
+                            Download anyway
+                          </Button>
+                        )}
+                        {(!entry.started_at || entry.stuck) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => downloadNowMutation.mutate(entry.id)}
+                            title="Download now"
+                            aria-label="Download now"
+                          >
+                            <Zap className="h-4 w-4 text-success" />
+                          </Button>
+                        )}
+                        {(!entry.started_at || entry.stuck) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeFromQueue.mutate(entry.id)}
+                            title="Remove from queue"
+                            aria-label="Remove from queue"
+                          >
+                            <XCircle className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        )}
+                      </>
+                    }
+                    footer={
+                      <>
+                        {/* Progress bar */}
+                        {(progress || entry.started_at) && (
+                          <div className="mt-3">
+                            <div className="h-3 bg-secondary rounded-full overflow-hidden relative">
+                              <div
+                                className={`h-full rounded-full transition-all duration-700 ease-out ${
+                                  progress?.percent >= 99.5
+                                    ? "bg-gradient-to-r from-green-500 to-emerald-400"
+                                    : progress?.percent > 0
+                                      ? "bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-400"
+                                      : "bg-yellow-500/50 animate-pulse"
+                                }`}
+                                style={{ width: `${progress?.percent || (entry.started_at ? 2 : 0)}%` }}
+                              />
+                              {progress?.percent > 15 && (
+                                <span className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white drop-shadow-sm">
+                                  {progress.percent}%
                                 </span>
                               )}
-                              <span>{formatSpeed(progress.smoothed_speed || progress.speed_bytes || 0)}</span>
-                              {progress.eta_seconds > 0 && (
-                                <span>ETA: {formatEta(progress.eta_seconds)}</span>
-                              )}
-                              {progress.elapsed_seconds > 0 && (
-                                <span className="ml-auto">{formatElapsed(progress.elapsed_seconds)}</span>
-                              )}
                             </div>
-                          ) : entry.started_at ? (
-                            <p className="text-xs text-warning mt-1">
-                              Waiting for download to begin (extracting info, rate limiting)...
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-
-                      {/* Inline warning if video has previous errors */}
-                      {video?.error_code && video?.status === "queued" && (
-                        <div className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft border border-warning-border px-3 py-2">
-                          <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
-                          <div className="text-xs">
-                            <span className="font-medium text-warning">
-                              Previous attempt failed: {ERROR_DESCRIPTIONS[video.error_code]?.label || video.error_code}
-                            </span>
-                            {video.retry_count > 0 && (
-                              <span className="text-muted-foreground ml-1">(retry #{video.retry_count})</span>
-                            )}
-                            <p className="text-muted-foreground mt-0.5">
-                              {ERROR_DESCRIPTIONS[video.error_code]?.tip || video.error_message}
-                            </p>
+                            {progress ? (
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1.5">
+                                {progress.percent < 15 && (
+                                  <span className="font-semibold text-foreground">{progress.percent}%</span>
+                                )}
+                                {progress.downloaded_bytes > 0 && (
+                                  <span>
+                                    {formatBytes(progress.downloaded_bytes)}
+                                    {progress.total_bytes > 0 && <> / {formatBytes(progress.total_bytes)}</>}
+                                  </span>
+                                )}
+                                <span>{formatSpeed(progress.smoothed_speed || progress.speed_bytes || 0)}</span>
+                                {progress.eta_seconds > 0 && (
+                                  <span>ETA: {formatEta(progress.eta_seconds)}</span>
+                                )}
+                                {progress.elapsed_seconds > 0 && (
+                                  <span className="ml-auto">{formatElapsed(progress.elapsed_seconds)}</span>
+                                )}
+                              </div>
+                            ) : entry.started_at ? (
+                              <p className="text-xs text-warning mt-1">
+                                Waiting for download to begin (extracting info, rate limiting)...
+                              </p>
+                            ) : null}
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  </Card>
+                        )}
+
+                        {/* Inline warning if video has previous errors */}
+                        {prevCode && (
+                          <div className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft border border-warning-border px-3 py-2">
+                            <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
+                            <div className="text-xs">
+                              <span className="font-medium text-warning">
+                                Previous attempt failed: {errorLabel(errorCatalog, prevCode)}
+                              </span>
+                              {video.retry_count > 0 && (
+                                <span className="text-muted-foreground ml-1">(retry #{video.retry_count})</span>
+                              )}
+                              <p className="text-muted-foreground mt-0.5">
+                                {errorTip(errorCatalog, prevCode, [video.platform]) || video.error_message}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    }
+                  />
                 )
               })}
 
@@ -826,13 +1105,19 @@ export default function DownloadsPage() {
                 className="pl-9"
               />
             </div>
-            {tab === "failed" && (
-              <Button variant="primary" onClick={() => retryAllMutation.mutate()} disabled={retryAllMutation.isPending}>
+            {tab === "failed" && failedGroups.some(([c]) => errorCatalog?.[c]?.retryable) && (
+              <Button variant="primary" onClick={() => retryFixableMutation.mutate()} disabled={retryFixableMutation.isPending}>
                 <RotateCcw className="h-4 w-4" />
-                Retry All Failed
+                Retry All Fixable
               </Button>
             )}
           </div>
+          {tab === "failed" && failedGroups.some(([c]) => errorCatalog?.[c]?.retryable) && (
+            <p className="text-xs text-muted-foreground">
+              Retry All Fixable skips causes that need a change first, such as expired cookies or an old yt-dlp. Once
+              you have made that change, use Retry these on its group.
+            </p>
+          )}
 
           {historyLoading && !history ? (
             <div className="text-center py-12">
@@ -841,148 +1126,47 @@ export default function DownloadsPage() {
             </div>
           ) : history && history.items.length > 0 ? (
             <>
-              <div className="space-y-2">
-                {history.items.map((video: any) => {
-                  const isExpanded = expandedRows.has(video.id)
-                  const errorInfo = video.error_code ? ERROR_DESCRIPTIONS[video.error_code] : null
-                  let errorDetails: any = null
-                  if (video.error_details) {
-                    try { errorDetails = JSON.parse(video.error_details) } catch { /* ignore */ }
-                  }
-
-                  return (
-                    <Card key={video.id} className="overflow-hidden p-0 space-y-0">
-                      <div className="p-3">
-                        <div className="flex flex-wrap items-start gap-3">
-                          {/* Thumbnail */}
-                          {video.thumbnail_url && (
-                            <img
-                              src={video.thumbnail_url}
-                              alt=""
-                              className="hidden sm:block w-24 h-14 object-cover rounded shrink-0 bg-muted"
-                            />
-                          )}
-                          <div className="flex-1 min-w-[10rem]">
-                            {/* Title row */}
-                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                              <p className="font-medium text-sm break-words sm:truncate flex-1 min-w-0 basis-40">{video.title}</p>
-                              <span className="inline-flex items-center gap-1 shrink-0">
-                                <StatusIcon
-                                  status={video.status}
-                                  monitored={true}
-                                  errorCode={video.error_code}
-                                  errorMessage={video.error_message}
-                                />
-                                <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
-                              </span>
-                            </div>
-
-                            {/* Meta row */}
-                            <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 flex-wrap">
-                              {video.channel_name && (
-                                <span className="font-medium text-foreground/70">{video.channel_name}</span>
-                              )}
-                              {video.upload_date && <span>{formatDate(video.upload_date)}</span>}
-                              {video.duration != null && video.duration > 0 && <span>{formatDuration(video.duration)}</span>}
-                              {video.file_size ? <span>{formatBytes(video.file_size)}</span> : null}
-                              <DateTime value={video.downloaded_at || video.discovered_at} />
-                              {video.retry_count > 0 && (
-                                <span className="text-warning">Retries: {video.retry_count}</span>
-                              )}
-                            </div>
-
-                            {/* Inline error summary for failed/skipped */}
-                            {video.error_code && (
-                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${errorInfo?.color || "text-danger"}`} />
-                                <span className={`text-xs font-medium ${errorInfo?.color || "text-danger"}`}>
-                                  {errorInfo?.label || video.error_code}
-                                </span>
-                                <span className="text-xs text-muted-foreground truncate">
-                                  {video.error_message}
-                                </span>
-                                {(errorDetails || errorInfo) && tab !== "failed" && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => toggleExpanded(video.id)}
-                                    aria-expanded={isExpanded}
-                                    className="ml-auto shrink-0 gap-0.5 px-1 py-0 text-muted-foreground hover:text-foreground"
-                                  >
-                                    {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                                    Details
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Actions */}
-                          <div className="flex flex-wrap items-center justify-end gap-1 w-full sm:w-auto sm:shrink-0">
-                            <a
-                              href={buildVideoUrl(video.platform || "youtube", video.video_id)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={buttonClasses("ghost", "icon")}
-                              aria-label={`Open on ${(video.platform || "youtube").charAt(0).toUpperCase() + (video.platform || "youtube").slice(1)}`}
-                              title={`Open on ${(video.platform || "youtube").charAt(0).toUpperCase() + (video.platform || "youtube").slice(1)}`}
-                            >
-                              <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
-                            </a>
-                            {(video.status === "failed" || video.status === "skipped") && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => retryMutation.mutate(video.id)}
-                                title="Retry download"
-                                aria-label="Retry download"
-                              >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-                            {video.status === "failed" && video.error_code === "QUALITY_TOO_LOW" && (
-                              <Button
-                                size="sm"
-                                onClick={() => downloadAnywayMutation.mutate(video.id)}
-                                title="Download at the best available quality"
-                              >
-                                Download anyway
-                              </Button>
-                            )}
-                          </div>
+              {tab === "failed" ? (
+                <div className="space-y-6">
+                  {failedGroups.map(([code, items]) => {
+                    const platforms = items.map((v: any) => v.platform)
+                    const tip = errorTip(errorCatalog, code, platforms)
+                    const entry = errorCatalog?.[code]
+                    const explanation = fillSite(entry?.explanation, platforms)
+                    const fix = fillSite(entry?.suggested_fix, platforms)
+                    return (
+                      <section key={code} className="space-y-2" aria-label={errorLabel(errorCatalog, code)}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="text-sm font-semibold">
+                            {errorLabel(errorCatalog, code)}
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              {items.length} {items.length === 1 ? "video" : "videos"} on this page
+                            </span>
+                          </h2>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => retryGroupMutation.mutate(code)}
+                            disabled={retryGroupMutation.isPending}
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Retry these
+                          </Button>
                         </div>
-
-                        {/* Expanded error details */}
-                        {(isExpanded || tab === "failed") && (
-                          <div className="mt-3 rounded-md bg-muted/50 border p-3 text-xs space-y-2">
-                            {errorDetails?.explanation && (
-                              <div>
-                                <p className="font-medium text-foreground mb-0.5">What happened</p>
-                                <p className="text-muted-foreground">{errorDetails.explanation}</p>
-                              </div>
-                            )}
-                            {errorDetails?.suggested_fix && (
-                              <div>
-                                <p className="font-medium text-foreground mb-0.5">Suggested fix</p>
-                                <p className="text-muted-foreground">{errorDetails.suggested_fix}</p>
-                              </div>
-                            )}
-                            {errorInfo?.tip && (
-                              <div className="flex items-start gap-1.5 bg-info-soft rounded px-2 py-1.5">
-                                <Info className="h-3.5 w-3.5 text-info shrink-0 mt-0.5" />
-                                <p className="text-info">{errorInfo.tip}</p>
-                              </div>
-                            )}
-                            {!errorDetails && errorInfo && (
-                              <p className="text-muted-foreground">{errorInfo.tip}</p>
-                            )}
-                          </div>
+                        {(tip || explanation || fix) && (
+                          <Banner tone="info" title={tip || undefined}>
+                            {explanation && <p>{explanation}</p>}
+                            {fix && <p className="mt-1">{fix}</p>}
+                          </Banner>
                         )}
-                      </div>
-                    </Card>
-                  )
-                })}
-              </div>
+                        <div className="space-y-2">{items.map(renderHistoryRow)}</div>
+                      </section>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="space-y-2">{history.items.map(renderHistoryRow)}</div>
+              )}
 
               {/* Pagination */}
               <div className="flex items-center justify-between">
@@ -1005,14 +1189,15 @@ export default function DownloadsPage() {
         </div>
       )}
       <ConfirmDialog
-        open={!!confirmAction}
-        title="Confirm Action"
-        message="Are you sure you want to proceed?"
+        open={!!confirm}
+        title={confirm?.title ?? "Confirm"}
+        message={confirm?.message ?? ""}
+        confirmLabel={confirm?.confirmLabel}
         onConfirm={() => {
-          confirmAction?.()
-          setConfirmAction(null)
+          confirm?.run()
+          setConfirm(null)
         }}
-        onCancel={() => setConfirmAction(null)}
+        onCancel={() => setConfirm(null)}
       />
     </div>
   )

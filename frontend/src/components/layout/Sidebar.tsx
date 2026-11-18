@@ -24,6 +24,13 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     queryFn: api.getHealth,
     staleTime: 300000,
   })
+  // Same query as the Dashboard, so the version comes from its cache
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: api.getStats,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  })
 
   return (
     <div className="flex h-full flex-col bg-card border-r">
@@ -60,6 +67,7 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
       <div className="border-t p-4">
         <p className="text-xs text-muted-foreground">ChannelHoarder</p>
         <p className="text-xs text-muted-foreground">v{health?.version || "..."}</p>
+        {stats?.ytdlp_version && <p className="text-xs text-muted-foreground">yt-dlp {stats.ytdlp_version}</p>}
       </div>
     </div>
   )

@@ -76,12 +76,14 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 <details>
 <summary><b>Adding channels & automatic scanning</b></summary>
 
-**Adding channels:** Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set per-channel options (quality, custom download directory, enabled/disabled). It can auto-scan immediately after adding. To add many channels at once, use **Bulk Import** to paste a list or upload a CSV/text file, such as YouTube Takeout's `subscriptions.csv`.
+### Adding channels
 
-**Automatic scanning:**
+Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set per-channel options (quality, custom download directory, enabled/disabled). It can auto-scan immediately after adding. To add many channels at once, use **Bulk Import** to paste a list or upload a CSV/text file, such as YouTube Takeout's `subscriptions.csv`.
 
-- Each channel is scanned at its own random time, every 12 to 24 hours by default (set the interval under Settings > General, and optionally limit scans to certain hours with a scan window under Settings > Anti-Detection)
-- Optionally, YouTube channels' RSS feeds can be checked every so many minutes (Settings > General, off by default), and a channel is scanned as soon as its feed shows a new video. Checks stay under YouTube's daily feed limit, and interval scans keep running as the backup
+### Automatic scanning
+
+- Each channel is scanned at its own random time, every 12 to 24 hours by default (set the interval under Settings > Scanning, and optionally limit scans to certain hours with a scan window on the same tab)
+- Optionally, YouTube channels' RSS feeds can be checked every so many minutes (Settings > Scanning, off by default), and a channel is scanned as soon as its feed shows a new video. Checks stay under YouTube's daily feed limit, and interval scans keep running as the backup
 - Each scan checks for new videos that haven't been downloaded yet and adds them to the download queue with `pending` status
 - If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise yt-dlp handles discovery directly
 - Manual scans can be triggered per-channel or for all channels at once
@@ -90,6 +92,10 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 
 <details>
 <summary><b>Download pipeline</b></summary>
+
+### Downloads
+
+The **Downloads** page shows the queue, the history and the failed downloads. Pause stops new downloads while in-progress ones finish. The pipeline works like this:
 
 1. **Queue Processing** - Every 30 seconds, the next queued video is picked up
 2. **Rate Limiting** - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
@@ -103,6 +109,8 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 <details>
 <summary><b>Importing existing videos</b></summary>
 
+### Importing existing videos
+
 If you already have downloaded videos from a channel, you can import them instead of re-downloading:
 
 1. Open a channel's detail page and click **Import Existing**
@@ -112,6 +120,26 @@ If you already have downloaded videos from a channel, you can import them instea
 5. Imported files are moved into the correct Plex-compatible directory structure
 
 **Important:** Video filenames must contain the original video title for matching to work. Files named with only dates or generic names won't match.
+
+</details>
+
+<details>
+<summary><b>Channel & episode management</b></summary>
+
+### Channel management
+
+Open a channel to change how it downloads. The options apply to future scans and leave videos already queued alone:
+
+- **Quality** - the target quality for new downloads, also the cutoff for upgrade searches, and a minimum quality. A video below the minimum isn't downloaded at once: the app waits and checks again after 1, 6 and 24 hours, then the video fails with a "Download anyway" button
+- **Codec** - the preferred video codec. H.264 plays on the most devices but on YouTube is usually capped at 1080p; if the codec isn't available the best available format is used, and nothing is re-encoded
+- **Publish date** - only download videos published on or after a date
+- **Title filter** - include only matching titles, or exclude matching ones
+- **Delete after** - remove downloaded files a set number of days after download. The videos stay listed as skipped and are not downloaded again, including after Force Rescan
+- **Scan Now** - scans the channel at once. A cooldown (Settings > Scanning) stops repeated clicks
+
+### Episode management
+
+A channel's videos are listed as episodes. Shorts (60 seconds or less, or on the channel's Shorts tab) and livestreams or premieres have their own sections and are skipped unless both Settings > Media Management and the channel allow them. A minimum duration skips shorter videos; the maximum duration in Settings flags longer ones for review. Subtitles, chapters and SponsorBlock are set under Settings > Media Management.
 
 </details>
 
@@ -220,6 +248,8 @@ From 2.0, `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting valu
 <details>
 <summary><b>YouTube Data API key (optional)</b></summary>
 
+### YouTube Data API key (optional)
+
 A YouTube Data API key improves channel scanning reliability and speed. Without it, yt-dlp handles discovery directly, which works but can be slower.
 
 To get a free API key:
@@ -241,19 +271,47 @@ The free tier provides 10,000 quota units per day, which is enough for most pers
 <details>
 <summary><b>Settings (via Web UI)</b></summary>
 
-All settings are configurable through the **Settings** page:
+All settings are on the **Settings** page, in seven tabs. Type in the search box at the top to find any setting by name; choosing a result opens its tab and highlights it. Changes on the General, Scanning, Media Management, Anti-Detection and Notifications tabs wait for the **Save** button in the bar that appears at the bottom; **Discard** puts the saved values back. Switching tabs or leaving the page with unsaved changes asks first. On the Authentication and Diagnostics tabs, and for Export/Import Config, Scan All Channels Now, naming Preview and the notification test buttons, the action happens when you press its button.
 
-- **General** - Scan interval (how often each channel is scanned), RSS feed checks for new YouTube uploads, default quality, max concurrent downloads, max retries, log level, manual scan trigger, system overview, config import/export
+- **General** - Default quality, max concurrent downloads, max retries, log level, system info, the bundled yt-dlp version, config export/import
+- **Scanning** - How often each channel is scanned, RSS feed checks for new YouTube uploads, the scan window (limit scans to certain hours), the Scan Now cooldown, and a Scan All Channels Now button
+- **Media Management** - Output filename template with live preview (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`), Shorts and livestream opt-in, subtitles, chapters, SponsorBlock, file permissions, max video duration filter
 - **Authentication** - PO token status, cookie upload/status, browser cookie sync (Tampermonkey), YouTube API key, player client strategy
-- **Naming** - Output filename template with live preview and variable reference (`{channel_name}`, `{season}`, `{episode}`, `{title}`, `{upload_date}`, `{video_id}`)
-- **yt-dlp** - Version info (yt-dlp ships current on every image build)
-- **Anti-Detection** - Download delay range, jitter toggle, user-agent rotation, max video duration filter (for skipping livestreams and long videos)
-- **Media Management** - Subtitle downloads, chapter embedding toggle
+- **Anti-Detection** - Download delay range, random jitter, user-agent rotation, scan jitter
 - **Notifications** - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
+- **Diagnostics** - System overview and the diagnostic report, error logs, system logs, the Library Check and Shared Folders repair tools
+
+Environment variables set the starting values; see the table above.
+
+</details>
+
+<details>
+<summary><b>Anti-detection & notifications</b></summary>
+
+### Anti-detection
+
+Random delays between downloads (default 10 to 30 seconds), optional random jitter (0 to 10 extra seconds), rotating user-agent strings and a random pause between channel scans keep traffic from looking like a script. All of it is under **Settings > Anti-Detection**.
+
+### Notifications
+
+Under **Settings > Notifications**, add a Telegram bot (token and chat ID), Pushover (application token and user key) and/or a Discord webhook URL. Save first, then use the test buttons, which send through the saved settings. Per-event toggles choose what triggers a message: downloads finishing or failing, cookies expiring or refreshing, health alerts, long videos waiting for review, moves, scans and quality upgrades.
 
 </details>
 
 ## Cookie Authentication
+
+<details>
+<summary><b>PO tokens & player client</b></summary>
+
+### PO tokens
+
+YouTube asks clients to prove they are a real browser. The built-in PO token server makes those proofs automatically, so downloads work without any setup. **Settings > Authentication** shows whether it is running. When you also upload cookies, the cookies take priority.
+
+### Player client
+
+The player client is the YouTube API yt-dlp uses to list a video's formats. Leave it on **Default (automatic)**: yt-dlp picks a working client and adapts when YouTube changes. Override it only if one specific video fails with a format error; `ios` and `web_safari` are good fallbacks. The choice applies as soon as you select it.
+
+</details>
 
 <details>
 <summary><b>Cookie authentication (optional) - three methods</b></summary>
@@ -310,7 +368,7 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 <details>
 <summary><b>Tech stack & volumes</b></summary>
 
-**Tech stack:**
+### Tech stack
 
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), APScheduler, yt-dlp
 - **Frontend**: React 18, TypeScript, Tailwind CSS, TanStack Query, React Router
@@ -372,15 +430,17 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 <details>
 <summary><b>Library repair (Settings > Diagnostics)</b></summary>
 
+### Library repair
+
 Two tools fix problems older versions could leave behind. Both show what they found before changing anything, and neither overwrites a file.
 
-**Library check.** Before 1.9.50, a scan could move a downloaded file onto a newer video with a similar title (for example "Week 11" and "Week 12") and rename it. Run the check once if you have channels with numbered titles. It lists:
+**Library Check.** Before 1.9.50, a scan could move a downloaded file onto a newer video with a similar title (for example "Week 11" and "Week 12") and rename it. Run the check once if you have channels with numbered titles. It lists:
 - files that are certainly filed under the wrong video, from the file's embedded source address or the `.info.json` beside it. "Fix all certain" moves each to the video it really belongs to and queues the wrongly filed video to download again;
 - likely mismatches, found from the file's length. Fix these one at a time;
 - downloaded videos whose file is gone. Re-download or skip them;
 - files to check by hand.
 
-**Shared folders.** Before 1.9.50, two channels with the same name (for example one creator on YouTube and on Rumble) shared one folder. New channels get their own folder, such as "Creator (Rumble)". For existing ones, the dashboard shows a notice, and this tool moves the channel you pick into a folder of its own. Files the other channel uses, shared artwork and files neither channel knows about stay where they are.
+**Shared Folders.** Before 1.9.50, two channels with the same name (for example one creator on YouTube and on Rumble) shared one folder. New channels get their own folder, such as "Creator (Rumble)". For existing ones, the dashboard shows a notice, and this tool moves the channel you pick into a folder of its own. Files the other channel uses, shared artwork and files neither channel knows about stay where they are.
 
 </details>
 
@@ -389,7 +449,7 @@ Two tools fix problems older versions could leave behind. Both show what they fo
 
 **Queue not downloading / stuck**
 - Check Settings → Authentication: PO Token Server must show **Running**
-- Check Settings → System Logs for error details
+- Check Settings → Diagnostics → System Logs for error details
 - If cookies expired, upload fresh ones via Settings → Authentication
 
 **"Sign in to confirm you're not a bot"**
@@ -419,7 +479,7 @@ Two tools fix problems older versions could leave behind. Both show what they fo
 
 ## Support
 
-For bugs or feature requests, open a GitHub issue and include the diagnostic report from **Settings → System → Copy Diagnostic Report**.
+For bugs or feature requests, open a GitHub issue and include the diagnostic report from **Settings → Diagnostics → System Overview → Copy Diagnostic Report**.
 
 ## License
 

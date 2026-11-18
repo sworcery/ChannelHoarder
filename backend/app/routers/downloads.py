@@ -18,6 +18,7 @@ from app.services.download_service import enqueue_video, enqueue_videos
 from app.services.queue_order import queue_order_by
 from app.services.settings_service import get_setting
 from app.services.ytdlp_service import YtdlpService
+from app.utils.error_codes import ERROR_CATALOG, ErrorCode
 from app.utils.file_utils import escape_like, move_video_files, status_after_dequeue, validate_download_path
 
 logger = logging.getLogger(__name__)
@@ -209,14 +210,81 @@ async def download_anyway(video_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/retry-all-failed", status_code=202)
-async def retry_all_failed(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(Video).where(Video.status == "failed"))
+async def retry_all_failed(
+    db: AsyncSession = Depends(get_db),
+    retryable_only: bool = False,
+    error_code: Optional[str] = None,
+):
+    """Re-queue failed videos. With retryable_only, skip causes a plain retry cannot fix
+    (expired cookies, old yt-dlp, ...), judged by the error catalogue. With error_code,
+    retry only that cause (UNKNOWN also covers failures with no code)."""
+    query = select(Video).where(Video.status == "failed")
+    if error_code:
+        if error_code == ErrorCode.UNKNOWN.value:
+            query = query.where(or_(Video.error_code.is_(None), Video.error_code == error_code))
+        else:
+            query = query.where(Video.error_code == error_code)
+    if retryable_only:
+        fixed_by_change = [c.value for c, info in ERROR_CATALOG.items() if not info.retryable]
+        query = query.where(or_(Video.error_code.is_(None), Video.error_code.notin_(fixed_by_change)))
+    result = await db.execute(query)
     videos = result.scalars().all()
 
     count = await enqueue_videos(db, videos, reset_retries=True)
 
     await db.commit()
     return {"message": f"Queued {count} failed videos for retry", "count": count}
+
+
+@router.get("/error-catalog")
+async def get_error_catalog():
+    """Label, tip and retry rule for each error code, so the Failed tab groups by cause."""
+    return {
+        c.value: {
+            "label": info.label,
+            "tip": info.tip,
+            "explanation": info.explanation,
+            "suggested_fix": info.suggested_fix,
+            "severity": info.severity,
+            "retryable": info.retryable,
+        }
+        for c, info in ERROR_CATALOG.items()
+    }
+
+
+_HELD_REASONS = (
+    ("moving", "is being moved"),
+    ("exclusive", "is being scanned"),
+    ("working", "is busy with another operation"),
+    ("draining", "is finishing its current download first"),
+)
+
+
+@router.get("/held-channels")
+async def get_held_channels(db: AsyncSession = Depends(get_db)):
+    """Channels that have waiting queue rows but can't start them now, with the reason."""
+    blocked = channel_activity.blocked_channel_ids()
+    if not blocked:
+        return []
+    rows = (await db.execute(
+        select(Channel.id, Channel.channel_name)
+        .where(
+            Channel.id.in_(blocked),
+            Channel.id.in_(
+                select(Video.channel_id)
+                .join(DownloadQueue, DownloadQueue.video_id == Video.id)
+                .where(DownloadQueue.started_at.is_(None))
+            ),
+        )
+        .order_by(Channel.channel_name)
+    )).all()
+    held = []
+    for cid, name in rows:
+        flags = channel_activity.activity(cid)
+        reason = next((text for key, text in _HELD_REASONS if flags.get(key)), None)
+        if reason:
+            held.append({"id": cid, "name": name, "reason": reason})
+    return held
 
 
 @router.get("/active")

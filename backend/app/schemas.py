@@ -110,6 +110,9 @@ class ChannelResponse(UTCBaseModel):
     updated_at: datetime
     # What the channel is doing now; filled by the list and detail endpoints.
     activity: dict = Field(default_factory=dict)
+    # Filled by the list and detail endpoints (empty / 0 elsewhere).
+    folder_path: str = ""  # download root + channel folder
+    skipped_count: int = 0
 
 
 # --- Video Schemas ---
@@ -234,6 +237,8 @@ class DashboardStats(UTCBaseModel):
     last_scan_at: Optional[datetime]
     active_downloads: int
     cookies_expired: bool = False
+    queued_count: int = 0  # Queue rows waiting to start
+    free_space_bytes: int = 0  # Free space on the drive holding the downloads
 
 
 # --- Settings Schemas ---
@@ -344,6 +349,8 @@ class DiagnosticReport(UTCBaseModel):
     api_key_configured: bool
     disk_free_bytes: int
     disk_free_formatted: str
+    disk_status: str = "healthy"  # healthy | warning | critical
+    disk_where: str = ""  # " in the temp folder" when that is the tighter one
     total_channels: int
     total_downloads: int
     total_failed: int

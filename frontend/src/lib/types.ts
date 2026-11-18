@@ -32,6 +32,9 @@ export interface Channel {
   last_error_code: string | null
   created_at: string
   updated_at: string
+  /** Download root + channel folder; empty on add/update responses. */
+  folder_path: string
+  skipped_count: number
   activity?: {
     moving: boolean
     scanning: boolean
@@ -123,6 +126,16 @@ export interface DashboardStats {
   last_scan_at: string | null
   active_downloads: number
   cookies_expired: boolean
+  queued_count: number
+  free_space_bytes: number
+}
+
+export interface DashboardAlert {
+  id: string
+  severity: "critical" | "warning" | "info"
+  title: string
+  message: string
+  action: { label: string; kind: "link" | "resume_queue"; target: string | null }
 }
 
 export interface DownloadLog {
@@ -163,6 +176,13 @@ export const HEALTH_COLORS: Record<string, string> = {
   warning: "text-warning",
   unhealthy: "text-danger",
   unknown: "text-muted-foreground",
+}
+
+export const HEALTH_LABELS: Record<string, string> = {
+  healthy: "Healthy",
+  warning: "Warning",
+  unhealthy: "Unhealthy",
+  unknown: "Not checked yet",
 }
 
 export type LibraryCheckKind = "wrong_file" | "likely" | "lost" | "manual"

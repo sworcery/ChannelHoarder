@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { Link } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { api } from "@/lib/api"
-import { formatBytes } from "@/lib/utils"
-import { HEALTH_COLORS } from "@/lib/types"
+import { formatBytes, formatVideoCounts } from "@/lib/utils"
+import { HEALTH_COLORS, HEALTH_LABELS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import BulkImportDialog from "@/components/channels/BulkImportDialog"
@@ -95,6 +95,19 @@ export default function ChannelsPage() {
   const [sortBy, setSortBy] = useState<SortBy>(() => getStored("ch_sort", "name_asc"))
 
   const { toast } = useToast()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const healthFilter = searchParams.get("health") === "unhealthy" ? "unhealthy" : null
+
+  // /channels?add=1 (the Dashboard's Add Channel button) opens the dialog once
+  useEffect(() => {
+    if (searchParams.get("add")) {
+      setShowAdd(true)
+      const next = new URLSearchParams(searchParams)
+      next.delete("add")
+      setSearchParams(next, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const debouncedSearch = useDebounce(search, 300)
 
@@ -148,10 +161,8 @@ export default function ChannelsPage() {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       resetAdd()
       toast(`Added channel: ${data.channel_name}`)
-      if (scanAfterAdd && data.id) {
-        toast("Starting initial scan...")
-        scanMutation.mutate(data.id)
-      }
+      // Land on the new channel; its page starts the scan and shows it running
+      if (data.id) navigate(`/channels/${data.id}`, { state: { scanAfterAdd: scanAfterAdd } })
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -199,7 +210,17 @@ export default function ChannelsPage() {
   const setSize = (s: CardSize) => { setCardSize(s); localStorage.setItem("ch_size", s) }
   const setSort = (s: SortBy) => { setSortBy(s); localStorage.setItem("ch_sort", s) }
 
-  const sortedChannels = useMemo(() => channels ? sortChannels(channels, sortBy) : [], [channels, sortBy])
+  const sortedChannels = useMemo(() => {
+    if (!channels) return []
+    const shown = healthFilter ? channels.filter((c) => c.health_status === healthFilter && c.enabled) : channels
+    return sortChannels(shown, sortBy)
+  }, [channels, sortBy, healthFilter])
+
+  const clearHealthFilter = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete("health")
+    setSearchParams(next, { replace: true })
+  }
 
   const closeMoveAll = () => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }
 
@@ -225,7 +246,7 @@ export default function ChannelsPage() {
     api.moveAllChannels(moveAllDir).then((r) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
       closeMoveAll()
-      toast(r.message)
+      toast(`${r.message} Rescan your Plex or Jellyfin library so it finds the new folders.`)
     }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingAll(false))
   }
 
@@ -444,6 +465,13 @@ export default function ChannelsPage() {
         </form>
       </Dialog>
 
+      {healthFilter && (
+        <div className="flex items-center gap-2 text-sm">
+          <Badge tone="warning">Showing unhealthy channels</Badge>
+          <Button variant="link" onClick={clearHealthFilter}>Clear</Button>
+        </div>
+      )}
+
       {/* Channel Display */}
       {isLoading ? (
         <div className="flex justify-center py-12">
@@ -496,8 +524,8 @@ export default function ChannelsPage() {
                         </Link>
                       </td>
                       <td className="px-2 sm:px-4 py-3 text-muted-foreground whitespace-nowrap">
-                        {channel.downloaded_count}/{channel.total_videos}
-                        <span className="text-xs ml-1 hidden sm:inline">({progress}%)</span>
+                        {formatVideoCounts(channel)}
+                        <span className="text-xs ml-1 hidden sm:inline">({channel.downloaded_count} downloaded, {progress}%)</span>
                       </td>
                       <td className="hidden md:table-cell px-4 py-3">
                         <Badge>{channel.quality}</Badge>
@@ -507,6 +535,9 @@ export default function ChannelsPage() {
                           <Circle className={`h-2.5 w-2.5 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
                           <span className={`text-xs ${channel.enabled ? "text-success" : "text-muted-foreground"}`}>
                             {channel.enabled ? "Active" : "Paused"}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            &middot; {HEALTH_LABELS[channel.health_status] || HEALTH_LABELS.unknown}
                           </span>
                         </div>
                       </td>
@@ -584,9 +615,6 @@ export default function ChannelsPage() {
                               {channel.platform}
                             </Badge>
                           )}
-                          <Circle
-                            className={`h-2.5 w-2.5 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`}
-                          />
                         </div>
                         {cardSize !== "small" && channel.description && (
                           <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{channel.description}</p>
@@ -597,8 +625,8 @@ export default function ChannelsPage() {
                     {/* Progress bar */}
                     <div className="mt-3">
                       <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>{channel.downloaded_count}/{channel.total_videos} videos</span>
-                        <span>{progress}%</span>
+                        <span>{formatVideoCounts(channel)}</span>
+                        <span>{channel.downloaded_count} downloaded &middot; {progress}%</span>
                       </div>
                       <div className="h-1.5 rounded-full bg-primary/20 overflow-hidden">
                         <div
@@ -615,6 +643,10 @@ export default function ChannelsPage() {
                         <Badge tone={channel.enabled ? "success" : "neutral"}>
                           {channel.enabled ? "Active" : "Paused"}
                         </Badge>
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <Circle className={`h-2.5 w-2.5 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} aria-hidden="true" />
+                          {HEALTH_LABELS[channel.health_status] || HEALTH_LABELS.unknown}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1 max-sm:opacity-100 [@media(hover:none)]:opacity-100 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <Button
@@ -657,11 +689,30 @@ export default function ChannelsPage() {
             })}
           </div>
         )
+      ) : debouncedSearch ? (
+        <EmptyState
+          icon={<Tv />}
+          title="No channels match your search"
+          text={`Nothing matches "${debouncedSearch}"${healthFilter ? " among the unhealthy channels" : ""}. Try a different name.`}
+          action={<Button onClick={() => setSearch("")}>Clear search</Button>}
+        />
+      ) : healthFilter ? (
+        <EmptyState
+          icon={<Tv />}
+          title="No unhealthy channels"
+          text="No active channel is marked unhealthy right now."
+          action={<Button onClick={clearHealthFilter}>Show all channels</Button>}
+        />
       ) : (
         <EmptyState
           icon={<Tv />}
           title="No channels yet"
-          text="Add one to get started."
+          text="Paste a channel URL from YouTube, Rumble, Twitch, Dailymotion, Vimeo or Odysee. ChannelHoarder scans it, lists its videos and downloads them for you."
+          action={
+            <Button variant="primary" onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4" /> Add your first channel
+            </Button>
+          }
         />
       )}
       <BulkImportDialog open={showBulk} onClose={() => setShowBulk(false)} />
@@ -701,6 +752,7 @@ export default function ChannelsPage() {
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Move all channel files to a new root directory. File paths in the database will be updated automatically.
+              Afterwards, rescan your Plex or Jellyfin library so it finds the new folders.
             </p>
             <Field label="New Download Directory">
               <Input
