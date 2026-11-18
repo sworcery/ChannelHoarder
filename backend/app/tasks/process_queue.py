@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, Channel, DownloadQueue, Video
+from app.services import channel_activity, queue_service
 from app.services.download_service import DownloadService
 from app.services.queue_order import queue_order_by
 from app.services.queue_state import get_pause_state
@@ -15,8 +16,8 @@ from app.services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
 
-# Track background download tasks so we know what's actually running
-_active_tasks: set[asyncio.Task] = set()
+# Background download tasks, so we know what's actually running (the set lives in channel_activity)
+_active_tasks = channel_activity.active_tasks
 
 
 async def _run_download(video_id: int, channel_id: int, queue_id: int):
@@ -25,6 +26,7 @@ async def _run_download(video_id: int, channel_id: int, queue_id: int):
     DownloadService manages its own short-lived DB sessions internally,
     so no session is held open during the long-running yt-dlp download.
     """
+    channel_activity.download_channels[video_id] = channel_id
     try:
         service = DownloadService()
         await service.download_video(video_id, channel_id, queue_id)
@@ -43,14 +45,13 @@ async def _run_download(video_id: int, channel_id: int, queue_id: int):
                     await db.commit()
         except Exception:
             logger.exception("Could not reset queue row %d after a download error", queue_id)
+    finally:
+        channel_activity.download_channels.pop(video_id, None)
 
 
 def _running_video_ids() -> set[str]:
     """Source video ids whose download is running right now."""
-    from app.services import download_service
-    running = set(download_service._active_downloads)
-    running |= {t.get_name().removeprefix("download-") for t in _active_tasks if not t.done()}
-    return running
+    return channel_activity.running_ids()
 
 
 async def reset_stale_entries(db) -> int:
@@ -116,13 +117,14 @@ async def process_download_queue():
         # concurrent yt-dlp for the same video. Exclude those.
         running_video_ids = {
             t.get_name().removeprefix("download-") for t in _active_tasks if not t.done()
-        }
+        }  # tasks only (not _active_downloads): that is the existing dispatch rule
 
         # Get next queued videos (fill all available slots). Over-fetch so we can drop
         # any still-running ones and still fill the slots.
         queue_order = await get_setting(db, "download_queue_order")
-        from app.services.channel_service import _moving_channels, draining_channel_ids
-        draining = draining_channel_ids()
+        # Moving, working, exclusive-scan (Force Rescan / Repair Dates) and draining
+        # channels start nothing; a plain scan does not hold downloads back.
+        blocked = channel_activity.blocked_channel_ids()
         query = (
             select(DownloadQueue)
             # Outer joins so entries whose video is gone still reach the cleanup below
@@ -135,14 +137,11 @@ async def process_download_queue():
                 DownloadQueue.retry_after <= datetime.now(timezone.utc).replace(tzinfo=None),
             ))
         )
-        if _moving_channels:
-            # Leave out channels whose files are being moved, in the query itself, so
-            # their entries can't take every slot and stall the rest of the queue.
-            query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(_moving_channels))))
-        if draining:
-            # A whole-channel action is waiting for this channel's running download to
-            # end: start nothing new there so it can finish.
-            query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(draining))))
+        if blocked:
+            # Left out in the query itself, so their entries can't take every slot and
+            # stall the rest of the queue. (A draining channel's action is waiting for
+            # its running download to end: nothing new starts there so it can finish.)
+            query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(blocked))))
         result = await db.execute(
             query.order_by(*queue_order_by(queue_order))
             .limit(slots + len(running_video_ids))
@@ -171,21 +170,8 @@ async def process_download_queue():
                 await db.commit()
                 continue
 
-            from app.services.channel_service import _moving_channels
-            if channel.id in _moving_channels or channel.id in draining:
-                continue  # moving or draining; stays queued for a later tick
-
-            # Mark as started NOW so the next scheduler tick
-            # sees it as active and doesn't double-pick it
-            queue_entry.started_at = datetime.now(timezone.utc)
-            queue_entry.retry_after = None
-            queue_entry.target_quality = channel.quality
-            video.status = "downloading"
-            await db.commit()
+            if channel.id in channel_activity.blocked_channel_ids():
+                continue  # claimed since the query ran; stays queued for a later tick
 
             logger.info("Processing queue: launching download for %s", video.title)
-            task = asyncio.create_task(
-                _run_download(video.id, channel.id, queue_entry.id),
-                name=f"download-{video.video_id}",
-            )
-            _active_tasks.add(task)
+            await queue_service.start(db, queue_entry, channel)

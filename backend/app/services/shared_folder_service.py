@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Channel, Video
-from app.services.channel_service import _moving_channels, _scanning_channels, other_recorded
+from app.services import channel_activity
+from app.services.channel_service import other_recorded
 from app.utils.file_utils import (
     ASSOCIATED_EXTENSIONS, channel_folder_name, file_keys, move_video_files, stem_key,
 )
@@ -73,23 +74,22 @@ async def busy_reason(
     claimed: the caller has already put this channel in _moving_channels itself
     (after checking it wasn't there), so its own entry doesn't count as busy.
     """
-    from app.services import channel_service as cs
-    from app.services.download_service import _active_downloads
-
-    if (channel_id in _moving_channels and not claimed) or cs._move_all_running:
+    ca = channel_activity
+    if (channel_id in ca.moving_channels and not claimed) or ca.is_move_all_running():
         return "A move of this channel's files is already running"
-    if any(c["id"] in _scanning_channels for c in group["channels"]):
+    if any(c["id"] in ca.scanning_channels or c["id"] in ca.exclusive_scans
+           for c in group["channels"]):
         return "A scan of one of these channels is running; try again when it finishes"
     # Another channel in the folder being renamed, imported, cleaned or moved could
     # place files the move would misread as untracked.
-    if any(c["id"] in cs._working_channels
-           or (c["id"] != channel_id and c["id"] in _moving_channels)
+    if any(c["id"] in ca.working_channels
+           or (c["id"] != channel_id and c["id"] in ca.moving_channels)
            for c in group["channels"]):
         return "Another operation on one of these channels is running; try again when it finishes"
     rows = (await db.execute(
         select(Video.video_id, Video.status).where(Video.channel_id == channel_id)
     )).all()
-    if any(status == "downloading" or vid in _active_downloads for vid, status in rows):
+    if any(status == "downloading" or ca.is_running(vid) for vid, status in rows):
         return "This channel has a download running; try again when it finishes"
     return None
 
@@ -287,4 +287,4 @@ async def move_task(channel_id: int) -> None:
                 "message": f"'{name}' now has its own folder '{folder}' ({moved} files moved{stay_note}{nfo_note})",
             })
     finally:
-        _moving_channels.discard(channel_id)
+        channel_activity.moving_channels.discard(channel_id)

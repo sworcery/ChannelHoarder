@@ -240,7 +240,7 @@ def test_channel_being_moved_does_not_stall_the_queue(monkeypatch):
                 await _queued(db, other, "o1", date(2024, 1, 3), 100, 3)
                 db.add(AppSetting(key="max_concurrent_downloads", value=json.dumps(1)))
                 await db.commit()
-                monkeypatch.setattr(channel_service, "_moving_channels", {moving.id})
+                monkeypatch.setattr("app.services.channel_activity.moving_channels", {moving.id})
                 await pq.process_download_queue()
                 await asyncio.sleep(0)
                 o1 = (await db.execute(select(Video).where(Video.video_id == "o1"))).scalar_one()

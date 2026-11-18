@@ -108,6 +108,8 @@ class ChannelResponse(UTCBaseModel):
     last_error_code: Optional[str]
     created_at: datetime
     updated_at: datetime
+    # What the channel is doing now; filled by the list and detail endpoints.
+    activity: dict = Field(default_factory=dict)
 
 
 # --- Video Schemas ---

@@ -226,14 +226,26 @@ async def test_outside_scan_window_no_fetch(env, monkeypatch):
     assert env.fetches == []
 
 
+async def test_channel_under_exclusive_scan_is_left_for_next_tick(env, monkeypatch):
+    await _set_minutes(env, 30)
+    pk = await _channel(env, "c1", videos=["a"])
+    env.feed["c1"] = {"a": "20260101", "b": "20260102"}
+    monkeypatch.setattr("app.services.channel_activity.exclusive_scans", {pk})
+    await _tick(env)
+    assert env.fetches == [] and env.scans == []
+    monkeypatch.setattr("app.services.channel_activity.exclusive_scans", set())
+    await _tick(env, 5)
+    assert env.scans == [pk]
+
+
 async def test_channel_being_scanned_is_left_for_next_tick(env, monkeypatch):
     await _set_minutes(env, 30)
     pk = await _channel(env, "c1", videos=["a"])
     env.feed["c1"] = {"a": "20260101", "b": "20260102"}
-    monkeypatch.setattr(rc, "_scanning_channels", {pk})
+    monkeypatch.setattr("app.services.channel_activity.scanning_channels", {pk})
     await _tick(env)
     assert env.fetches == [] and env.scans == []
-    monkeypatch.setattr(rc, "_scanning_channels", set())
+    monkeypatch.setattr("app.services.channel_activity.scanning_channels", set())
     await _tick(env, 5)
     assert env.scans == [pk]
 

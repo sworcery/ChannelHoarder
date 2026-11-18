@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, Channel, Video, DownloadQueue, DownloadLog
-from app.services import queue_state
+from app.services import channel_activity, queue_state
 from app.services.diagnostics_service import DiagnosticsService
 from app.services.settings_service import get_setting, get_settings
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
@@ -29,11 +29,11 @@ from app.utils.rate_limiter import wait_for_rate_limit
 
 logger = logging.getLogger(__name__)
 
-# Video IDs of downloads currently running. A set (not a bool) so that with
-# max_concurrent_downloads > 1 the first download to finish doesn't make
-# is_download_active() report False while others are still running (which let the
-# PO-token watchdog probe/restart the PO server under a live download).
-_active_downloads: set[str] = set()
+# Video IDs of downloads currently running; the set lives in channel_activity.
+# A set (not a bool) so that with max_concurrent_downloads > 1 the first download to
+# finish doesn't make is_download_active() report False while others are still running
+# (which let the PO-token watchdog probe/restart the PO server under a live download).
+_active_downloads = channel_activity.active_downloads
 
 
 def is_download_active() -> bool:

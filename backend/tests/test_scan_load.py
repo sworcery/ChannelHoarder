@@ -18,6 +18,7 @@ import app.tasks.temp_cleanup as temp_cleanup
 from app.config import settings
 from app.database import Base
 from app.models import AppSetting, Channel, Video
+from app.services import channel_activity as ca
 from app.services import download_service
 
 
@@ -26,7 +27,7 @@ def clean_state():
     cs._moving_channels.clear()
     cs._scanning_channels.clear()
     cs._working_channels.clear()
-    cs._move_all_running = False
+    ca.set_move_all_running(False)
     cs._last_scan_attempt.clear()
     download_service._active_downloads.clear()
     yield

@@ -15,7 +15,7 @@ from app.routers import channels as channels_router
 from app.routers.channels import (
     download_all_missing, force_rescan, monitor_season, MonitorRequest,
 )
-from app.services.channel_service import ChannelService, _scanning_channels
+from app.services.channel_service import ChannelService, _exclusive_scans, _scanning_channels
 from app.services.ytdlp_service import YtdlpService
 
 MARK = datetime(2026, 3, 1, 12, 0)
@@ -41,6 +41,7 @@ def isolate(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "YOUTUBE_API_KEY", "")
     monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(tmp_path))
     _scanning_channels.clear()
+    _exclusive_scans.clear()
 
     async def _noop(*args, **kwargs):
         return 0
@@ -51,6 +52,7 @@ def isolate(monkeypatch, tmp_path):
     monkeypatch.setattr(YtdlpService, "get_rss_upload_dates", lambda self, *a, **k: {})
     yield
     _scanning_channels.clear()
+    _exclusive_scans.clear()
 
 
 def _listing(monkeypatch, entries):
@@ -104,7 +106,7 @@ async def test_empty_listing_changes_nothing(monkeypatch, tmp_path):
             assert rows["removed_vid1"].status == "skipped"
             assert rows["removed_vid1"].retention_removed_at == MARK
             assert rows["kept_video01"].status == "pending"
-            assert ch.id not in _scanning_channels
+            assert ch.id not in _scanning_channels and ch.id not in _exclusive_scans
     finally:
         await eng.dispose()
 
@@ -152,13 +154,13 @@ async def test_channel_marked_scanning_during_run(monkeypatch, tmp_path):
             seen = []
 
             async def fake(self, channel):
-                seen.append(channel.id in _scanning_channels)
+                seen.append(channel.id in _exclusive_scans)
                 return [_entry("removed_vid1")]
 
             monkeypatch.setattr(ChannelService, "fetch_video_list", fake)
             await force_rescan(ch.id, db)
             assert seen == [True]
-            assert ch.id not in _scanning_channels
+            assert ch.id not in _scanning_channels and ch.id not in _exclusive_scans
     finally:
         await eng.dispose()
 
@@ -271,7 +273,7 @@ async def test_scan_failure_keeps_completed_and_marked_rows(monkeypatch, tmp_pat
             assert rows["done_vid001"].downloaded_at == MARK
             assert rows["removed_vid1"].status == "skipped"
             assert rows["removed_vid1"].retention_removed_at == MARK
-            assert ch.id not in _scanning_channels
+            assert ch.id not in _scanning_channels and ch.id not in _exclusive_scans
     finally:
         await eng.dispose()
 

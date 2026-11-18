@@ -119,7 +119,7 @@ async def test_two_concurrent_enqueues_make_one_row(tmp_path):
 
 async def test_remove_refuses_running_row(monkeypatch, tmp_path):
     maker, (vid, _ch) = await _maker(tmp_path)
-    monkeypatch.setattr(ds, "_active_downloads", {"v1"})
+    monkeypatch.setattr("app.services.channel_activity.active_downloads", {"v1"})
     async with maker() as db:
         video = await db.get(Video, vid)
         entry = await enqueue_video(db, video)

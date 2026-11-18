@@ -22,7 +22,10 @@ from app.schemas import (
     ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
 from app.services.channel_service import (
-    ChannelService, SHORTS_MAX_DURATION, _moving_channels, other_recorded, is_short,
+    ChannelService, SHORTS_MAX_DURATION, other_recorded, is_short,
+)
+from app.services import channel_activity, queue_service
+from app.services.channel_activity import (
     claim_channel, release_claim, set_move_all_running, try_claim,
 )
 from app.services import channel_service as _channel_service
@@ -70,6 +73,7 @@ async def list_channels(
         total, downloaded = counts_map.get(ch.id, (0, 0))
         ch.total_videos = total
         ch.downloaded_count = downloaded
+        ch.activity = channel_activity.activity(ch.id)
 
     return channels
 
@@ -158,6 +162,7 @@ async def get_channel(channel_id: int, db: AsyncSession = Depends(get_db)):
     row = counts.one()
     channel.total_videos = row[0] or 0
     channel.downloaded_count = row[1] or 0
+    channel.activity = channel_activity.activity(channel.id)
 
     return channel
 
@@ -192,16 +197,7 @@ async def update_channel(
     if "min_quality" in update_data:
         from app.utils.quality_utils import quality_rank
         if quality_rank(channel.min_quality) < quality_rank(old_min_quality):
-            await db.execute(
-                update(DownloadQueue)
-                .where(
-                    DownloadQueue.video_id.in_(select(Video.id).where(Video.channel_id == channel.id)),
-                    DownloadQueue.quality_attempts > 0,
-                    DownloadQueue.retry_after.isnot(None),
-                )
-                .values(retry_after=None, quality_attempts=0)
-                .execution_options(synchronize_session=False)
-            )
+            await queue_service.clear_quality_waits(db, channel.id)
 
     # A new download root (without moving files) can hold a same-named channel's
     # folder; give this channel its own there so future downloads don't mix.
@@ -629,7 +625,7 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
 
     # Busy (already scanning, moving, ...) is a 409, not "found 0 new videos". The flag
     # check and scan_channel's own claim have no await between them.
-    reason = _channel_service._flag_reason(channel.id)
+    reason = channel_activity.flag_reason(channel.id)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
 
@@ -1682,7 +1678,7 @@ async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
     try:
         await _move_channel_task_inner(channel_id, new_dir, old_dir)
     finally:
-        _moving_channels.discard(channel_id)
+        channel_activity.moving_channels.discard(channel_id)
 
 
 async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
@@ -1884,7 +1880,7 @@ async def move_all_channels(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    if _channel_service._move_all_running or _moving_channels:
+    if channel_activity.is_move_all_running() or channel_activity.moving_channels:
         raise HTTPException(status_code=409, detail="A move is already running; wait for it to finish")
     # Set right after the check, with no await between, so a double-click can't start two.
     set_move_all_running(True)

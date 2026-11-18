@@ -382,8 +382,7 @@ async def test_second_move_of_same_channel_is_refused(monkeypatch, tmp_path):
     maker, root, cid = await _setup(monkeypatch, tmp_path)
     monkeypatch.setattr(settings, "DOWNLOAD_DIR", str(root))
     monkeypatch.setattr(settings, "EXTRA_DOWNLOAD_DIRS", str(tmp_path))
-    monkeypatch.setattr(channels_router, "_moving_channels", {cid})
-    monkeypatch.setattr("app.services.channel_service._moving_channels", {cid})
+    monkeypatch.setattr("app.services.channel_activity.moving_channels", {cid})
     async with maker() as db:
         with pytest.raises(HTTPException) as ei:
             await channels_router.move_channel_files(
@@ -404,4 +403,4 @@ async def test_move_to_same_folder_alias_tells_the_user(monkeypatch, tmp_path):
     await channels_router._move_channel_task(cid, str(alias), str(root))
 
     assert sent and "already in that folder" in sent[-1][1]["message"]
-    assert cid not in channels_router._moving_channels
+    assert cid not in channels_router.channel_activity.moving_channels

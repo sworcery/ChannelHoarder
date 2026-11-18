@@ -16,7 +16,15 @@ from app.database import Base
 from app.models import Channel, Video
 from app.schemas import ImportConfirmRequest, RepairDatesConfirm
 from app.services import download_service
-from app.services.channel_service import channel_busy
+from app.services import channel_activity as ca
+
+
+async def channel_busy(db, channel_id, from_move_all=False):
+    """The busy reason a claim would be refused with, or None (the claim is not kept)."""
+    reason = await ca.try_claim(db, channel_id, "work", from_move_all=from_move_all)
+    if reason is None:
+        ca.release_claim(channel_id, "work")
+    return reason
 
 
 @pytest.fixture(autouse=True)
@@ -24,13 +32,13 @@ def clean_state():
     cs._moving_channels.clear()
     cs._scanning_channels.clear()
     cs._working_channels.clear()
-    cs._move_all_running = False
+    ca.set_move_all_running(False)
     download_service._active_downloads.clear()
     yield
     cs._moving_channels.clear()
     cs._scanning_channels.clear()
     cs._working_channels.clear()
-    cs._move_all_running = False
+    ca.set_move_all_running(False)
     download_service._active_downloads.clear()
 
 
@@ -73,7 +81,7 @@ def _make_busy(kind, cid):
     elif kind == "working":
         cs._working_channels.add(cid)
     elif kind == "move_all":
-        cs._move_all_running = True
+        ca.set_move_all_running(True)
     elif kind == "active_download":
         download_service._active_downloads.add("vid_one")
 
@@ -86,7 +94,7 @@ async def test_each_busy_reason_is_detected(monkeypatch, tmp_path):
             for s in (cs._moving_channels, cs._scanning_channels, cs._working_channels,
                       download_service._active_downloads):
                 s.clear()
-            cs._move_all_running = False
+            ca.set_move_all_running(False)
             _make_busy(kind, cid)
             reason = await channel_busy(db, cid)
             assert reason, kind
@@ -96,9 +104,9 @@ async def test_each_busy_reason_is_detected(monkeypatch, tmp_path):
                 assert reason == "Move All is running; try again when it finishes"
 
         download_service._active_downloads.clear()
-        cs._move_all_running = True
+        ca.set_move_all_running(True)
         assert await channel_busy(db, cid, from_move_all=True) is None
-        cs._move_all_running = False
+        ca.set_move_all_running(False)
         download_service._active_downloads.clear()
 
         v = (await db.execute(select(Video))).scalar_one()
@@ -171,23 +179,23 @@ async def test_move_all_skips_busy_channel_and_moves_the_rest(monkeypatch, tmp_p
     assert sent and sent[-1]["skipped"] and "Chan busy" in sent[-1]["skipped"][0]
     assert "Chan busy" in sent[-1]["message"]
     assert not cs._moving_channels
-    assert cs._move_all_running is False
+    assert ca.is_move_all_running() is False
 
 
 async def test_move_all_does_not_block_itself(monkeypatch, tmp_path):
     maker, root, (cid,) = await _setup(monkeypatch, tmp_path)
     new_root = tmp_path / "other"
-    cs._move_all_running = True  # as the endpoint sets it before starting the task
+    ca.set_move_all_running(True)  # as the endpoint sets it before starting the task
 
     await channels_router._move_all_task(str(new_root), {cid: str(root)})
 
     assert (new_root / "Chan one" / "Season 1" / "one.mp4").exists()
-    assert cs._move_all_running is False
+    assert ca.is_move_all_running() is False
 
 
 async def test_move_all_409_reads_move_all(monkeypatch, tmp_path):
     maker, root, (cid,) = await _setup(monkeypatch, tmp_path)
-    cs._move_all_running = True
+    ca.set_move_all_running(True)
     async with maker() as db:
         detail = await _expect_409(channels_router.move_channel_files(
             cid, channels_router.MoveFilesRequest(new_download_dir=str(tmp_path / "o")), db))
@@ -213,7 +221,7 @@ async def test_concurrent_force_rescans_one_gets_409(monkeypatch, tmp_path):
     errors = [r for r in results if isinstance(r, HTTPException)]
     assert len(errors) == 1 and errors[0].status_code == 409
     assert len(runs) == 1
-    assert cid not in cs._scanning_channels
+    assert cid not in ca.exclusive_scans
 
 
 async def test_concurrent_repair_dates_one_gets_409(monkeypatch, tmp_path):
@@ -226,7 +234,7 @@ async def test_concurrent_repair_dates_one_gets_409(monkeypatch, tmp_path):
     results = await asyncio.gather(call(), call(), return_exceptions=True)
     errors = [r for r in results if isinstance(r, HTTPException)]
     assert len(errors) == 1 and errors[0].status_code == 409
-    assert cid not in cs._scanning_channels
+    assert cid not in ca.exclusive_scans
 
 
 async def test_concurrent_moves_one_gets_409(monkeypatch, tmp_path):
