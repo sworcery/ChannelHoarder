@@ -87,7 +87,7 @@ export default function DashboardPage() {
       <PageHeader title="Dashboard" />
 
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Tv} label="Channels" value={stats.total_channels} sub={`${stats.active_channels} active`} />
         <StatCard icon={Download} label="Downloaded" value={stats.total_downloaded} sub={`of ${stats.total_videos_known} known`} />
         <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={`${stats.total_pending} pending`} color={stats.total_failed > 0 ? "text-danger" : undefined} />
@@ -133,7 +133,7 @@ export default function DashboardPage() {
         </Banner>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Download Queue */}
         <Card as="h2" title={`Download Queue (${stats.queue_length})`}>
           {queue && queue.length > 0 ? (
@@ -189,7 +189,7 @@ export default function DashboardPage() {
               {recent.map((video: any) => (
                 <div key={video.id} className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
-                  <div className="truncate flex-1">
+                  <div className="truncate flex-1 min-w-0">
                     <span>{video.title}</span>
                     {video.channel_name && (
                       <span className="text-xs text-muted-foreground ml-1.5"> - {video.channel_name}</span>

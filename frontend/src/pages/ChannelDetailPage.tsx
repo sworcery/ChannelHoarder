@@ -403,8 +403,8 @@ export default function ChannelDetailPage() {
           <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent" />
         </div>
 
-        <div className="relative px-6 pb-5 -mt-16">
-          <div className="flex items-end gap-4">
+        <div className="relative px-4 sm:px-6 pb-5 -mt-16">
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:gap-4">
             {channel.thumbnail_url ? (
               <img src={channel.thumbnail_url} alt={channel.channel_name} className="h-24 w-24 rounded-full object-cover border-4 border-card flex-shrink-0 shadow-lg" />
             ) : (
@@ -412,9 +412,9 @@ export default function ChannelDetailPage() {
                 <Tv className="h-12 w-12 text-muted-foreground" />
               </div>
             )}
-            <div className="flex-1 min-w-0 pb-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold truncate">{channel.channel_name}</h1>
+            <div className="w-full sm:w-auto sm:flex-1 min-w-0 pb-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold break-words min-w-0">{channel.channel_name}</h1>
                 {channel.platform && channel.platform !== "youtube" && (
                   <Badge tone="info" className="capitalize">{channel.platform}</Badge>
                 )}
@@ -423,8 +423,8 @@ export default function ChannelDetailPage() {
                   {!channel.enabled ? "Not scanned automatically" : channel.auto_download ? "Scanning, auto-download" : "Scanning, manual queue"}
                 </Badge>
               </div>
-              <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5">
-                {channel.channel_url} <ExternalLink className="h-3 w-3" />
+              <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5 min-w-0">
+                <span className="truncate">{channel.channel_url}</span> <ExternalLink className="h-3 w-3 flex-shrink-0" />
               </a>
             </div>
           </div>
@@ -442,21 +442,21 @@ export default function ChannelDetailPage() {
             </div>
           )}
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground mt-3">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:flex sm:flex-wrap sm:items-center text-sm text-muted-foreground mt-3">
             <span>{channel.downloaded_count}/{channel.total_videos} videos downloaded</span>
             {totalChannelSize > 0 && (
               <>
-                <span className="text-border">|</span>
+                <span className="text-border hidden sm:inline">|</span>
                 <span>{formatBytes(totalChannelSize)}</span>
               </>
             )}
-            <span className="text-border">|</span>
+            <span className="text-border hidden sm:inline">|</span>
             <span>Quality: {channel.quality}</span>
-            <span className="text-border">|</span>
+            <span className="text-border hidden sm:inline">|</span>
             <span>Last scan: <DateTime value={channel.last_scanned_at} /></span>
             {channel.next_scan_at && (
               <>
-                <span className="text-border">|</span>
+                <span className="text-border hidden sm:inline">|</span>
                 <span>Next scan: <DateTime value={channel.next_scan_at} /></span>
               </>
             )}
@@ -548,8 +548,8 @@ export default function ChannelDetailPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="relative flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="relative flex-1 min-w-[180px] max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
@@ -649,8 +649,9 @@ export default function ChannelDetailPage() {
         ) : filteredVideos.length > 0 ? (
           <>
             <div className="rounded-lg border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
+              {/* Below md the table is laid out as stacked rows: title on top, meta line beneath. */}
+              <table className="block md:table w-full text-sm">
+                <thead className="hidden md:table-header-group bg-muted/50">
                   <tr>
                     <th className="px-3 py-2 w-8">
                       <Button variant="ghost" size="icon" onClick={toggleSelectAll} aria-label="Select all episodes" className="!p-0">
@@ -670,7 +671,7 @@ export default function ChannelDetailPage() {
                     <th className="px-3 py-2"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="block md:table-row-group divide-y">
                   {(() => {
                     return seasons.flatMap((season) => {
                       const seasonVideos = seasonGroups[season]
@@ -683,9 +684,9 @@ export default function ChannelDetailPage() {
                       const rows: React.ReactNode[] = []
 
                       rows.push(
-                        <tr key={`season-${season}`} className="bg-muted/30">
-                          <td colSpan={8} className="px-3 py-2">
-                            <div className="flex items-center justify-between">
+                        <tr key={`season-${season}`} className="block md:table-row bg-muted/30">
+                          <td colSpan={8} className="block md:table-cell px-3 py-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
                               {/* Plain element on purpose: the whole season header is the expand/collapse click target, not a styled button. */}
                               <button
                                 onClick={() => setExpandedSeasons(prev => {
@@ -704,14 +705,14 @@ export default function ChannelDetailPage() {
                                   {` · ${monitored} monitored`}
                                 </span>
                               </button>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden" title={`${pct}% downloaded`}>
                                   <div
                                     className="h-full bg-primary rounded-full transition-all"
                                     style={{ width: `${pct}%` }}
                                   />
                                 </div>
-                                <div className="flex items-center gap-1">
+                                <div className="flex flex-wrap items-center gap-1">
                                   {(() => {
                                     const seasonIds = seasonVideos.map((v: any) => v.id)
                                     const allSelected = seasonIds.every((id: number) => selectedVideoIds.has(id))
@@ -764,29 +765,30 @@ export default function ChannelDetailPage() {
                           rows.push(
                       <tr
                         key={video.id}
-                        className={`hover:bg-muted/30 cursor-pointer ${isSelected ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
+                        className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 md:table-row md:p-0 hover:bg-muted/30 cursor-pointer ${isSelected ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
                         onClick={(e) => toggleVideoSelection(video.id, globalIdx, e.shiftKey)}
                       >
-                        <td className="px-3 py-2">
+                        <td className="order-1 md:px-3 md:py-2">
                           {isSelected ? (
                             <CheckSquare className="h-4 w-4 text-primary" />
                           ) : (
                             <Square className="h-4 w-4 text-muted-foreground" />
                           )}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">
+                        <td className="order-5 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">
                           S{video.season}E{String(video.episode).padStart(3, "0")}
                         </td>
-                        <td className="px-3 py-2 max-w-xs truncate" title={video.title}>
+                        <td className="order-2 min-w-0 flex-1 break-words md:max-w-xs md:truncate md:px-3 md:py-2" title={video.title}>
                           {video.title}
                           {video.is_short && <Badge tone="warning" className="ml-1.5 text-[10px]">SHORT</Badge>}
                           {video.is_livestream && <Badge tone="info" className="ml-1.5 text-[10px]">LIVE</Badge>}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">{formatDate(video.upload_date)}</td>
-                        <td className="px-3 py-2 text-muted-foreground">
+                        <td className="order-4 h-0 basis-full p-0 md:hidden" aria-hidden="true" />
+                        <td className="order-6 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">{formatDate(video.upload_date)}</td>
+                        <td className="order-7 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">
                           {video.duration ? formatDuration(video.duration) : "-"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="order-8 md:px-3 md:py-2">
                           <div className="flex items-center gap-2">
                             <StatusIcon
                               status={video.status}
@@ -799,10 +801,10 @@ export default function ChannelDetailPage() {
                             <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">
+                        <td className="order-9 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">
                           {video.file_size ? formatBytes(video.file_size) : "-"}
                         </td>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                        <td className="order-3 shrink-0 md:px-3 md:py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
                             <Button
                               variant="ghost"
@@ -893,7 +895,7 @@ export default function ChannelDetailPage() {
           {/* Download Settings */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Download Settings</p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex items-end gap-1">
                 <Field
                   className="flex-1"
@@ -1194,7 +1196,7 @@ export default function ChannelDetailPage() {
           {/* Monitoring */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monitoring</p>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
                 label="Auto-download"
                 caption
@@ -1477,7 +1479,7 @@ export default function ChannelDetailPage() {
               This action cannot be undone.
             </Banner>
 
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-lg border overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
@@ -1622,7 +1624,7 @@ export default function ChannelDetailPage() {
                   {importSelected.size === importMatches.length ? "Deselect All" : "Select All"}
                 </Button>
               </div>
-              <div className="rounded-lg border overflow-hidden">
+              <div className="rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50">
                     <tr>
@@ -1735,7 +1737,7 @@ export default function ChannelDetailPage() {
               {renumberPreview.total_changes} episode{renumberPreview.total_changes !== 1 ? "s" : ""} will be renumbered
               (out of {renumberPreview.total_videos} total). Files on disk will be renamed to match.
             </p>
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
                   <tr>
@@ -1826,7 +1828,7 @@ export default function ChannelDetailPage() {
             {repairPreview.stopped_early && (
               <Banner tone="warning" className="mb-4">{repairPreview.message}</Banner>
             )}
-            <div className="border rounded-lg overflow-hidden">
+            <div className="border rounded-lg overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
                   <tr>

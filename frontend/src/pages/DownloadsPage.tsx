@@ -579,7 +579,7 @@ export default function DownloadsPage() {
                 return (
                   <Card key={entry.id} className={`overflow-hidden p-0 space-y-0 ${isSelected ? "ring-2 ring-primary/50" : ""}`}>
                     <div className="p-4">
-                      <div className="flex items-start gap-3">
+                      <div className="flex flex-wrap items-start gap-3">
                         {/* Position + Checkbox */}
                         <div className="flex flex-col items-center gap-0.5 shrink-0 mt-1">
                           <span className="text-[10px] font-mono text-muted-foreground w-5 text-center">
@@ -606,13 +606,13 @@ export default function DownloadsPage() {
                           <img
                             src={video.thumbnail_url}
                             alt=""
-                            className="w-28 h-16 object-cover rounded shrink-0 bg-muted"
+                            className="hidden sm:block w-28 h-16 object-cover rounded shrink-0 bg-muted"
                           />
                         )}
-                        <div className="flex-1 min-w-0">
+                        <div className="flex-1 min-w-[10rem]">
                           {/* Title + state badge */}
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium truncate flex-1">{video?.title || "Unknown"}</p>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                            <p className="font-medium break-words sm:truncate flex-1 min-w-0 basis-40">{video?.title || "Unknown"}</p>
                             <div className={`flex items-center gap-1 text-xs font-medium shrink-0 ${state.color}`}>
                               {state.icon}
                               {state.label}
@@ -658,7 +658,7 @@ export default function DownloadsPage() {
                         </div>
 
                         {/* Queue controls */}
-                        <div className="flex items-center gap-0.5 shrink-0">
+                        <div className="flex flex-wrap items-center justify-end gap-0.5 w-full sm:w-auto sm:shrink-0">
                           {!entry.started_at && (
                             <Button
                               variant="ghost"
@@ -725,7 +725,7 @@ export default function DownloadsPage() {
                             )}
                           </div>
                           {progress ? (
-                            <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1.5">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1.5">
                               {progress.percent < 15 && (
                                 <span className="font-semibold text-foreground">{progress.percent}%</span>
                               )}
@@ -811,8 +811,8 @@ export default function DownloadsPage() {
       {/* History / Failed Tab */}
       {tab !== "queue" && (
         <div role="tabpanel" id={panelId("downloads", tab)} aria-labelledby={tabId("downloads", tab)} className="space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
@@ -849,19 +849,19 @@ export default function DownloadsPage() {
                   return (
                     <Card key={video.id} className="overflow-hidden p-0 space-y-0">
                       <div className="p-3">
-                        <div className="flex items-start gap-3">
+                        <div className="flex flex-wrap items-start gap-3">
                           {/* Thumbnail */}
                           {video.thumbnail_url && (
                             <img
                               src={video.thumbnail_url}
                               alt=""
-                              className="w-24 h-14 object-cover rounded shrink-0 bg-muted"
+                              className="hidden sm:block w-24 h-14 object-cover rounded shrink-0 bg-muted"
                             />
                           )}
-                          <div className="flex-1 min-w-0">
+                          <div className="flex-1 min-w-[10rem]">
                             {/* Title row */}
-                            <div className="flex items-center gap-2">
-                              <p className="font-medium text-sm truncate flex-1">{video.title}</p>
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <p className="font-medium text-sm break-words sm:truncate flex-1 min-w-0 basis-40">{video.title}</p>
                               <span className="inline-flex items-center gap-1 shrink-0">
                                 <StatusIcon
                                   status={video.status}
@@ -874,7 +874,7 @@ export default function DownloadsPage() {
                             </div>
 
                             {/* Meta row */}
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1 flex-wrap">
+                            <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 flex-wrap">
                               {video.channel_name && (
                                 <span className="font-medium text-foreground/70">{video.channel_name}</span>
                               )}
@@ -914,7 +914,7 @@ export default function DownloadsPage() {
                           </div>
 
                           {/* Actions */}
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex flex-wrap items-center justify-end gap-1 w-full sm:w-auto sm:shrink-0">
                             <a
                               href={buildVideoUrl(video.platform || "youtube", video.video_id)}
                               target="_blank"

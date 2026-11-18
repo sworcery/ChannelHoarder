@@ -233,7 +233,7 @@ function GeneralTab() {
 
       {/* Download & System Settings */}
       <Card icon={<Settings />} title="Download Settings">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Default Quality" hint="Default quality for new channels">
             <select
               value={defaultQuality}
@@ -873,7 +873,7 @@ function MediaManagementTab() {
           <span className="text-sm">Set permissions on downloaded files</span>
         </label>
         {setPermissions && (
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Folder chmod">
               <input
                 type="text"
@@ -1004,7 +1004,7 @@ function AntiDetectTab() {
         <p className="text-sm text-muted-foreground">
           Add delays between downloads to avoid YouTube rate limiting.
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Min Delay (seconds)">
             <input
               type="number"
@@ -1074,7 +1074,7 @@ function AntiDetectTab() {
           const tooNarrow = scanWindowStartHour !== scanWindowEndHour && width < 8
           return (
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Field label="Start (local time)">
                   <select
                     value={scanWindowStartHour}
@@ -1257,7 +1257,7 @@ function NotificationsTab() {
         <p className="text-sm text-muted-foreground">
           Create a bot via @BotFather, then use the bot token and your chat ID.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Bot Token">
             <input
               type="password"
@@ -1296,7 +1296,7 @@ function NotificationsTab() {
         <p className="text-sm text-muted-foreground">
           Create an app at pushover.net to get your tokens.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Application Token">
             <input
               type="password"
@@ -1358,7 +1358,7 @@ function NotificationsTab() {
         <p className="text-sm text-muted-foreground">
           Choose which events trigger push notifications.
         </p>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {WEBHOOK_EVENTS.map((evt) => (
             <label key={evt.key} className="flex items-center gap-2 cursor-pointer">
               <input

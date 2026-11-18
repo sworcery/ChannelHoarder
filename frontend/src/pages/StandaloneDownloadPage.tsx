@@ -174,7 +174,7 @@ export default function StandaloneDownloadPage() {
           />
         </Field>
 
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Quality">
             <select
               value={quality}
@@ -271,8 +271,8 @@ export default function StandaloneDownloadPage() {
                           style={{ width: `${Math.min(percent, 100)}%` }}
                         />
                       </div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <div className="flex flex-wrap items-center gap-3">
                           {prog.downloaded_bytes > 0 && prog.total_bytes > 0 && (
                             <span>{formatBytes(prog.downloaded_bytes)} / {formatBytes(prog.total_bytes)}</span>
                           )}

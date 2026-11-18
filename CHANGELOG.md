@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Every dialog works the same way.** Each one has a close button, closes with Esc, keeps its buttons in view on short screens (the form scrolls instead), and puts focus back where it was. Dialogs that hold typed-in work (Add Channel, Move All, Bulk Import) don't close on a stray click outside, and dialogs that are deleting or moving files can't be closed until they finish.
 - **Buttons, labels and dates are consistent across pages.** Buttons that delete something are outlined in red until the final confirmation, times read as "3 hours ago" with the full date on hover, and upload dates no longer show a day early west of UTC.
 - **The phone menu slides in from the left and closes when you pick a page.**
+- **Every page fits a phone screen.** Channel names, stats and filters no longer get cut off at the edge. On a phone, a channel's episodes show as stacked rows (title, then number, date, length, status and size, with the menu at hand), channel card buttons show without hovering, and Downloads rows wrap with their buttons in reach.
 - **Warnings, errors and status labels are readable in the light theme.** Yellow and green text on pale backgrounds was hard or impossible to read. Every status colour now meets the usual contrast level (4.5:1) in both themes.
 
 ### Added

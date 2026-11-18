@@ -103,7 +103,7 @@ export default function DiagnosticsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-y-3">
         <Tabs
           tabs={SUB_TABS}
           value={subTab}
@@ -111,10 +111,10 @@ export default function DiagnosticsTab() {
           storageKey="diagnostics_tab"
           label="Diagnostics sections"
           idPrefix="diag"
-          className="flex-1"
+          className="min-w-0 basis-full flex-1 sm:basis-0"
         />
         {subTab === "overview" && diagnostics && (
-          <Button onClick={copyReport} className="ml-4 whitespace-nowrap">
+          <Button onClick={copyReport} className="sm:ml-4 whitespace-nowrap">
             <ClipboardCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Diagnostic Report"}
           </Button>
@@ -128,7 +128,7 @@ export default function DiagnosticsTab() {
           </div>
         ) : diagnostics ? (
           <div role="tabpanel" id={panelId("diag", "overview")} aria-labelledby={tabId("diag", "overview")} className="space-y-6">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatusCard label="PO Tokens" status={diagnostics.pot_status === "healthy" ? "ok" : "error"} value={diagnostics.pot_status} />
               <StatusCard label="Cookies" status={diagnostics.cookies_status === "present" ? "ok" : "info"} value={diagnostics.cookies_status} />
               <StatusCard label="yt-dlp" status="ok" value={diagnostics.ytdlp_version} />
@@ -140,7 +140,7 @@ export default function DiagnosticsTab() {
             </div>
 
             <Card title="Statistics" className="space-y-3">
-              <div className="grid gap-2 text-sm sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Channels</span>
                   <span>{diagnostics.total_channels}</span>

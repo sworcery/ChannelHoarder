@@ -485,12 +485,12 @@ export default function ChannelsPage() {
             <table className="w-full text-sm">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="text-left px-4 py-2.5">Channel</th>
-                  <th className="text-left px-4 py-2.5">Videos</th>
-                  <th className="text-left px-4 py-2.5">Quality</th>
-                  <th className="text-left px-4 py-2.5">Status</th>
-                  <th className="text-left px-4 py-2.5">Last Scan</th>
-                  <th className="px-4 py-2.5"></th>
+                  <th className="text-left px-2 sm:px-4 py-2.5">Channel</th>
+                  <th className="text-left px-2 sm:px-4 py-2.5">Videos</th>
+                  <th className="hidden md:table-cell text-left px-4 py-2.5">Quality</th>
+                  <th className="hidden sm:table-cell text-left px-4 py-2.5">Status</th>
+                  <th className="hidden md:table-cell text-left px-4 py-2.5">Last Scan</th>
+                  <th className="px-2 sm:px-4 py-2.5"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -500,7 +500,7 @@ export default function ChannelsPage() {
                     : 0
                   return (
                     <tr key={channel.id} className="hover:bg-muted/30">
-                      <td className="px-4 py-3">
+                      <td className="px-2 sm:px-4 py-3">
                         <Link to={`/channels/${channel.id}`} className="flex items-center gap-3 hover:text-primary">
                           {channel.thumbnail_url ? (
                             <img src={channel.thumbnail_url} alt="" className="h-10 w-10 rounded-full object-cover flex-shrink-0" />
@@ -511,7 +511,7 @@ export default function ChannelsPage() {
                           )}
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium truncate">{channel.channel_name}</span>
+                              <span className="font-medium truncate max-w-[7.5rem] sm:max-w-none">{channel.channel_name}</span>
                               {channel.platform !== "youtube" && (
                                 <Badge tone="info" className="text-[10px] px-1.5 capitalize">
                                   {channel.platform}
@@ -524,14 +524,14 @@ export default function ChannelsPage() {
                           </div>
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground">
+                      <td className="px-2 sm:px-4 py-3 text-muted-foreground whitespace-nowrap">
                         {channel.downloaded_count}/{channel.total_videos}
-                        <span className="text-xs ml-1">({progress}%)</span>
+                        <span className="text-xs ml-1 hidden sm:inline">({progress}%)</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden md:table-cell px-4 py-3">
                         <Badge className="text-[10px]">{channel.quality}</Badge>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="hidden sm:table-cell px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <Circle className={`h-2.5 w-2.5 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
                           <span className={`text-xs ${channel.enabled ? "text-success" : "text-muted-foreground"}`}>
@@ -539,8 +539,8 @@ export default function ChannelsPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground"><DateTime value={channel.last_scanned_at} /></td>
-                      <td className="px-4 py-3">
+                      <td className="hidden md:table-cell px-4 py-3 text-xs text-muted-foreground"><DateTime value={channel.last_scanned_at} /></td>
+                      <td className="px-2 sm:px-4 py-3">
                         <div className="flex items-center gap-1">
                           <Button
                             variant="ghost" size="icon"
@@ -639,13 +639,13 @@ export default function ChannelsPage() {
 
                     {/* Metadata badges + actions */}
                     <div className="mt-3 flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <Badge className="text-[10px]">{channel.quality}</Badge>
                         <Badge tone={channel.enabled ? "success" : "neutral"} className="text-[10px]">
                           {channel.enabled ? "Active" : "Paused"}
                         </Badge>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                      <div className="flex items-center gap-1 max-sm:opacity-100 [@media(hover:none)]:opacity-100 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                         <Button
                           variant="ghost" size="icon"
                           onClick={(e) => { e.preventDefault(); downloadChannelMutation.mutate(channel.id) }}
