@@ -399,6 +399,9 @@ export default function DownloadsPage() {
     if (progress && progress.percent > 0) {
       return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
     }
+    if (entry.stuck && !progress) {
+      return { label: "Stuck - remove it or download now", icon: <Clock className="h-3.5 w-3.5 text-red-500" />, color: "text-red-500" }
+    }
     if (entry.started_at && !progress) {
       return { label: "Starting...", icon: <Clock className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />, color: "text-yellow-500" }
     }
@@ -407,7 +410,9 @@ export default function DownloadsPage() {
     }
     if (entry.retry_after && new Date(entry.retry_after).getTime() > Date.now()) {
       return {
-        label: `Waiting for higher quality, retrying at ${formatDateTime(entry.retry_after)}`,
+        label: entry.quality_attempts > 0
+          ? `Waiting for higher quality, retrying at ${formatDateTime(entry.retry_after)}`
+          : `Retrying at ${formatDateTime(entry.retry_after)}`,
         icon: <Clock className="h-3.5 w-3.5 text-yellow-500" />,
         color: "text-yellow-500",
       }
@@ -507,7 +512,7 @@ export default function DownloadsPage() {
             <div className="flex items-center gap-4 text-sm text-muted-foreground px-1">
               <span>{queueTotal} in queue</span>
               {queue && (
-                <span>{queue.filter((e: any) => e.started_at).length} downloading</span>
+                <span>{queue.filter((e: any) => e.running).length} downloading</span>
               )}
             </div>
           )}
@@ -675,7 +680,16 @@ export default function DownloadsPage() {
                               <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
                             </button>
                           )}
-                          {!entry.started_at && (
+                          {!entry.started_at && entry.quality_attempts > 0 && entry.retry_after && (
+                            <button
+                              onClick={() => downloadAnywayMutation.mutate(video.id)}
+                              className="px-2 py-1 text-xs hover:bg-accent rounded border"
+                              title="Download at the best available quality"
+                            >
+                              Download anyway
+                            </button>
+                          )}
+                          {(!entry.started_at || entry.stuck) && (
                             <button
                               onClick={() => downloadNowMutation.mutate(entry.id)}
                               className="p-1.5 hover:bg-green-500/10 rounded"
@@ -684,7 +698,7 @@ export default function DownloadsPage() {
                               <Zap className="h-4 w-4 text-green-500" />
                             </button>
                           )}
-                          {!entry.started_at && (
+                          {(!entry.started_at || entry.stuck) && (
                             <button
                               onClick={() => removeFromQueue.mutate(entry.id)}
                               className="p-1.5 hover:bg-accent rounded"

@@ -13,6 +13,24 @@ from app.database import init_database
 logger = logging.getLogger(__name__)
 
 
+async def repair_unqueued_videos(db) -> int:
+    """Videos marked queued or downloading with no queue row behind them go back to
+    pending (completed if their file is still there). Returns how many were fixed."""
+    from sqlalchemy import select
+    from app.models import DownloadQueue, Video
+    from app.utils.file_utils import status_after_dequeue
+
+    has_row = select(DownloadQueue.video_id).where(DownloadQueue.video_id == Video.id).exists()
+    videos = (await db.execute(
+        select(Video).where(Video.status.in_(("queued", "downloading")), ~has_row)
+    )).scalars().all()
+    for video in videos:
+        video.status = status_after_dequeue(video)
+    if videos:
+        await db.commit()
+    return len(videos)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logging.basicConfig(
@@ -63,6 +81,10 @@ async def lifespan(app: FastAPI):
                     entry.video.status = "queued"
             await db.commit()
             logger.info("Reset %d stale queue entries on startup", len(stale))
+
+        repaired = await repair_unqueued_videos(db)
+        if repaired:
+            logger.info("Put %d queued/downloading videos with no queue row back to pending", repaired)
 
         # Queue flags: rewrite old raw values into canonical JSON (before the generic fix below)
         from app.services.queue_state import normalize_flags

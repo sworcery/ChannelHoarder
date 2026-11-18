@@ -208,6 +208,9 @@ class QueueEntryResponse(UTCBaseModel):
     target_quality: Optional[str]
     estimated_size: Optional[int]
     retry_after: Optional[datetime] = None
+    quality_attempts: int = 0
+    running: bool = False
+    stuck: bool = False
     video: VideoSummary
 
 

@@ -73,6 +73,9 @@ export interface QueueEntry {
   target_quality: string | null
   estimated_size: number | null
   retry_after: string | null
+  quality_attempts: number
+  running: boolean
+  stuck: boolean
   video: Video
 }
 

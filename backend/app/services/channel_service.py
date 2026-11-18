@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -98,6 +99,15 @@ _move_all_running = False
 # Channels with a file-touching operation in flight (renumber, rename, import, delete...).
 _working_channels: set[int] = set()
 
+# Channels whose whole-channel claim was refused only because a download is running:
+# {channel_id: time.monotonic()}. The dispatcher starts nothing new for them.
+_draining_channels: dict[int, float] = {}
+DRAINING_MAX_SECONDS = 30 * 60
+DRAINING_MESSAGE = (
+    "Finishing this channel's current download first; new downloads for it are held. "
+    "Try again in a few minutes."
+)
+
 # When each channel's last failed scan attempt happened (last_scanned_at is not
 # stamped on failure); the Scan Now cooldown reads it.
 _last_scan_attempt: dict[int, datetime] = {}
@@ -152,9 +162,14 @@ def _claim_set(kind: str) -> set[int]:
 
 async def try_claim(
     db: AsyncSession, channel_id: int, kind: str, from_move_all: bool = False,
-    video_ids: list[int] | None = None,
+    video_ids: list[int] | None = None, drain: bool = False,
 ) -> str | None:
     """Claim a channel for an operation: None on success, else the busy reason.
+
+    drain: only for a user-initiated whole-channel action that will be retried. A
+    refusal for a running download then holds the channel's new downloads (see
+    _draining_channels). Background callers (retention, Move All, library fixes) leave
+    it off, since they don't come back soon.
 
     The flags are checked and the claim added with no await in between, so two
     concurrent requests can't both pass. The download check runs after the claim
@@ -174,7 +189,23 @@ async def try_claim(
         raise
     if reason:
         claim.discard(channel_id)
+        if drain and video_ids is None:
+            # Refused only because a download is running: hold new downloads for this
+            # channel so the running one is the last, and a retry can then claim it.
+            _draining_channels[channel_id] = time.monotonic()
+            return DRAINING_MESSAGE
+        return reason
+    _draining_channels.pop(channel_id, None)
     return reason
+
+
+def draining_channel_ids() -> set[int]:
+    """Channels held back from starting new downloads; entries older than 30 minutes expire."""
+    now = time.monotonic()
+    for cid, since in list(_draining_channels.items()):
+        if now - since > DRAINING_MAX_SECONDS:
+            del _draining_channels[cid]
+    return set(_draining_channels)
 
 
 def release_claim(channel_id: int, kind: str) -> None:
@@ -188,7 +219,7 @@ async def claim_channel(
     """Hold a channel's claim for the whole operation; 409 when it is busy."""
     from fastapi import HTTPException
 
-    reason = await try_claim(db, channel_id, kind, video_ids=video_ids)
+    reason = await try_claim(db, channel_id, kind, video_ids=video_ids, drain=True)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     try:

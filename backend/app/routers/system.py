@@ -363,7 +363,7 @@ async def move_shared_folder_channel(body: SharedFolderMoveRequest, db: AsyncSes
     # Claim the channel before the checks (refused if it's being moved, scanned, worked
     # on or downloading), so nothing else can start on it while they run; released by
     # move_task, or right here if the move doesn't start.
-    reason = await try_claim(db, body.channel_id, "move")
+    reason = await try_claim(db, body.channel_id, "move", drain=True)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     started = False

@@ -1,11 +1,11 @@
 import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select, func
+from sqlalchemy import and_, delete, or_, select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -24,11 +24,56 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _running_video_ids() -> set[str]:
+    """Source video ids whose download is running right now (not just rows with started_at)."""
+    from app.services.download_service import _active_downloads
+    from app.tasks.process_queue import _active_tasks
+
+    running = set(_active_downloads)
+    running |= {t.get_name().removeprefix("download-") for t in _active_tasks if not t.done()}
+    return running
+
+
+STUCK_AFTER = timedelta(minutes=2)
+
+
+def _stuck_cutoff() -> datetime:
+    return (datetime.now(timezone.utc) - STUCK_AFTER).replace(tzinfo=None)
+
+
+def _not_running_condition():
+    """SQL condition for a row that may be removed or forced: not started, or started
+    over 2 minutes ago with no running download. The age test sits in the statement
+    itself, so a row the dispatcher has just started (its task not yet created) is
+    never taken, atomically with the DELETE/UPDATE."""
+    idle_or_old = or_(DownloadQueue.started_at.is_(None), DownloadQueue.started_at < _stuck_cutoff())
+    running = _running_video_ids()
+    if not running:
+        return idle_or_old
+    return and_(
+        idle_or_old,
+        DownloadQueue.video_id.notin_(select(Video.id).where(Video.video_id.in_(list(running)))),
+    )
+
+
+def _queue_response(entry: DownloadQueue, running: set[str] | None = None) -> QueueEntryResponse:
+    resp = QueueEntryResponse.model_validate(entry)
+    if running is None:
+        running = _running_video_ids()
+    resp.running = bool(entry.video and entry.video.video_id in running)
+    started = entry.started_at
+    if started is not None and started.tzinfo is not None:
+        started = started.astimezone(timezone.utc).replace(tzinfo=None)
+    resp.stuck = bool(started is not None and not resp.running and started < _stuck_cutoff())
+    return resp
+
+
 async def _delete_idle(db: AsyncSession, *conditions) -> list[int]:
-    """Delete matching queue rows that have not started; returns their video ids."""
+    """Delete matching queue rows whose download is not running (a row with started_at
+    but no running download is stuck and is cleared too); returns their video ids."""
     result = await db.execute(
         delete(DownloadQueue)
-        .where(*conditions, DownloadQueue.started_at.is_(None))
+        .where(*conditions, _not_running_condition())
         .returning(DownloadQueue.video_id)
         .execution_options(synchronize_session=False)
     )
@@ -88,9 +133,10 @@ async def get_queue(
         .limit(limit)
     )
     entries = result.scalars().unique().all()
+    running = _running_video_ids()
 
     return {
-        "items": [QueueEntryResponse.model_validate(e) for e in entries],
+        "items": [_queue_response(e, running) for e in entries],
         "total": total,
         "skip": skip,
         "limit": limit,
@@ -135,7 +181,7 @@ async def bulk_remove_from_queue(body: BulkQueueRemove, db: AsyncSession = Depen
 
 @router.delete("/queue/{queue_id}", status_code=204)
 async def remove_from_queue(queue_id: int, db: AsyncSession = Depends(get_db)):
-    # Delete only an idle row; the started_at test is part of the DELETE itself
+    # Delete any row that isn't running; the running test is part of the DELETE itself
     deleted = await _delete_idle(db, DownloadQueue.id == queue_id)
     if not deleted:
         exists = await db.scalar(select(DownloadQueue.id).where(DownloadQueue.id == queue_id))
@@ -213,6 +259,23 @@ async def download_anyway(video_id: int, db: AsyncSession = Depends(get_db)):
     video = (await db.execute(select(Video).where(Video.id == video_id))).scalar_one_or_none()
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
+    if video.status == "queued":
+        # Waiting for higher quality: its row has used a wait and has a retry time.
+        entry = (await db.execute(
+            select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+        )).scalar_one_or_none()
+        if (
+            entry is None or entry.quality_attempts <= 0 or entry.retry_after is None
+            or video.video_id in _running_video_ids()
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Only a video waiting for higher quality can be downloaded anyway",
+            )
+        entry.skip_min_quality = True
+        entry.retry_after = None
+        await db.commit()
+        return {"message": f"Video '{video.title}' will download at the best available quality"}
     if video.status != "failed" or video.error_code != "QUALITY_TOO_LOW":
         raise HTTPException(
             status_code=409,
@@ -243,7 +306,8 @@ async def get_active_downloads(db: AsyncSession = Depends(get_db)):
         .where(DownloadQueue.started_at.isnot(None))
     )
     entries = result.scalars().unique().all()
-    return [QueueEntryResponse.model_validate(e) for e in entries]
+    running = _running_video_ids()
+    return [_queue_response(e, running) for e in entries]
 
 
 # --- Queue control: pause / resume / clear ---
@@ -279,7 +343,7 @@ async def clear_queue(db: AsyncSession = Depends(get_db)):
     # Only clear items that haven't started (don't interrupt active downloads)
     deleted = await _delete_idle(db)
     count = len(deleted)
-    await _reset_dequeued(db, deleted, ("queued",))
+    await _reset_dequeued(db, deleted, ("queued", "downloading"))
     await db.commit()
     logger.info("Cleared %d items from download queue", count)
     return {
@@ -328,18 +392,14 @@ async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
     entry = result.scalar_one_or_none()
     if not entry:
         raise HTTPException(status_code=404, detail="Queue entry not found")
-    if entry.started_at is not None:
-        raise HTTPException(status_code=409, detail="Download already in progress")
-
     video = entry.video
     if not video:
         raise HTTPException(status_code=404, detail="Video not found for queue entry")
 
-    # Same name the queue dispatcher uses, so each side sees the other's running
-    # download. After the 4h stale reset started_at is cleared while the task may
-    # still be running.
+    # Refuse only a download that is really running; a started row with nothing
+    # running behind it is stuck and may be started again.
     task_name = f"download-{video.video_id}"
-    if any(t.get_name() == task_name and not t.done() for t in _active_tasks):
+    if video.video_id in _running_video_ids():
         raise HTTPException(status_code=409, detail="Download already in progress")
 
     result = await db.execute(select(Channel).where(Channel.id == video.channel_id))
@@ -350,10 +410,20 @@ async def download_now(queue_id: int, db: AsyncSession = Depends(get_db)):
     if channel.id in _moving_channels:
         raise HTTPException(status_code=409, detail="This channel's files are being moved; try again shortly")
 
-    # Mark as started and bump priority
+    # A draining channel (a whole-channel action is waiting) is not checked here on
+    # purpose: Download Now is the user's explicit action.
+    # Mark as started and bump priority. The check is part of the UPDATE, so a row the
+    # dispatcher started meanwhile (or one that is running) is refused, never run twice.
     max_priority = await db.scalar(select(func.max(DownloadQueue.priority))) or 0
-    entry.priority = max_priority + 1
-    entry.started_at = datetime.now(timezone.utc)
+    claimed = await db.execute(
+        update(DownloadQueue)
+        .where(DownloadQueue.id == queue_id, _not_running_condition())
+        .values(priority=max_priority + 1, started_at=datetime.now(timezone.utc))
+        .returning(DownloadQueue.id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.first() is None:
+        raise HTTPException(status_code=409, detail="Download already in progress")
     video.status = "downloading"
     await db.commit()
 

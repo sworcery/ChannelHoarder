@@ -183,8 +183,25 @@ async def update_channel(
             raise HTTPException(status_code=400, detail=str(e))
 
     old_dir = channel.download_dir
+    old_min_quality = channel.min_quality
     for field, value in update_data.items():
         setattr(channel, field, value)
+
+    # Minimum quality cleared or lowered: videos waiting for higher quality have
+    # nothing left to wait for, so they run on the next tick.
+    if "min_quality" in update_data:
+        from app.utils.quality_utils import quality_rank
+        if quality_rank(channel.min_quality) < quality_rank(old_min_quality):
+            await db.execute(
+                update(DownloadQueue)
+                .where(
+                    DownloadQueue.video_id.in_(select(Video.id).where(Video.channel_id == channel.id)),
+                    DownloadQueue.quality_attempts > 0,
+                    DownloadQueue.retry_after.isnot(None),
+                )
+                .values(retry_after=None, quality_attempts=0)
+                .execution_options(synchronize_session=False)
+            )
 
     # A new download root (without moving files) can hold a same-named channel's
     # folder; give this channel its own there so future downloads don't mix.
@@ -468,7 +485,7 @@ async def repair_dates_confirm(
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    reason = await try_claim(db, channel_id, "scan")
+    reason = await try_claim(db, channel_id, "scan", drain=True)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     try:
@@ -1732,7 +1749,7 @@ async def move_channel_files(
         return {"message": f"'{channel.channel_name}' is already in {body.new_download_dir}"}
 
     # The claim goes in _moving_channels; the background task releases it when it ends.
-    reason = await try_claim(db, channel_id, "move")
+    reason = await try_claim(db, channel_id, "move", drain=True)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     try:
@@ -2280,7 +2297,7 @@ async def force_rescan(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     # Held for the whole run so scheduled and RSS scans skip this channel
-    reason = await try_claim(db, channel_id, "scan")
+    reason = await try_claim(db, channel_id, "scan", drain=True)
     if reason:
         raise HTTPException(status_code=409, detail=reason)
     try:

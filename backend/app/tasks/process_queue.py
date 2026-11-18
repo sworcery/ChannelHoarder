@@ -30,6 +30,52 @@ async def _run_download(video_id: int, channel_id: int, queue_id: int):
         await service.download_video(video_id, channel_id, queue_id)
     except Exception:
         logger.exception("Unhandled error in background download task for video_id=%d", video_id)
+        # Last resort: never leave the row "started" with nothing running behind it.
+        try:
+            async with async_session() as db:
+                entry = await db.get(DownloadQueue, queue_id)
+                if entry is not None and entry.started_at is not None:
+                    entry.started_at = None
+                    entry.progress_percent = 0
+                    video = await db.get(Video, video_id)
+                    if video is not None and video.status == "downloading":
+                        video.status = "queued"
+                    await db.commit()
+        except Exception:
+            logger.exception("Could not reset queue row %d after a download error", queue_id)
+
+
+def _running_video_ids() -> set[str]:
+    """Source video ids whose download is running right now."""
+    from app.services import download_service
+    running = set(download_service._active_downloads)
+    running |= {t.get_name().removeprefix("download-") for t in _active_tasks if not t.done()}
+    return running
+
+
+async def reset_stale_entries(db) -> int:
+    """Reset queue rows started more than 4 hours ago whose download is not running."""
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
+    stale_result = await db.execute(
+        select(DownloadQueue)
+        .options(joinedload(DownloadQueue.video))
+        .where(DownloadQueue.started_at.isnot(None))
+        .where(DownloadQueue.started_at < stale_cutoff)
+    )
+    running = _running_video_ids()
+    count = 0
+    for stale in stale_result.scalars().unique().all():
+        if stale.video and stale.video.video_id in running:
+            continue
+        logger.warning("Unsticking stale queue entry (started %s): video_id=%s",
+                       stale.started_at, stale.video.video_id if stale.video else "?")
+        stale.started_at = None
+        stale.progress_percent = 0
+        if stale.video:
+            stale.video.status = "queued"
+        count += 1
+    await db.commit()
+    return count
 
 
 async def process_download_queue():
@@ -44,28 +90,15 @@ async def process_download_queue():
     _active_tasks.difference_update(done)
 
     async with async_session() as db:
+        # Unstick any downloads that have been "active" for more than 4 hours
+        # (downloads use progress-based timeout so large files can run for hours).
+        # Runs while the queue is paused too, and never touches a running download.
+        await reset_stale_entries(db)
+
         # Check if queue is paused
         paused, _reason = await get_pause_state(db)
         if paused:
             return  # Queue is paused  - don't start new downloads
-
-        # Unstick any downloads that have been "active" for more than 4 hours
-        # (downloads use progress-based timeout so large files can run for hours)
-        stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=4)
-        stale_result = await db.execute(
-            select(DownloadQueue)
-            .options(joinedload(DownloadQueue.video))
-            .where(DownloadQueue.started_at.isnot(None))
-            .where(DownloadQueue.started_at < stale_cutoff)
-        )
-        for stale in stale_result.scalars().unique().all():
-            logger.warning("Unsticking stale queue entry (started %s): video_id=%s",
-                           stale.started_at, stale.video.video_id if stale.video else "?")
-            stale.started_at = None
-            stale.progress_percent = 0
-            if stale.video:
-                stale.video.status = "queued"
-        await db.commit()
 
         # Check how many downloads are currently active
         active_count = await db.scalar(
@@ -88,7 +121,8 @@ async def process_download_queue():
         # Get next queued videos (fill all available slots). Over-fetch so we can drop
         # any still-running ones and still fill the slots.
         queue_order = await get_setting(db, "download_queue_order")
-        from app.services.channel_service import _moving_channels
+        from app.services.channel_service import _moving_channels, draining_channel_ids
+        draining = draining_channel_ids()
         query = (
             select(DownloadQueue)
             # Outer joins so entries whose video is gone still reach the cleanup below
@@ -105,6 +139,10 @@ async def process_download_queue():
             # Leave out channels whose files are being moved, in the query itself, so
             # their entries can't take every slot and stall the rest of the queue.
             query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(_moving_channels))))
+        if draining:
+            # A whole-channel action is waiting for this channel's running download to
+            # end: start nothing new there so it can finish.
+            query = query.where(or_(Channel.id.is_(None), Channel.id.notin_(list(draining))))
         result = await db.execute(
             query.order_by(*queue_order_by(queue_order))
             .limit(slots + len(running_video_ids))
@@ -134,12 +172,13 @@ async def process_download_queue():
                 continue
 
             from app.services.channel_service import _moving_channels
-            if channel.id in _moving_channels:
-                continue  # its files are being moved; stays queued for a later tick
+            if channel.id in _moving_channels or channel.id in draining:
+                continue  # moving or draining; stays queued for a later tick
 
             # Mark as started NOW so the next scheduler tick
             # sees it as active and doesn't double-pick it
             queue_entry.started_at = datetime.now(timezone.utc)
+            queue_entry.retry_after = None
             queue_entry.target_quality = channel.quality
             video.status = "downloading"
             await db.commit()

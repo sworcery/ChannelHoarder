@@ -303,6 +303,7 @@ class DownloadService:
         """Download a single video. Returns True on success."""
 
         # ── Phase 1: mark as downloading and gather plain data ───────────
+        pre_error: Exception | None = None
         async with async_session() as db:
             video = await db.get(Video, video_id)
             channel = await db.get(Channel, channel_id)
@@ -319,16 +320,6 @@ class DownloadService:
                 queue_entry.started_at = datetime.now(timezone.utc)
             await db.commit()
 
-            db.add(DownloadLog(video_id=video.id, event="started", message=f"Starting download: {video.title}"))
-            await db.commit()
-
-            await self.notification.broadcast("download_progress", {
-                "video_id": video.video_id,
-                "title": video.title,
-                "status": "downloading",
-                "percent": 0,
-            })
-
             # Snapshot all ORM data we need into plain Python values so we
             # can close the session before the long-running download.
             vdata = _VideoData(
@@ -342,50 +333,66 @@ class DownloadService:
                 duration=video.duration,
                 thumbnail_url=video.thumbnail_url,
             )
-            cdata = _ChannelData(
+            # From here until the main try, any error goes through _record_failure so
+            # the row never stays "started" with nobody running it.
+            try:
+                db.add(DownloadLog(video_id=video.id, event="started", message=f"Starting download: {video.title}"))
+                await db.commit()
+
+                await self.notification.broadcast("download_progress", {
+                    "video_id": video.video_id,
+                    "title": video.title,
+                    "status": "downloading",
+                    "percent": 0,
+                })
+                cdata = _ChannelData(
                 pk=channel.id,
-                channel_id=channel.channel_id,
-                channel_name=channel.channel_name,
-                channel_url=channel.channel_url,
-                platform=channel.platform,
-                description=channel.description,
-                thumbnail_url=channel.thumbnail_url,
-                quality=channel.quality,
-                min_quality=channel.min_quality,
-                preferred_codec=channel.preferred_codec,
-                naming_template=channel.naming_template,
-                download_dir=channel.download_dir,
-                folder_name=channel_folder_name(channel),
-            )
+                    channel_id=channel.channel_id,
+                    channel_name=channel.channel_name,
+                    channel_url=channel.channel_url,
+                    platform=channel.platform,
+                    description=channel.description,
+                    thumbnail_url=channel.thumbnail_url,
+                    quality=channel.quality,
+                    min_quality=channel.min_quality,
+                    preferred_codec=channel.preferred_codec,
+                    naming_template=channel.naming_template,
+                    download_dir=channel.download_dir,
+                    folder_name=channel_folder_name(channel),
+                )
 
-            # Read download feature settings and global fallbacks while we have a DB session
-            features = await get_settings(db, ["subtitles_enabled", "chapters_enabled", "sponsorblock_mode"])
-            subtitles_enabled = bool(features["subtitles_enabled"])
-            chapters_enabled = bool(features["chapters_enabled"])
-            sponsorblock_mode = features["sponsorblock_mode"] or "off"
+                # Read download feature settings and global fallbacks while we have a DB session
+                features = await get_settings(db, ["subtitles_enabled", "chapters_enabled", "sponsorblock_mode"])
+                subtitles_enabled = bool(features["subtitles_enabled"])
+                chapters_enabled = bool(features["chapters_enabled"])
+                sponsorblock_mode = features["sponsorblock_mode"] or "off"
 
-            # Per-channel naming_template takes priority; fall back to global setting.
-            # Shared with every rename/renumber path so a later scan can't compute a
-            # different path than the one this download writes to.
-            from app.services.naming_service import resolve_naming_template
-            effective_template = await resolve_naming_template(db, cdata.naming_template)
+                # Per-channel naming_template takes priority; fall back to global setting.
+                # Shared with every rename/renumber path so a later scan can't compute a
+                # different path than the one this download writes to.
+                from app.services.naming_service import resolve_naming_template
+                effective_template = await resolve_naming_template(db, cdata.naming_template)
 
-            output_path = build_output_path(
-                channel_name=cdata.channel_name,
-                video_title=vdata.title,
-                video_id=vdata.video_id,
-                upload_date=vdata.upload_date,
-                season=vdata.season,
-                episode=vdata.episode,
-                naming_template=effective_template,
-                base_dir=cdata.download_dir,
-                folder_name=cdata.folder_name,
-            )
+                output_path = build_output_path(
+                    channel_name=cdata.channel_name,
+                    video_title=vdata.title,
+                    video_id=vdata.video_id,
+                    upload_date=vdata.upload_date,
+                    season=vdata.season,
+                    episode=vdata.episode,
+                    naming_template=effective_template,
+                    base_dir=cdata.download_dir,
+                    folder_name=cdata.folder_name,
+                )
+            except Exception as e:
+                pre_error = e
         # ← session released
 
-        # ── Phase 2: actual download  - no DB session held ────────────────
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        if pre_error is not None:
+            await self._record_failure(video_id, channel_id, queue_id, pre_error, vdata)
+            return False
 
+        # ── Phase 2: actual download  - no DB session held ────────────────
         # Per-attempt isolated working directory. A stalled download's yt-dlp thread
         # cannot be killed (asyncio.to_thread cancellation doesn't stop the OS thread),
         # so the orphan may keep writing while the retry runs. Giving every attempt its
@@ -393,8 +400,13 @@ class DownloadService:
         # moved to output_path on success. Rooted under the channel's own download root
         # so the final move is an atomic same-filesystem rename. Orphaned dirs are
         # reclaimed by the cleanup_download_temp task.
-        download_root = cdata.download_dir or settings.DOWNLOAD_DIR
-        temp_dir = attempt_temp_dir(download_root)
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            download_root = cdata.download_dir or settings.DOWNLOAD_DIR
+            temp_dir = attempt_temp_dir(download_root)
+        except Exception as e:
+            await self._record_failure(video_id, channel_id, queue_id, e, vdata)
+            return False
 
         _loop = asyncio.get_running_loop()
         import time
