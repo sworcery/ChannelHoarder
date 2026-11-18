@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react"
+import * as PopoverPrimitive from "@radix-ui/react-popover"
+import { CircleHelp, ExternalLink } from "lucide-react"
 
 const REPO_URL = "https://github.com/sworcery/ChannelHoarder"
 
@@ -8,20 +9,42 @@ interface HelpIconProps {
   side?: string // kept for backwards compat, ignored now
 }
 
+/** A small "?" button that opens a popover with the help text and an optional "Learn more" link.
+ *  The popover is portaled, so it never sits inside a caller's <label>. */
 export function HelpIcon({ text, anchor }: HelpIconProps) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-      <span>{text}</span>
-      {anchor && (
-        <a
-          href={`${REPO_URL}#${anchor}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-0.5 text-primary hover:underline whitespace-nowrap"
+    <PopoverPrimitive.Root>
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          aria-label="Help"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex rounded-full align-middle text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          Learn more <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
-    </span>
+          <CircleHelp className="h-3.5 w-3.5" />
+        </button>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal>
+        <PopoverPrimitive.Content
+          side="bottom"
+          align="start"
+          sideOffset={8}
+          collisionPadding={16}
+          className="z-[90] w-64 max-w-[calc(100vw-2rem)] whitespace-normal rounded-md border bg-popover p-3 text-left text-xs font-normal leading-relaxed text-popover-foreground shadow-md focus:outline-none"
+        >
+          <span className="block">{text}</span>
+          {anchor && (
+            <a
+              href={`${REPO_URL}#${anchor}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-1.5 inline-flex items-center gap-0.5 whitespace-nowrap text-primary hover:underline"
+            >
+              Learn more <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
   )
 }

@@ -76,7 +76,25 @@ export interface QueueEntry {
   quality_attempts: number
   running: boolean
   stuck: boolean
-  video: Video
+  video: VideoSummary
+}
+
+/** Lightweight video returned inside queue entries (backend VideoSummary). */
+export interface VideoSummary {
+  id: number
+  video_id: string
+  channel_id: number
+  channel_name: string | null
+  platform: string
+  title: string
+  upload_date: string
+  duration: number | null
+  thumbnail_url: string | null
+  status: string
+  monitored: boolean
+  error_code: string | null
+  error_message: string | null
+  retry_count: number
 }
 
 export interface DashboardStats {
@@ -104,6 +122,9 @@ export interface DownloadLog {
   event: string
   error_code: string | null
   message: string | null
+  details?: string | null
+  video_title?: string | null
+  channel_name?: string | null
   created_at: string
 }
 

@@ -59,6 +59,45 @@ export function formatDateTime(date: string | null): string {
   })
 }
 
+/** Relative time such as "5 minutes ago" or "in 2 hours". Returns "-" for empty/invalid input. */
+export function formatRelative(date: string | Date | null | undefined): string {
+  if (!date) return "-"
+  const t = new Date(date).getTime()
+  if (Number.isNaN(t)) return "-"
+  const diffSec = Math.round((t - Date.now()) / 1000)
+  const abs = Math.abs(diffSec)
+  if (abs < 45) return "just now"
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" })
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["minute", 60],
+    ["hour", 3600],
+    ["day", 86400],
+    ["week", 604800],
+    ["month", 2592000],
+    ["year", 31536000],
+  ]
+  let unit: Intl.RelativeTimeFormatUnit = "minute"
+  let size = 60
+  for (const [u, s] of units) {
+    if (abs >= s) { unit = u; size = s }
+  }
+  return rtf.format(Math.round(diffSec / size), unit)
+}
+
+/** Full local date and time, e.g. "Nov 17, 2026, 03:04 PM". Returns "-" for empty/invalid input. */
+export function formatFull(date: string | Date | null | undefined): string {
+  if (!date) return "-"
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return "-"
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
+}
+
 export function formatSpeed(bytesPerSec: number): string {
   if (!bytesPerSec || bytesPerSec <= 0) return "0 B/s"
   const k = 1024

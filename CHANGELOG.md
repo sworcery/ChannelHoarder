@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - unreleased
 
+### Changed
+- **Help is a "?" next to each heading.** Help text used to sit inline in headings and field labels, often repeating the paragraph below it. Each now opens from a small "?" with a link to the matching part of the README, and closes with Esc or a click outside.
+- **Confirmations look and behave like the rest of the app's dialogs,** with a close button, Esc and a click outside to close, and focus going back where it was. The other dialogs follow as the pages move to the new building blocks.
+
 ### Added
 - **"Download anyway" for videos below a channel's minimum quality.** Fresh uploads often show only low resolutions for their first hours. A video below the minimum now waits and checks again after 1, 6 and 24 hours, and the Downloads page shows when the next check is. If it is still too low after that, it fails with a "Download anyway" button that downloads the best quality available.
 

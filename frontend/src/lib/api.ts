@@ -270,12 +270,12 @@ export const api = {
     if (!res.ok) throw new Error("Upload failed")
     return res.json()
   },
-  getCookieStatus: () => request<{ exists: boolean; path: string; size: number | null }>("/auth/cookies/status"),
-  validateCookies: () => request<{ valid: boolean; message: string }>("/auth/cookies/validate", { method: "POST" }),
+  getCookieStatus: () => request<{ status: string; message: string; age_hours?: number; size?: number }>("/auth/cookies/status"),
+  validateCookies: () => request<{ status: string; message: string }>("/auth/cookies/validate", { method: "POST" }),
   deleteCookies: () => request<void>("/auth/cookies", { method: "DELETE" }),
   setApiKey: (apiKey: string) =>
     request<MessageResponse>(`/auth/api-key?api_key=${encodeURIComponent(apiKey)}`, { method: "PUT" }),
-  getAuthStatus: () => request<{ pot_status: string; pot_message: string | null; cookies_status: string; cookies_message: string | null; cookies_age_hours: number | null; api_key_configured: boolean; api_key_valid: boolean | null; last_successful_auth: string | null; player_client: string }>("/auth/status"),
+  getAuthStatus: () => request<{ pot_status: string; pot_message: string | null; cookies_status: string; cookies_message: string | null; cookies_age_hours: number | null; api_key_configured: boolean; api_key_valid: boolean | null; last_successful_auth?: string | null; player_client: string }>("/auth/status"),
   setPlayerClient: (strategy: string) =>
     request<MessageResponse>(`/auth/player-client?strategy=${encodeURIComponent(strategy)}`, { method: "PUT" }),
 

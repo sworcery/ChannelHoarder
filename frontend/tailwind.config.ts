@@ -40,6 +40,26 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        success: {
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          soft: "hsl(var(--success-soft) / <alpha-value>)",
+          border: "hsl(var(--success-border) / <alpha-value>)",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning) / <alpha-value>)",
+          soft: "hsl(var(--warning-soft) / <alpha-value>)",
+          border: "hsl(var(--warning-border) / <alpha-value>)",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger) / <alpha-value>)",
+          soft: "hsl(var(--danger-soft) / <alpha-value>)",
+          border: "hsl(var(--danger-border) / <alpha-value>)",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info) / <alpha-value>)",
+          soft: "hsl(var(--info-soft) / <alpha-value>)",
+          border: "hsl(var(--info-border) / <alpha-value>)",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

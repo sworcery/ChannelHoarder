@@ -24,6 +24,20 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 0 72% 51%;
     --radius: 0.5rem;
+
+    /* Status tones: text, soft background, border (values match the old -700/-100/-300 colours) */
+    --success: 142 72% 29%;
+    --success-soft: 141 84% 93%;
+    --success-border: 142 77% 73%;
+    --warning: 35 92% 33%;
+    --warning-soft: 55 97% 88%;
+    --warning-border: 50 98% 64%;
+    --danger: 0 74% 42%;
+    --danger-soft: 0 93% 94%;
+    --danger-border: 0 94% 82%;
+    --info: 224 76% 48%;
+    --info-soft: 214 95% 93%;
+    --info-border: 212 96% 78%;
   }
 
   .dark {
@@ -46,6 +60,19 @@
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 0 72% 51%;
+
+    --success: 142 77% 73%;
+    --success-soft: 144 61% 20%;
+    --success-border: 142 72% 29%;
+    --warning: 50 98% 64%;
+    --warning-soft: 28 73% 26%;
+    --warning-border: 35 92% 33%;
+    --danger: 0 94% 82%;
+    --danger-soft: 0 63% 31%;
+    --danger-border: 0 74% 42%;
+    --info: 212 96% 78%;
+    --info-soft: 224 64% 33%;
+    --info-border: 224 76% 48%;
   }
 }
 
