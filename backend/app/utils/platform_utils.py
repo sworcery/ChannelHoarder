@@ -52,7 +52,7 @@ PLATFORMS: dict[str, dict] = {
         "label": "Vimeo",
         "domains": ["vimeo.com", "www.vimeo.com"],
         "video_url_template": "https://vimeo.com/{video_id}",
-        "channel_video_suffix": "/videos",
+        "channel_video_suffix": "",
         "cookie_domains": [".vimeo.com"],
         "supports_api": False,
         "supports_rss": False,
@@ -120,11 +120,27 @@ def build_video_url(platform: str, video_id: str) -> str:
     return config["video_url_template"].format(video_id=vid)
 
 
+def _vimeo_listing_url(channel_url: str) -> str:
+    """Vimeo URL yt-dlp can list. /channels/<x>, /showcase/<x>, /groups/<x> and
+    plain /<user> match an extractor without a suffix, but their /videos forms
+    only match for users, so a stored /videos suffix is dropped and /user/<x>
+    (not a real Vimeo form) becomes /<x>."""
+    parsed = urlparse(channel_url.rstrip("/"))
+    segments = [s for s in parsed.path.split("/") if s]
+    if len(segments) >= 2 and segments[-1] == "videos" and segments[0] != "videos":
+        segments = segments[:-1]
+    if len(segments) == 2 and segments[0] == "user":
+        segments = segments[1:]
+    return parsed._replace(path="/" + "/".join(segments), query="", fragment="").geturl()
+
+
 def get_channel_videos_url(platform: str, channel_url: str) -> str:
     """Append the platform-appropriate suffix for listing videos.
     Playlists are returned as-is (no suffix needed)."""
     if is_playlist_url(channel_url):
         return channel_url
+    if platform == "vimeo":
+        return _vimeo_listing_url(channel_url)
     config = get_platform_config(platform)
     suffix = config["channel_video_suffix"]
     if suffix and not channel_url.rstrip("/").endswith(suffix):

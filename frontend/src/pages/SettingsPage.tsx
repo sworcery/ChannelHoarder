@@ -1221,6 +1221,7 @@ const WEBHOOK_EVENTS = [
   { key: "review_required", label: "Long Video Review Required" },
   { key: "move_complete", label: "File Move Complete" },
   { key: "scan_complete", label: "Channel Scan Complete" },
+  { key: "scan_failed", label: "Channel Scan Failed" },
   { key: "quality_upgrade", label: "Quality Upgrade" },
 ]
 

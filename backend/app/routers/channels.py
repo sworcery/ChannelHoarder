@@ -27,6 +27,7 @@ from app.services.channel_service import (
 )
 from app.services import channel_service as _channel_service
 from app.services.download_service import enqueue_video, enqueue_videos
+from app.services.ytdlp_service import ChannelListingError
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -283,6 +284,9 @@ async def refresh_metadata(channel_id: int, db: AsyncSession = Depends(get_db)):
     try:
         updated = await service.refresh_channel_metadata(channel)
         return {"message": f"Metadata refreshed for {updated.channel_name}"}
+    except ValueError as e:
+        logger.warning("Metadata refresh failed for %s: %s", channel.channel_name, e)
+        raise HTTPException(status_code=502, detail=f"Metadata refresh failed: {e}")
     except Exception as e:
         logger.error("Metadata refresh failed for %s: %s", channel.channel_name, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Metadata refresh failed: {e}")
@@ -575,7 +579,17 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
     except Exception:
         pass
 
-    if channel.last_scanned_at and cooldown_minutes > 0:
+    from app.services.channel_service import _last_scan_attempt
+
+    def _aware(ts):
+        return ts.replace(tzinfo=timezone.utc) if ts is not None and ts.tzinfo is None else ts
+
+    # A failed scan doesn't stamp last_scanned_at, so the cooldown also counts the last attempt
+    last_activity = max(
+        (t for t in (_aware(channel.last_scanned_at), _last_scan_attempt.get(channel.id)) if t),
+        default=None,
+    )
+    if last_activity and cooldown_minutes > 0:
         # Exempt channels that haven't found any videos yet - a freshly added
         # channel that came up empty should be re-scannable immediately rather
         # than locked out by the anti-spam cooldown.
@@ -583,9 +597,7 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
             select(func.count(Video.id)).where(Video.channel_id == channel.id)
         )
         if video_count:
-            last_ts = channel.last_scanned_at
-            if last_ts.tzinfo is None:
-                last_ts = last_ts.replace(tzinfo=timezone.utc)
+            last_ts = last_activity
             elapsed = datetime.now(timezone.utc) - last_ts
             cooldown = timedelta(minutes=cooldown_minutes)
             if elapsed < cooldown:
@@ -599,6 +611,8 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
     try:
         new_count = await service.scan_channel(channel)
         return {"message": f"Scan complete. Found {new_count} new videos.", "new_videos": new_count}
+    except ChannelListingError as e:
+        raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error("Scan failed for channel %s: %s", channel.channel_name, e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
@@ -2287,6 +2301,13 @@ async def _force_rescan_locked(channel: Channel, db: AsyncSession):
         raise HTTPException(
             status_code=502,
             detail=f"Could not read the channel's video list ({e}). Nothing was changed.",
+        )
+    failed_tabs = getattr(video_list, "failed_tabs", None)
+    if failed_tabs:
+        raise HTTPException(
+            status_code=502,
+            detail=f"The channel's video list was incomplete ({', '.join(failed_tabs)} could not be read), "
+                   "so nothing was changed. Try again later.",
         )
     if not video_list:
         raise HTTPException(

@@ -1,5 +1,6 @@
 import atexit
 import logging
+import re
 import shutil
 import subprocess
 import tempfile
@@ -126,6 +127,45 @@ def channel_avatar_url(info: dict | None) -> str | None:
     return None
 
 
+class ChannelListingError(Exception):
+    """A channel's video listing could not be read (as opposed to being empty)."""
+
+
+class VideoListing(list):
+    """A video list that also records which YouTube tabs could not be read."""
+
+    def __init__(self, items=(), failed_tabs=()):
+        super().__init__(items)
+        self.failed_tabs = list(failed_tabs)
+
+
+class _ErrorCapture:
+    """yt-dlp logger that remembers errors (ignoreerrors hides them) and forwards
+    everything to the module logger."""
+
+    def __init__(self):
+        self.errors: list[str] = []
+
+    def debug(self, msg):
+        logger.debug("yt-dlp: %s", msg)
+
+    def info(self, msg):
+        logger.debug("yt-dlp: %s", msg)
+
+    def warning(self, msg):
+        logger.warning("yt-dlp: %s", msg)
+
+    def error(self, msg):
+        logger.warning("yt-dlp: %s", msg)
+        self.errors.append(str(msg))
+
+
+def _tab_absent(message: str) -> bool:
+    """True when an error only means the channel has no such tab, e.g. "This
+    channel does not have a shorts tab". "The channel does not exist" is NOT this."""
+    return re.search(r"does not have an? \w+ tab", message, re.IGNORECASE) is not None
+
+
 class YtdlpService:
     """Wrapper for all yt-dlp interactions."""
 
@@ -194,10 +234,12 @@ class YtdlpService:
         from app.utils.platform_utils import get_channel_tab_url, get_channel_videos_url
 
         opts = self._base_opts(platform=platform)
+        capture = _ErrorCapture()
         opts.update({
             "extract_flat": "in_playlist",
             "ignoreerrors": True,
             "quiet": False,
+            "logger": capture,
         })
 
         # Resolve URL for the requested tab
@@ -223,20 +265,28 @@ class YtdlpService:
         # down from a network failure so we don't re-enter curl_cffi on a corrupted heap.
         if platform != "youtube" and _curlcffi_cooling_down():
             logger.info("Skipping yt-dlp extraction for %s (curl_cffi network cooldown)", target_url)
-            return []
+            raise ChannelListingError("network cooldown after a connection failure; try again later")
 
         try:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
                 if not info:
                     logger.warning("yt-dlp returned None for %s", target_url)
-                    return []
+                    message = "; ".join(capture.errors) or "yt-dlp returned nothing"
+                    if capture.errors and all(_tab_absent(m) for m in capture.errors):
+                        return []  # the channel simply has no such tab
+                    raise ChannelListingError(f"{tab} tab: {message}")
                 entries = list(info.get("entries", []))
                 # Filter out None entries (failed extractions) and tag each with source tab
                 raw_count = len(entries)
                 entries = [e for e in entries if e is not None]
                 if raw_count > 0 and not entries:
                     logger.warning("All %d entries were None (extraction failures) for %s", raw_count, target_url)
+                    if platform != "youtube":
+                        rescued = self._get_channel_video_list_full(target_url, platform, tab)
+                        if rescued:
+                            return rescued
+                    raise ChannelListingError(f"{tab} tab: every entry failed to extract")
                 for entry in entries:
                     entry["_source_tab"] = tab
                 logger.info("Found %d entries in %s tab for %s", len(entries), tab, target_url)
@@ -247,10 +297,15 @@ class YtdlpService:
                     return self._get_channel_video_list_full(target_url, platform, tab)
 
                 return entries
+        except ChannelListingError:
+            raise
         except Exception as e:
             # /shorts and /streams tabs can 404 on channels that don't have them
-            logger.info("Failed to fetch %s tab (may not exist): %s", tab, e)
-            return []
+            if _tab_absent(str(e)):
+                logger.info("Channel has no %s tab: %s", tab, e)
+                return []
+            logger.warning("Failed to fetch %s tab: %s", tab, e)
+            raise ChannelListingError(f"{tab} tab: {e}") from e
         finally:
             self._cleanup_cookie_tmp(opts)
 
@@ -267,7 +322,7 @@ class YtdlpService:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(target_url, download=False)
                 if not info:
-                    return []
+                    raise ChannelListingError(f"{tab} tab: full extraction returned nothing")
                 entries = list(info.get("entries", []))
                 entries = [e for e in entries if e is not None]
                 for entry in entries:
@@ -284,9 +339,11 @@ class YtdlpService:
                             entry["id"] = path.split(".")[0] if "." in path else path
                 logger.info("Full extraction found %d entries for %s", len(entries), target_url)
                 return entries
+        except ChannelListingError:
+            raise
         except Exception as e:
             logger.warning("Full extraction also failed for %s: %s", target_url, e)
-            return []
+            raise ChannelListingError(f"{tab} tab: full extraction failed: {e}") from e
         finally:
             self._cleanup_cookie_tmp(opts)
 
@@ -488,9 +545,17 @@ class YtdlpService:
         if platform != "youtube":
             return self.get_channel_video_list(channel_url, platform, tab="videos")
 
-        videos = self.get_channel_video_list(channel_url, platform, tab="videos")
-        shorts = self.get_channel_video_list(channel_url, platform, tab="shorts")
-        streams = self.get_channel_video_list(channel_url, platform, tab="streams")
+        results: dict[str, list[dict]] = {}
+        failures: dict[str, str] = {}
+        for tab in ("videos", "shorts", "streams"):
+            try:
+                results[tab] = self.get_channel_video_list(channel_url, platform, tab=tab)
+            except ChannelListingError as e:
+                failures[tab] = str(e)
+                results[tab] = []
+        if len(failures) == 3:
+            raise ChannelListingError("; ".join(failures.values()))
+        videos, shorts, streams = results["videos"], results["shorts"], results["streams"]
 
         # Deduplicate: shorts/streams override videos for the same video_id
         merged: dict[str, dict] = {}
@@ -507,7 +572,9 @@ class YtdlpService:
             if vid_id:
                 merged[vid_id] = entry  # streams tab wins
 
-        return list(merged.values())
+        if failures and not merged:
+            raise ChannelListingError("; ".join(failures.values()))
+        return VideoListing(merged.values(), failed_tabs=list(failures))
 
     @staticmethod
     def get_rss_upload_dates(channel_id: str, platform: str = "youtube",

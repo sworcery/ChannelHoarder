@@ -27,6 +27,7 @@ EVENT_TITLES: dict[str, str] = {
     "review_required": "👀 Review Required",
     "move_complete": "📁 Files Moved",
     "scan_complete": "🔍 Scan Complete",
+    "scan_failed": "⚠️ Scan Failed",
     "quality_upgrade": "⬆️ Quality Upgrade",
 }
 

@@ -22,7 +22,7 @@ from app.services.metadata_service import write_tvshow_nfo
 from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
-from app.services.ytdlp_service import YtdlpService, channel_avatar_url
+from app.services.ytdlp_service import ChannelListingError, YtdlpService, channel_avatar_url
 from app.utils.file_utils import channel_folder_name, file_keys, sanitize_filename
 from app.utils.error_codes import ErrorCode, classify_error
 
@@ -76,6 +76,14 @@ _move_all_running = False
 
 # Channels with a file-touching operation in flight (renumber, rename, import, delete...).
 _working_channels: set[int] = set()
+
+# When each channel's last failed scan attempt happened (last_scanned_at is not
+# stamped on failure); the Scan Now cooldown reads it.
+_last_scan_attempt: dict[int, datetime] = {}
+
+
+class ScanFailed(ChannelListingError):
+    """The scan could not read the channel's video list; the failure is already recorded."""
 
 
 def set_move_all_running(value: bool) -> None:
@@ -457,6 +465,7 @@ class ChannelService:
     async def refresh_channel_metadata(self, channel: Channel) -> Channel:
         """Re-fetch thumbnail, banner, and description from the platform."""
         # Prefer YouTube Data API for thumbnail (more reliable than yt-dlp tab extraction)
+        api_ok = False
         if channel.platform == "youtube" and settings.has_youtube_api_key:
             try:
                 from app.services.youtube_api_service import YouTubeAPIService
@@ -464,14 +473,23 @@ class ChannelService:
                 api_thumb = await api_svc.get_channel_thumbnail(channel.channel_id)
                 if api_thumb:
                     channel.thumbnail_url = api_thumb
+                    api_ok = True
             except Exception as e:
                 logger.warning("Could not fetch thumbnail via API: %s", e)
 
-        # Also try yt-dlp for banner and description
+        # Also try yt-dlp for banner and description, on the channel's own platform
+        info = None
+        info_error: Optional[Exception] = None
         try:
-            info = await asyncio.to_thread(self.ytdlp.get_channel_info, channel.channel_url)
-        except Exception:
-            info = None
+            info = await asyncio.to_thread(
+                self.ytdlp.get_channel_info, channel.channel_url, getattr(channel, "platform", "youtube")
+            )
+        except Exception as e:
+            info_error = e
+        if not info and not api_ok:
+            # Nothing was refreshed: say so instead of reporting success
+            raise ValueError(f"Could not read the channel's metadata from {channel.platform}: "
+                             f"{info_error or 'no data returned'}")
 
         if info:
             if not channel.thumbnail_url:
@@ -570,6 +588,29 @@ class ChannelService:
             self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
         )
 
+    async def _record_scan_failure(self, channel: Channel, error: Exception) -> None:
+        """A listing that could not be read is a failed scan, not a healthy empty one.
+        last_scanned_at stays as it was; next_scan_at still advances so a dead
+        channel is retried on the normal schedule, not every tick."""
+        logger.error("Scan failed for %s: could not read its video list: %s", channel.channel_name, error)
+        channel_name = channel.channel_name
+        channel_pk = channel.id
+        first_failure = channel.last_error_code != ErrorCode.SCAN_FAILED.value
+        if channel.last_error_code in _DEGRADED_OVERWRITABLE:
+            channel.health_status = "unhealthy"
+            channel.last_error_code = ErrorCode.SCAN_FAILED.value
+        channel.next_scan_at = await self._compute_next_scan_at()
+        await self.db.commit()
+        _last_scan_attempt[channel_pk] = datetime.now(timezone.utc)
+        message = f"Scan of {channel_name} failed: {error}"
+        if first_failure:
+            # Once per outage: a dead channel must not push a webhook every scan
+            await NotificationService.broadcast("scan_failed", {
+                "channel": channel_name,
+                "message": message,
+            })
+        raise ScanFailed(message)
+
     async def _scan_channel_inner(self, channel: Channel, video_list: Optional[list[dict]] = None) -> int:
         """Internal scan implementation. A prefetched listing skips the fetch."""
         from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
@@ -603,15 +644,37 @@ class ChannelService:
             await self._backfill_channel_art(channel)
 
         if video_list is None:
-            video_list = await self.fetch_video_list(channel)
+            try:
+                video_list = await self.fetch_video_list(channel)
+            except Exception as e:
+                await self._record_scan_failure(channel, e)  # always raises ScanFailed
+
+        failed_tabs = list(getattr(video_list, "failed_tabs", None) or [])
+        if failed_tabs:
+            logger.warning("Listing for %s is partial; these tabs failed: %s",
+                           channel.channel_name, ", ".join(failed_tabs))
 
         logger.info("Video list returned %d entries for %s (url: %s)",
                     len(video_list) if video_list else 0, channel.channel_name, channel.channel_url)
 
         if not video_list:
             logger.warning("No videos found for channel: %s", channel.channel_name)
+            stored = await self.db.scalar(
+                select(func.count(Video.id)).where(Video.channel_id == channel.id)
+            ) or 0
             channel.last_scanned_at = datetime.now(timezone.utc)
             channel.next_scan_at = await self._compute_next_scan_at()
+            if stored > 0:
+                # Videos we know about vanished from the listing: more likely a
+                # broken listing than an emptied channel. Nothing is touched.
+                logger.warning("%s has %d stored videos but its listing is empty",
+                               channel.channel_name, stored)
+                if channel.last_error_code in _DEGRADED_OVERWRITABLE:
+                    channel.health_status = "warning"
+                    channel.last_error_code = ErrorCode.METADATA_DEGRADED.value
+            elif channel.last_error_code == ErrorCode.SCAN_FAILED.value:
+                channel.last_error_code = None
+                channel.health_status = "healthy"
             await self.db.commit()
             return 0
 
@@ -1057,7 +1120,11 @@ class ChannelService:
         channel.total_videos = len(existing_ids) + new_count
         if new_count > 0:
             channel.health_status = "healthy"
-        if deferred_count > 0:
+        if channel.last_error_code == ErrorCode.SCAN_FAILED.value and not failed_tabs:
+            # The listing reads again: the earlier failure is over.
+            channel.last_error_code = None
+            channel.health_status = "healthy"
+        if deferred_count > 0 or failed_tabs:
             # Videos were intentionally left out, so this scan is not "healthy" even
             # if other videos landed. Tell the user why and that it self-corrects, but
             # never paper over a more specific error (disk full, auth) already recorded.
