@@ -29,6 +29,13 @@
     <Icon>https://raw.githubusercontent.com/sworcery/ChannelHoarder/main/frontend/public/logo.png</Icon>
     <ExtraParams></ExtraParams>
     <Changes>
+### v2.0.0
+- Rebuilt interface, now comfortable on phones too
+- Safer file moves and deletes, and a download queue that can't get stuck
+- Settings now win over environment variables; MAX_RETRIES, USER_AGENT_ROTATION and LOG_LEVEL are copied into Settings once on upgrade
+- Shorts are YouTube-only; short clips on other sites download like any video
+- Full notes in CHANGELOG.md
+
 ### v1.4.2
 - Fixed PUID/PGID  - downloaded files are now owned by the configured user instead of root
 - Added /cookies volume mount to template

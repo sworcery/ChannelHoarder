@@ -17,7 +17,7 @@
 - **Automatic archiving** - Scheduled scans detect new videos and queue them, with per-channel quality (up to 4K), preferred codec (H.264 or VP9), quality cutoff, title (keyword/regex) and duration filters, an exact start date, optional auto-delete of downloaded videos after N days, and per-channel storage paths
 - **Plex / Jellyfin / Emby ready** - TV Show-style naming (seasons by year, chronological episodes) with customizable templates, NFO metadata, and poster/season art
 - **Sonarr-style episode management** - Monitor/unmonitor, status icons, collapsible seasons, bulk actions, per-episode retry/re-download/rename/delete, and a channel-level Repair Dates action for videos saved with the wrong upload date
-- **Robust downloads** - Sequential queue you can order (newest, oldest, shortest, longest), with "download first" channels and a per-item "Move to top", rate limiting and live progress (speed/ETA) over WebSocket, standalone single-video downloads, import of existing files, subtitle and chapter support, and automatic Shorts / livestream filtering
+- **Robust downloads** - Queue that downloads one video at a time by default (Settings > General allows up to 5 at once), which you can order (newest, oldest, shortest, longest), with "download first" channels and a per-item "Move to top", rate limiting and live progress (speed/ETA) over WebSocket, standalone single-video downloads, import of existing files, subtitle and chapter support, and automatic Shorts / livestream filtering
 - **Smart authentication** - Cookies (auto-sync via Windows exporter or Tampermonkey, or manual upload) with PO token fallback, optional YouTube Data API key, and a selectable yt-dlp player client
 - **Anti-detection** - Configurable download delays, random jitter, and user-agent rotation
 - **Monitoring** - Error classification with suggested fixes, diagnostic reports, searchable logs, and Telegram / Pushover / Discord notifications
@@ -65,7 +65,7 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 2. *(Optional)* Add a YouTube Data API key for faster channel discovery
 3. *(Optional)* Configure Telegram, Pushover, or Discord notifications
 4. Go to **Channels** → **Add Channel** and paste a channel URL
-5. Videos will be scanned immediately and queued for download
+5. With **Scan for videos after adding** checked, the channel is scanned at once. With **Auto-download videos** checked, every video the channel has published is queued for download, unless you set a **Download from date**
 
 > **Security note:** ChannelHoarder has no built-in authentication - it is designed for trusted local networks. If exposing to the internet, place it behind a reverse proxy with authentication (e.g. Authelia, Nginx Proxy Manager).
 
@@ -78,7 +78,7 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 <details>
 <summary><b>Show details</b></summary>
 
-Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set per-channel options (quality, custom download directory, enabled/disabled). It can auto-scan immediately after adding. To add many channels at once, use **Bulk Import** to paste a list or upload a CSV/text file, such as YouTube Takeout's `subscriptions.csv`.
+Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set options in the Add dialog: **Scan for videos after adding**, **Auto-download videos** and **Download from date**. By default a channel downloads everything it has published unless a date is set. With Auto-download off, scans only list new videos and you queue the ones you want. Other per-channel options (quality, download folder and more) are under **Edit** on the channel page. To add many channels at once, use **Bulk Import** to paste a list or upload a CSV/text file, such as YouTube Takeout's `subscriptions.csv`.
 
 </details>
 
@@ -91,7 +91,8 @@ Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on 
 - Optionally, YouTube channels' RSS feeds can be checked every so many minutes (Settings > Scanning, off by default), and a channel is scanned as soon as its feed shows a new video. Checks stay under YouTube's daily feed limit, and interval scans keep running as the backup
 - Each scan checks for new videos that haven't been downloaded yet and adds them to the download queue with `pending` status
 - If a YouTube Data API key is configured, it's used for faster and more reliable discovery; otherwise yt-dlp handles discovery directly
-- Manual scans can be triggered per-channel or for all channels at once
+- With Auto-download off for a channel, scans only list new videos; they are not queued
+- Manual scans (**Scan Now** per channel, **Scan All Channels Now** for all) run at any hour, even outside the scan window. A scan window must be at least 8 hours wide. Scheduled scans and feed checks stay inside it. The Dashboard says when scans are more than a day late
 
 </details>
 
@@ -100,7 +101,7 @@ Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on 
 <details>
 <summary><b>Download pipeline</b></summary>
 
-The **Downloads** page shows the queue, the history and the failed downloads. Pause stops new downloads while in-progress ones finish. The pipeline works like this:
+The **Downloads** page shows the queue, the history and the failed downloads. Pause stops new downloads while in-progress ones finish. Downloads run one at a time by default; Settings > General allows up to 5 at once. The pipeline works like this:
 
 1. **Queue Processing** - Every 30 seconds, the next queued video is picked up
 2. **Rate Limiting** - A configurable delay (default 10–30 seconds) with optional random jitter is applied between downloads
@@ -140,7 +141,12 @@ Open a channel to change how it downloads. The options apply to future scans and
 - **Publish date** - only download videos published on or after a date
 - **Title filter** - include only matching titles, or exclude matching ones
 - **Delete after** - remove downloaded files a set number of days after download. The videos stay listed as skipped and are not downloaded again, including after Force Rescan
+- **Auto-download** - new videos found by scans are queued automatically. When off, they are only listed and you queue them yourself
+- **Scan this channel** - when off, the channel is not scanned on schedule, by feed checks or by Scan All Channels Now. Scan Now still works
+- **Download first** - queued videos from this channel download before other channels' videos
 - **Scan Now** - scans the channel at once. A cooldown (Settings > Scanning) stops repeated clicks
+- **Force Rescan** - rebuilds the records of monitored videos that are pending, failed or queued and have no file, then scans again. Downloaded, skipped, unmonitored and downloading videos are kept as they are. Nothing changes if the channel's video list can't be read
+- **Download Directory** - **Save & Move** shows what will move before it moves. A plain **Save** makes the next scan move the files. Rescan the library in Plex or Jellyfin afterwards
 
 </details>
 
@@ -149,7 +155,7 @@ Open a channel to change how it downloads. The options apply to future scans and
 <details>
 <summary><b>Show details</b></summary>
 
-A channel's videos are listed as episodes. Shorts (60 seconds or less, or on the channel's Shorts tab) and livestreams or premieres have their own sections and are skipped unless both Settings > Media Management and the channel allow them. A minimum duration skips shorter videos; the maximum duration in Settings flags longer ones for review. Subtitles, chapters and SponsorBlock are set under Settings > Media Management.
+A channel's videos are listed as episodes. YouTube Shorts (on the Shorts tab, a `/shorts/` URL, 60 seconds or less, or tagged #short) and livestreams or premieres have their own sections and are skipped unless both Settings > Media Management and the channel allow them. A minimum duration skips shorter videos; the maximum duration in Settings flags longer ones for review. Subtitles, chapters and SponsorBlock are set under Settings > Media Management.
 
 </details>
 
@@ -166,6 +172,8 @@ When a download fails, ChannelHoarder classifies the error and tells you the cau
 - **Authentication required or age restricted.** Upload fresh cookies in Settings > Authentication, then retry.
 - **Scan failed.** The channel's video list could not be read. The scan tries again on its next run; see Settings > Diagnostics if it keeps failing.
 - **No usable format.** Set the player client to Default (automatic) in Settings > Authentication, then retry.
+- **Dates could not be read (metadata degraded).** Upload dates could not be fetched during a scan, usually from expired cookies. Those videos are left out, not saved with a wrong date. Upload fresh cookies and scan again; nothing is lost.
+- **Scheduled livestream.** The video is a livestream or premiere that has not started. It is marked as a livestream and unmonitored; wait until it ends, then unmark it or turn on livestream downloads for the channel.
 - **Unavailable, private, removed or geo-blocked.** The video itself is gone or blocked, so a retry will not help.
 - **yt-dlp outdated.** Update the image; each build ships a current yt-dlp.
 
@@ -242,14 +250,15 @@ If you already added channels to an existing TV library, move them to the new li
 | `EXTRA_DOWNLOAD_DIRS` | *(empty)* | Comma-separated additional allowed download paths (e.g. `/media,/cartoons`) |
 | `TEMP_DIR` | *(empty)* | Optional folder for in-progress downloads, such as a volume on an SSD. Finished videos are then moved into their download folder, so a slow or external download drive only gets the finished file. Empty means downloads happen inside the download folder itself |
 | `COOKIE_WATCH_DIR` | `/cookies` | Directory watched for cookie file updates |
-| `MAX_CONCURRENT_DOWNLOADS` | `1` | Maximum simultaneous downloads |
+| `DEFAULT_QUALITY` | `best` | Default quality for new channels. Starting value only; change it in Settings > General |
+| `MAX_CONCURRENT_DOWNLOADS` | `1` | Maximum simultaneous downloads. Starting value only; change it in Settings > General |
 | `MAX_RETRIES` | `3` | Retry attempts for failed downloads. Starting value only; change it in Settings > General |
-| `DOWNLOAD_DELAY_MIN` | `10` | Minimum delay between downloads (seconds) |
-| `DOWNLOAD_DELAY_MAX` | `30` | Maximum delay between downloads (seconds) |
-| `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads |
+| `DOWNLOAD_DELAY_MIN` | `10` | Minimum delay between downloads (seconds). Starting value only; change it in Settings > Anti-Detection |
+| `DOWNLOAD_DELAY_MAX` | `30` | Maximum delay between downloads (seconds). Starting value only; change it in Settings > Anti-Detection |
+| `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads. Starting value only; change it in Settings > Anti-Detection |
 | `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings. Starting value only; change it in Settings > Anti-Detection |
 
-`MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting values only. Once a value is saved in Settings, its variable no longer applies.
+On the first start of 2.0, any `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` values you set are copied into Settings once, so nothing changes. After that, change them in Settings.
 
 </details>
 
@@ -291,7 +300,7 @@ All settings are on the **Settings** page, in seven tabs. Type in the search box
 - **Notifications** - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
 - **Diagnostics** - System overview and the diagnostic report, error logs, system logs, the Library Check and Shared Folders repair tools
 
-Environment variables are starting values; once a value is saved in Settings, its variable no longer applies (see the table above).
+Only variables marked "Starting value only" in the table above are starting values; once a value is saved in Settings, its variable no longer applies. `PUID`, `PGID`, `TZ`, the directories, the `POT_SERVER_*` variables and `COOKIE_WATCH_DIR` apply as set. `YOUTUBE_API_KEY` is different: if it is set, it is used when the container starts, even over a key saved in Settings.
 
 </details>
 
@@ -309,7 +318,7 @@ Random delays between downloads (default 10 to 30 seconds), optional random jitt
 <details>
 <summary><b>Show details</b></summary>
 
-Under **Settings > Notifications**, add a Telegram bot (token and chat ID), Pushover (application token and user key) and/or a Discord webhook URL. Save first, then use the test buttons, which send through the saved settings. Per-event toggles choose what triggers a message: downloads finishing or failing, cookies expiring or refreshing, health alerts, long videos waiting for review, moves, scans and quality upgrades.
+Under **Settings > Notifications**, add a Telegram bot (token and chat ID), Pushover (application token and user key) and/or a Discord webhook URL. Save first, then use the test buttons, which send through the saved settings. Per-event toggles choose what triggers a message: **Download Complete**, **Download Failed**, **Cookies Expired**, **Cookies Refreshed**, **Health Alerts**, **Critical Alerts**, **Long Video Review Required**, **File Move Complete**, **Channel Scan Complete**, **Channel Scan Failed** and **Quality Upgrade**.
 
 </details>
 
@@ -442,7 +451,7 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 <details>
 <summary><b>Show details</b></summary>
 
-- **YouTube Shorts** - YouTube videos of 60 seconds or less (or on the Shorts tab) are treated as Shorts and skipped by default (toggleable per channel)
+- **YouTube Shorts** - Shorts exist only on YouTube. A YouTube video counts as a Short if it is on the channel's Shorts tab, has a `/shorts/` URL, runs 60 seconds or less, or has the #short or #shorts tag. Shorts are skipped by default (toggleable per channel). Short clips on other sites download like any video. To get a skipped one back, open its menu on the channel page, choose **Unmark as Short**, then queue it. The choice sticks
 - **Livestreams / long videos** - Videos over the max duration setting are skipped by default
 - **Geo-blocked content** - Cannot download region-restricted videos
 - **Private / deleted videos** - Automatically skipped if no longer available
@@ -477,10 +486,10 @@ Two tools fix problems older versions could leave behind. Both show what they fo
 
 **Queue not downloading / stuck**
 - Look for a **Queue paused** banner on the Downloads page. It gives the reason: paused by you, disk full, or cookies expired. Press **Resume** (disk full needs free space first; expired cookies need a fresh upload)
-- The strip across the top of the app lists anything that needs you (a pause, a full disk, expired cookies, overdue scans); its button goes to the fix
-- If a scan window is set (Settings → Scanning), scans only run inside it, so channels can wait for the next window
+- The strip across the top of the app lists anything that needs you: a full or nearly full disk, expired cookies, a PO token server that is not responding, a paused queue, channels that need attention (channels that keep failing), channels overdue for a scan, and the shared-folders notice (its button, **Separate them**, opens the fix). Each has a button that goes to the fix
+- If a scan window is set (Settings → Scanning), scheduled scans and feed checks only run inside it, so channels can wait for the next window. **Scan Now** and **Scan All Channels Now** run at any hour. The Dashboard says when scans are more than a day late
 - A row reading **Waiting for higher quality** is held back on purpose: only low formats were offered, and it retries after 1, 6 and 24 hours. **Download anyway** skips the wait
-- A row reading **Waiting: channel is finishing its current download first** (or moving files, or scanning) starts by itself once that work ends
+- A row reading **Waiting: channel is finishing its current download first** (or **is being moved**, **is being scanned**, **is busy with another operation**) starts by itself once that work ends
 - Check Settings → Authentication: the PO token status must read **Running**. If it says **Not responding**, restart the container; uploading cookies works as a fallback
 - Check Settings → Diagnostics → System Logs for error details
 - If cookies expired, upload fresh ones via Settings → Authentication
