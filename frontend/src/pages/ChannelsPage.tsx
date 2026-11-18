@@ -468,7 +468,7 @@ export default function ChannelsPage() {
             />
           </Field>
           {addMutation.error && (
-            <p className="text-sm text-red-500">{(addMutation.error as Error).message}</p>
+            <p className="text-sm text-danger">{(addMutation.error as Error).message}</p>
           )}
         </form>
       </Dialog>
@@ -534,7 +534,7 @@ export default function ChannelsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
                           <Circle className={`h-2.5 w-2.5 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
-                          <span className={`text-xs ${channel.enabled ? "text-green-600 dark:text-green-400" : "text-muted-foreground"}`}>
+                          <span className={`text-xs ${channel.enabled ? "text-success" : "text-muted-foreground"}`}>
                             {channel.enabled ? "Active" : "Paused"}
                           </span>
                         </div>

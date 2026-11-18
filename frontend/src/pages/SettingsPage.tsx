@@ -439,9 +439,9 @@ function AuthTab() {
           {authLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : authStatus?.pot_status === "enabled" ? (
-            <CheckCircle2 className="h-4 w-4 text-green-500" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
           ) : (
-            <XCircle className="h-4 w-4 text-red-500" />
+            <XCircle className="h-4 w-4 text-danger" />
           )}
           <span className="text-sm">{authLoading ? "Checking..." : authStatus?.pot_message || "Unknown"}</span>
         </div>
@@ -462,12 +462,12 @@ function AuthTab() {
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : isExpired ? (
             <>
-              <XCircle className="h-4 w-4 text-red-500" />
-              <span className="text-sm text-red-500">{authStatus?.cookies_message}</span>
+              <XCircle className="h-4 w-4 text-danger" />
+              <span className="text-sm text-danger">{authStatus?.cookies_message}</span>
             </>
           ) : hasCookies ? (
             <>
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
               <span className="text-sm">{authStatus?.cookies_message}</span>
             </>
           ) : (
@@ -593,7 +593,7 @@ function AuthTab() {
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           ) : authStatus?.api_key_configured ? (
             <>
-              <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <CheckCircle2 className="h-4 w-4 text-success" />
               <span className="text-sm">API key configured</span>
             </>
           ) : (

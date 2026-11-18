@@ -26,16 +26,16 @@
     --radius: 0.5rem;
 
     /* Status tones: text, soft background, border (values match the old -700/-100/-300 colours) */
-    --success: 142 72% 29%;
+    --success: 142 72% 25%;
     --success-soft: 141 84% 93%;
     --success-border: 142 77% 73%;
-    --warning: 35 92% 33%;
+    --warning: 32 95% 28%;
     --warning-soft: 55 97% 88%;
     --warning-border: 50 98% 64%;
-    --danger: 0 74% 42%;
+    --danger: 0 74% 40%;
     --danger-soft: 0 93% 94%;
     --danger-border: 0 94% 82%;
-    --info: 224 76% 48%;
+    --info: 224 76% 45%;
     --info-soft: 214 95% 93%;
     --info-border: 212 96% 78%;
   }

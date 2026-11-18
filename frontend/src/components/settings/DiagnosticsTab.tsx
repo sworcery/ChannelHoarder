@@ -151,7 +151,7 @@ export default function DiagnosticsTab() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Failed</span>
-                  <span className={diagnostics.total_failed > 0 ? "text-red-500" : ""}>
+                  <span className={diagnostics.total_failed > 0 ? "text-danger" : ""}>
                     {diagnostics.total_failed}
                   </span>
                 </div>
@@ -167,9 +167,9 @@ export default function DiagnosticsTab() {
                 <div className="space-y-2">
                   {diagnostics.recent_errors.map((error: any) => (
                     <div key={error.id} className="flex items-start gap-2 text-sm">
-                      <XCircle className="h-4 w-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <XCircle className="h-4 w-4 text-danger flex-shrink-0 mt-0.5" />
                       <div>
-                        <span className="font-mono text-xs text-red-500">{error.error_code}</span>
+                        <span className="font-mono text-xs text-danger">{error.error_code}</span>
                         <span className="mx-1">-</span>
                         <span>{error.message}</span>
                         <DateTime value={error.created_at} className="text-xs text-muted-foreground ml-2" />
@@ -208,15 +208,15 @@ export default function DiagnosticsTab() {
                     >
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         {log.error_code ? (
-                          <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />
+                          <XCircle className="h-4 w-4 text-danger flex-shrink-0" />
                         ) : (
-                          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                         )}
                         <span className="text-sm truncate">
                           {log.video_title || "Unknown"} - {log.event}
                         </span>
                         {log.error_code && (
-                          <span className="text-xs font-mono text-red-500 flex-shrink-0">{log.error_code}</span>
+                          <span className="text-xs font-mono text-danger flex-shrink-0">{log.error_code}</span>
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
@@ -304,9 +304,9 @@ export default function DiagnosticsTab() {
                 liveLogs.entries.map((entry: any, i: number) => {
                   const levelColor =
                     entry.level === "ERROR" || entry.level === "CRITICAL"
-                      ? "text-red-500"
+                      ? "text-danger"
                       : entry.level === "WARNING"
-                        ? "text-yellow-500"
+                        ? "text-warning"
                         : entry.level === "DEBUG"
                           ? "text-muted-foreground"
                           : ""
@@ -335,10 +335,10 @@ export default function DiagnosticsTab() {
 
 function StatusCard({ label, status, value }: { label: string; status: "ok" | "warning" | "error" | "info"; value: string }) {
   const icons = {
-    ok: <CheckCircle2 className="h-5 w-5 text-green-500" />,
-    warning: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-    error: <XCircle className="h-5 w-5 text-red-500" />,
-    info: <Stethoscope className="h-5 w-5 text-blue-500" />,
+    ok: <CheckCircle2 className="h-5 w-5 text-success" />,
+    warning: <AlertTriangle className="h-5 w-5 text-warning" />,
+    error: <XCircle className="h-5 w-5 text-danger" />,
+    info: <Stethoscope className="h-5 w-5 text-info" />,
   }
 
   return (

@@ -142,18 +142,18 @@ export type VideoStatus = "pending" | "pending_review" | "queued" | "downloading
 export const STATUS_COLORS: Record<string, string> = {
   pending: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
   pending_review: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  queued: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  downloading: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-  completed: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  failed: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  queued: "bg-info-soft text-info",
+  downloading: "bg-warning-soft text-warning",
+  completed: "bg-success-soft text-success",
+  failed: "bg-danger-soft text-danger",
   skipped: "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400",
 }
 
 export const HEALTH_COLORS: Record<string, string> = {
-  healthy: "text-green-500",
-  warning: "text-yellow-500",
-  unhealthy: "text-red-500",
-  unknown: "text-gray-400",
+  healthy: "text-success",
+  warning: "text-warning",
+  unhealthy: "text-danger",
+  unknown: "text-muted-foreground",
 }
 
 export type LibraryCheckKind = "wrong_file" | "likely" | "lost" | "manual"

@@ -327,7 +327,7 @@ export default function StandaloneDownloadPage() {
                     <p className="text-sm font-medium truncate">{file.filename}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
                       <span>{formatBytes(file.size_bytes)}</span>
-                      <span className={days <= 1 ? "text-red-500 font-medium" : ""}>
+                      <span className={days <= 1 ? "text-danger font-medium" : ""}>
                         {days === 0 ? "Expires today" : `Expires in ${days} day${days !== 1 ? "s" : ""}`}
                       </span>
                     </div>
@@ -343,7 +343,7 @@ export default function StandaloneDownloadPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-muted-foreground hover:text-red-500"
+                      className="text-muted-foreground hover:text-danger"
                       onClick={() => deleteMutation.mutate(file.filename)}
                       disabled={deleteMutation.isPending}
                       title="Delete file"

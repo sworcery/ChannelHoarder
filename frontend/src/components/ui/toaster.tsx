@@ -33,9 +33,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const icons = {
-    success: <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />,
-    error: <XCircle className="h-4 w-4 text-red-500 flex-shrink-0" />,
-    warning: <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />,
+    success: <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />,
+    error: <XCircle className="h-4 w-4 text-danger flex-shrink-0" />,
+    warning: <AlertTriangle className="h-4 w-4 text-warning flex-shrink-0" />,
   }
 
   return (

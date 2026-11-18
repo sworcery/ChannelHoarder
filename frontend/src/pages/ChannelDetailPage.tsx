@@ -1663,7 +1663,7 @@ export default function ChannelDetailPage() {
                             {match.video_title}
                           </td>
                           <td className="px-3 py-2 text-right">
-                            <span className={`font-medium ${match.match_confidence >= 90 ? "text-green-500" : match.match_confidence >= 80 ? "text-yellow-500" : "text-orange-500"}`}>
+                            <span className={`font-medium ${match.match_confidence >= 90 ? "text-success" : match.match_confidence >= 80 ? "text-warning" : "text-orange-700 dark:text-orange-300"}`}>
                               {match.match_confidence}%
                             </span>
                           </td>
@@ -1750,8 +1750,8 @@ export default function ChannelDetailPage() {
                     <tr key={c.video_id} className="border-t">
                       <td className="px-3 py-2 truncate max-w-[250px]" title={c.title}>{c.title}</td>
                       <td className="px-3 py-2 text-muted-foreground">{formatDate(c.upload_date)}</td>
-                      <td className="px-3 py-2 text-red-400">{c.old_episode}</td>
-                      <td className="px-3 py-2 text-green-400">{c.new_episode}</td>
+                      <td className="px-3 py-2 text-danger">{c.old_episode}</td>
+                      <td className="px-3 py-2 text-success">{c.new_episode}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1843,8 +1843,8 @@ export default function ChannelDetailPage() {
                         {c.title}
                         {c.has_file && <FileEdit className="inline-block h-3 w-3 ml-1.5 text-muted-foreground" />}
                       </td>
-                      <td className="px-3 py-2 text-red-400">{formatDate(c.old_date)}</td>
-                      <td className="px-3 py-2 text-green-400">{formatDate(c.new_date)}</td>
+                      <td className="px-3 py-2 text-danger">{formatDate(c.old_date)}</td>
+                      <td className="px-3 py-2 text-success">{formatDate(c.new_date)}</td>
                       <td className="px-3 py-2 text-muted-foreground">{c.old_episode}</td>
                     </tr>
                   ))}

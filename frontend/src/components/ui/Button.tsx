@@ -18,10 +18,10 @@ const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-primary text-primary-foreground hover:bg-primary/90",
   outline: "border hover:bg-accent",
   ghost: "hover:bg-accent",
-  success: "bg-green-600 text-white hover:bg-green-700",
-  warning: "bg-orange-600 text-white hover:bg-orange-700",
+  success: "bg-green-700 text-white hover:bg-green-800",
+  warning: "bg-orange-700 text-white hover:bg-orange-800",
   danger: "bg-red-600 text-white hover:bg-red-700",
-  "danger-outline": "border border-red-500/30 text-red-500 hover:bg-red-500/10",
+  "danger-outline": "border border-danger/30 text-danger hover:bg-danger/10",
   link: "text-primary hover:underline !px-0 !py-0",
 }
 

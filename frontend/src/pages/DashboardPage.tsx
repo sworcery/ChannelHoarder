@@ -90,7 +90,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Tv} label="Channels" value={stats.total_channels} sub={`${stats.active_channels} active`} />
         <StatCard icon={Download} label="Downloaded" value={stats.total_downloaded} sub={`of ${stats.total_videos_known} known`} />
-        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={`${stats.total_pending} pending`} color={stats.total_failed > 0 ? "text-red-500" : undefined} />
+        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={`${stats.total_pending} pending`} color={stats.total_failed > 0 ? "text-danger" : undefined} />
         <StatCard icon={HardDrive} label="Storage" value={stats.storage_used_formatted} sub={`yt-dlp ${stats.ytdlp_version}`} />
       </div>
 
@@ -188,7 +188,7 @@ export default function DashboardPage() {
             <div className="space-y-2">
               {recent.map((video: any) => (
                 <div key={video.id} className="flex items-center gap-2 text-sm">
-                  <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-success flex-shrink-0" />
                   <div className="truncate flex-1">
                     <span>{video.title}</span>
                     {video.channel_name && (

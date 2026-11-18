@@ -38,7 +38,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
   if (status === "downloading") {
     return (
       <Tooltip content="Downloading..." side="left">
-        <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+        <Loader2 className="h-4 w-4 text-info animate-spin" />
       </Tooltip>
     )
   }
@@ -47,7 +47,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
   if (status === "queued") {
     return (
       <Tooltip content="Queued for download" side="left">
-        <Clock className="h-4 w-4 text-blue-400" />
+        <Clock className="h-4 w-4 text-info" />
       </Tooltip>
     )
   }
@@ -57,13 +57,13 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
     if (!isQualityMet(qualityDownloaded, targetQuality)) {
       return (
         <Tooltip content={`Downloaded (${qualityDownloaded || "?"}) - upgrade available to ${targetQuality}`} side="left">
-          <ArrowUpCircle className="h-4 w-4 text-yellow-500" />
+          <ArrowUpCircle className="h-4 w-4 text-warning" />
         </Tooltip>
       )
     }
     return (
       <Tooltip content={`Downloaded${qualityDownloaded ? ` - ${qualityDownloaded}` : ""}`} side="left">
-        <CheckCircle className="h-4 w-4 text-green-500" />
+        <CheckCircle className="h-4 w-4 text-success" />
       </Tooltip>
     )
   }
@@ -73,7 +73,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
     const tip = errorMessage ? `Failed: ${errorMessage}` : `Failed${errorCode ? ` - ${errorCode}` : ""}`
     return (
       <Tooltip content={tip} side="left">
-        <AlertTriangle className="h-4 w-4 text-red-500" />
+        <AlertTriangle className="h-4 w-4 text-danger" />
       </Tooltip>
     )
   }
@@ -82,7 +82,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
   if (status === "skipped") {
     return (
       <Tooltip content="Skipped" side="left">
-        <Ban className="h-4 w-4 text-gray-400" />
+        <Ban className="h-4 w-4 text-muted-foreground" />
       </Tooltip>
     )
   }
@@ -91,7 +91,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
   if (status === "pending_review") {
     return (
       <Tooltip content="Needs review (long video)" side="left">
-        <Eye className="h-4 w-4 text-purple-400" />
+        <Eye className="h-4 w-4 text-purple-700 dark:text-purple-300" />
       </Tooltip>
     )
   }
@@ -101,13 +101,13 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
     if (monitored) {
       return (
         <Tooltip content="Missing - monitored" side="left">
-          <Circle className="h-4 w-4 text-orange-400" />
+          <Circle className="h-4 w-4 text-orange-700 dark:text-orange-300" />
         </Tooltip>
       )
     }
     return (
       <Tooltip content="Unmonitored" side="left">
-        <Circle className="h-4 w-4 text-gray-400" />
+        <Circle className="h-4 w-4 text-muted-foreground" />
       </Tooltip>
     )
   }
@@ -115,7 +115,7 @@ export function StatusIcon({ status, monitored, qualityDownloaded, targetQuality
   // Fallback
   return (
     <Tooltip content={status} side="left">
-      <XCircle className="h-4 w-4 text-gray-400" />
+      <XCircle className="h-4 w-4 text-muted-foreground" />
     </Tooltip>
   )
 }

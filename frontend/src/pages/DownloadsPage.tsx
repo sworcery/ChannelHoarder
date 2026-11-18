@@ -43,72 +43,72 @@ import {
 const ERROR_DESCRIPTIONS: Record<string, { label: string; color: string; tip: string }> = {
   AUTH_EXPIRED: {
     label: "Authentication Required",
-    color: "text-red-400",
+    color: "text-danger",
     tip: "YouTube is requiring sign-in. Upload fresh cookies in Settings > Authentication.",
   },
   RATE_LIMITED: {
     label: "Rate Limited",
-    color: "text-yellow-400",
+    color: "text-warning",
     tip: "Too many requests. Will auto-retry with increased delay.",
   },
   GEO_BLOCKED: {
     label: "Geo-Blocked",
-    color: "text-gray-400",
+    color: "text-muted-foreground",
     tip: "Video not available in your region.",
   },
   VIDEO_UNAVAILABLE: {
     label: "Unavailable",
-    color: "text-gray-400",
+    color: "text-muted-foreground",
     tip: "Video was removed or made unavailable by YouTube.",
   },
   VIDEO_PRIVATE: {
     label: "Private",
-    color: "text-gray-400",
+    color: "text-muted-foreground",
     tip: "Video is set to private by the uploader.",
   },
   VIDEO_REMOVED: {
     label: "Removed",
-    color: "text-gray-400",
+    color: "text-muted-foreground",
     tip: "Video has been permanently removed from YouTube.",
   },
   NETWORK_ERROR: {
     label: "Network Error",
-    color: "text-yellow-400",
+    color: "text-warning",
     tip: "Connection issue. Will auto-retry.",
   },
   YTDLP_OUTDATED: {
     label: "yt-dlp Outdated",
-    color: "text-orange-400",
+    color: "text-orange-700 dark:text-orange-300",
     tip: "Update yt-dlp in Settings > System.",
   },
   FFMPEG_ERROR: {
     label: "Processing Error",
-    color: "text-orange-400",
+    color: "text-orange-700 dark:text-orange-300",
     tip: "Video/audio merge failed. Will auto-retry.",
   },
   DISK_FULL: {
     label: "Disk Full",
-    color: "text-red-500",
+    color: "text-danger",
     tip: "No disk space remaining. Free space and retry.",
   },
   PO_TOKEN_FAILURE: {
     label: "PO Token Failed",
-    color: "text-orange-400",
+    color: "text-orange-700 dark:text-orange-300",
     tip: "Token server issue. Check PO token server status in Settings.",
   },
   FORMAT_UNAVAILABLE: {
     label: "Format Unavailable",
-    color: "text-yellow-400",
+    color: "text-warning",
     tip: "Requested quality not available. Try 'best' quality.",
   },
   AGE_RESTRICTED: {
     label: "Age Restricted",
-    color: "text-yellow-400",
+    color: "text-warning",
     tip: "Requires cookies from a logged-in account.",
   },
   UNKNOWN: {
     label: "Unknown Error",
-    color: "text-red-400",
+    color: "text-danger",
     tip: "Check diagnostics for details.",
   },
 }
@@ -406,16 +406,16 @@ export default function DownloadsPage() {
   /** Determine what state label to show for a queue entry */
   const getQueueEntryState = (entry: any, progress: any) => {
     if (progress && progress.percent >= 99.5) {
-      return { label: "Processing...", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-green-500" />, color: "text-green-500" }
+      return { label: "Processing...", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-success" />, color: "text-success" }
     }
     if (progress && progress.percent > 0) {
       return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
     }
     if (entry.stuck && !progress) {
-      return { label: "Stuck - remove it or download now", icon: <Clock className="h-3.5 w-3.5 text-red-500" />, color: "text-red-500" }
+      return { label: "Stuck - remove it or download now", icon: <Clock className="h-3.5 w-3.5 text-danger" />, color: "text-danger" }
     }
     if (entry.started_at && !progress) {
-      return { label: "Starting...", icon: <Clock className="h-3.5 w-3.5 text-yellow-500 animate-pulse" />, color: "text-yellow-500" }
+      return { label: "Starting...", icon: <Clock className="h-3.5 w-3.5 text-warning animate-pulse" />, color: "text-warning" }
     }
     if (entry.started_at) {
       return { label: "Downloading", icon: <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />, color: "text-primary" }
@@ -425,8 +425,8 @@ export default function DownloadsPage() {
         label: entry.quality_attempts > 0
           ? <>Waiting for higher quality, retrying <DateTime value={entry.retry_after} /></>
           : <>Retrying <DateTime value={entry.retry_after} /></>,
-        icon: <Clock className="h-3.5 w-3.5 text-yellow-500" />,
-        color: "text-yellow-500",
+        icon: <Clock className="h-3.5 w-3.5 text-warning" />,
+        color: "text-warning",
       }
     }
     return { label: "Queued", icon: <Clock className="h-3.5 w-3.5 text-muted-foreground" />, color: "text-muted-foreground" }
@@ -687,7 +687,7 @@ export default function DownloadsPage() {
                               title="Download now"
                               aria-label="Download now"
                             >
-                              <Zap className="h-4 w-4 text-green-500" />
+                              <Zap className="h-4 w-4 text-success" />
                             </Button>
                           )}
                           {(!entry.started_at || entry.stuck) && (
@@ -744,7 +744,7 @@ export default function DownloadsPage() {
                               )}
                             </div>
                           ) : entry.started_at ? (
-                            <p className="text-xs text-yellow-500 mt-1">
+                            <p className="text-xs text-warning mt-1">
                               Waiting for download to begin (extracting info, rate limiting)...
                             </p>
                           ) : null}
@@ -753,10 +753,10 @@ export default function DownloadsPage() {
 
                       {/* Inline warning if video has previous errors */}
                       {video?.error_code && video?.status === "queued" && (
-                        <div className="mt-2 flex items-start gap-2 rounded-md bg-yellow-500/10 border border-yellow-500/20 px-3 py-2">
-                          <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
+                        <div className="mt-2 flex items-start gap-2 rounded-md bg-warning-soft border border-warning-border px-3 py-2">
+                          <AlertTriangle className="h-4 w-4 text-warning shrink-0 mt-0.5" />
                           <div className="text-xs">
-                            <span className="font-medium text-yellow-500">
+                            <span className="font-medium text-warning">
                               Previous attempt failed: {ERROR_DESCRIPTIONS[video.error_code]?.label || video.error_code}
                             </span>
                             {video.retry_count > 0 && (
@@ -883,15 +883,15 @@ export default function DownloadsPage() {
                               {video.file_size ? <span>{formatBytes(video.file_size)}</span> : null}
                               <DateTime value={video.downloaded_at || video.discovered_at} />
                               {video.retry_count > 0 && (
-                                <span className="text-yellow-500">Retries: {video.retry_count}</span>
+                                <span className="text-warning">Retries: {video.retry_count}</span>
                               )}
                             </div>
 
                             {/* Inline error summary for failed/skipped */}
                             {video.error_code && (
                               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${errorInfo?.color || "text-red-400"}`} />
-                                <span className={`text-xs font-medium ${errorInfo?.color || "text-red-400"}`}>
+                                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${errorInfo?.color || "text-danger"}`} />
+                                <span className={`text-xs font-medium ${errorInfo?.color || "text-danger"}`}>
                                   {errorInfo?.label || video.error_code}
                                 </span>
                                 <span className="text-xs text-muted-foreground truncate">
@@ -964,9 +964,9 @@ export default function DownloadsPage() {
                               </div>
                             )}
                             {errorInfo?.tip && (
-                              <div className="flex items-start gap-1.5 bg-blue-500/10 rounded px-2 py-1.5">
-                                <Info className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5" />
-                                <p className="text-blue-300">{errorInfo.tip}</p>
+                              <div className="flex items-start gap-1.5 bg-info-soft rounded px-2 py-1.5">
+                                <Info className="h-3.5 w-3.5 text-info shrink-0 mt-0.5" />
+                                <p className="text-info">{errorInfo.tip}</p>
                               </div>
                             )}
                             {!errorDetails && errorInfo && (

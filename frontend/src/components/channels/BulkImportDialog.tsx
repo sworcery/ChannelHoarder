@@ -274,7 +274,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
                   <div key={o.url} className="flex gap-2">
                     <span
                       className={`shrink-0 ${
-                        o.status === "added" ? "text-green-600 dark:text-green-400" : o.status === "exists" ? "text-muted-foreground" : "text-red-500"
+                        o.status === "added" ? "text-success" : o.status === "exists" ? "text-muted-foreground" : "text-danger"
                       }`}
                     >
                       {o.status === "added" ? "Added" : o.status === "exists" ? "Already subscribed" : "Failed"}
@@ -285,7 +285,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
                   </div>
                 ))}
               </div>
-              {haltReason && <p className="text-sm text-red-500">{haltReason}</p>}
+              {haltReason && <p className="text-sm text-danger">{haltReason}</p>}
               {done && (
                 <p className="text-sm">
                   {added} added, {exists} already subscribed, {failed.length} failed

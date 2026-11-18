@@ -85,7 +85,7 @@ export function DropdownItem({ onClick, children, variant = "default", disabled 
       onClick={onClick}
       disabled={disabled}
       className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50 flex items-center gap-2 ${
-        variant === "danger" ? "text-red-500 hover:text-red-600" : ""
+        variant === "danger" ? "text-danger hover:text-danger/80" : ""
       }`}
     >
       {children}
