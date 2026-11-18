@@ -8,7 +8,7 @@ from fastapi import WebSocket
 logger = logging.getLogger(__name__)
 
 # Events that should NOT trigger push notifications (too noisy / internal)
-_SKIP_WEBHOOK_EVENTS = {"download_progress", "queue_update"}
+_SKIP_WEBHOOK_EVENTS = {"download_progress", "queue_update", "library_check_progress"}
 
 
 class NotificationService:

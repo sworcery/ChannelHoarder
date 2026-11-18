@@ -79,13 +79,15 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     return name or "Untitled"
 
 
-def move_video_files(old_path: str, new_path: str, overwrite: bool = False) -> int:
-    """Move a video file and all associated sidecar files to a new location.
+def move_video_files(old_path: str, new_path: str, overwrite: bool = False, sidecars: bool = True) -> int:
+    """Move a video file and (unless sidecars is False) all associated sidecar files.
 
     Returns the number of files moved.
     """
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
     _place_file(old_path, new_path, overwrite)
+    if not sidecars:
+        return 1
     return 1 + move_sidecar_files(old_path, new_path, overwrite)
 
 

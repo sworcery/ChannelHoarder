@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from typing import Optional
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -301,6 +302,36 @@ async def test_download():
         ytdlp._cleanup_cookie_tmp(opts)
 
     return diagnostics
+
+
+class LibraryCheckApply(BaseModel):
+    item_ids: Optional[list[str]] = None
+    all_certain: bool = False
+    # item id -> "redownload" (default) or "skip", for lost-file items
+    actions: dict[str, Literal["redownload", "skip"]] = {}
+
+
+@router.post("/library-check/start", status_code=202)
+async def start_library_check():
+    from app.services import library_repair
+    if not library_repair.start_check():
+        raise HTTPException(status_code=409, detail="A library check is already running")
+    return {"status": "running"}
+
+
+@router.get("/library-check")
+async def get_library_check():
+    from app.services import library_repair
+    return library_repair.get_state()
+
+
+@router.post("/library-check/apply")
+async def apply_library_check(body: LibraryCheckApply):
+    from app.services import library_repair
+    if library_repair.is_running():
+        raise HTTPException(status_code=409, detail="A library check is running")
+    results = await library_repair.apply_fixes(body.item_ids, body.all_certain, body.actions)
+    return {"results": results}
 
 
 @router.post("/scan-all", status_code=202)

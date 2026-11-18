@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.50] - unreleased
 
+### Added
+- **Library check** (Settings > Diagnostics). It finds and repairs damage from the scan bug fixed below. A file that ended up under the wrong video is moved back to the video it really belongs to, and the video it was wrongly filed under is queued to download again.
+  - **What it reports:** "certain" mismatches, from the file's own embedded source address or the `.info.json` beside it; "likely" ones, from the file's length plus the leftover files of a video whose file went missing; downloaded videos whose file is gone; and files to check by hand.
+  - **How fixes apply:** nothing changes until you press a fix button. "Fix all certain" asks first and says how many downloads it will queue. "Likely" items are fixed one at a time. A file that changed since the check is left alone, and nothing is ever overwritten.
+  - **Who should run it:** run it once if you have channels with numbered titles ("Week 12", "Episode 311").
+
 ### Fixed
 - **Scans no longer move downloaded videos onto new episodes.** At the end of every scan, ChannelHoarder looked for existing files to attach to videos it hadn't downloaded yet, matching them by how similar their titles were. On channels with numbered titles ("Week 11", "Episode 311"), a new episode's title was close enough to older ones that their already-downloaded files were moved onto the new episode's name. The files overwrote each other, the new episode never downloaded, and the older episodes showed as downloaded with no file. Scans now attach a file only when its name or its `.info.json` carries that exact video's ID. They never touch a file another video already owns, never overwrite anything, and ignore leftover partial and empty files. The Import dialog, where you review matches before confirming, still matches by title, with the same protections when you confirm. A repair tool for libraries this already affected is coming in this release.
 - **Moving a channel's download folder no longer deletes files.** After moving a channel (or using Move All), the old folder was deleted outright, even when some videos had failed to move and with any files ChannelHoarder doesn't track (posters, `tvshow.nfo`, your own files). Moving everything to the same folder with a trailing slash, such as `/downloads/`, could delete every channel in the default folder. Now:

@@ -2,6 +2,7 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { formatDateTime } from "@/lib/utils"
+import LibraryCheckCard from "./LibraryCheckCard"
 import {
   Stethoscope,
   ClipboardCopy,
@@ -165,6 +166,8 @@ export default function DiagnosticsTab() {
                 </div>
               </div>
             </div>
+
+            <LibraryCheckCard />
 
             {diagnostics.recent_errors.length > 0 && (
               <div className="rounded-lg border bg-card p-4">

@@ -130,3 +130,35 @@ export const HEALTH_COLORS: Record<string, string> = {
   unhealthy: "text-red-500",
   unknown: "text-gray-400",
 }
+
+export type LibraryCheckKind = "wrong_file" | "likely" | "lost" | "manual"
+
+export interface LibraryCheckItem {
+  id: string
+  kind: LibraryCheckKind
+  certain: boolean
+  video_id: number
+  title: string
+  channel_name: string
+  file_path: string | null
+  real_video_id: number | null
+  real_title: string | null
+  detail: string
+  state: "open" | "fixed" | "skipped" | "error"
+  result: string | null
+}
+
+export interface LibraryCheckState {
+  status: "idle" | "running" | "done" | "error"
+  processed: number
+  total: number
+  started_at: string | null
+  finished_at: string | null
+  error: string | null
+  notes: string[]
+  items: LibraryCheckItem[]
+}
+
+export interface LibraryCheckApplyResult {
+  results: { id: string; state: string; message: string }[]
+}
