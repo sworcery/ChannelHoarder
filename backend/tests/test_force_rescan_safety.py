@@ -233,15 +233,7 @@ async def _add_completed(db, ch, tmp_path, vid="done_vid001"):
 
 
 async def test_removed_video_never_queued_with_auto_download(monkeypatch, tmp_path):
-    from sqlalchemy import event
-
     eng, maker = await _maker()
-    queued_ids = []
-
-    def record(mapper, connection, target):
-        queued_ids.append(target.video_id)
-
-    event.listen(DownloadQueue, "before_insert", record)
     try:
         async with maker() as db:
             ch = await _seed(db, tmp_path)
@@ -250,13 +242,13 @@ async def test_removed_video_never_queued_with_auto_download(monkeypatch, tmp_pa
             _listing(monkeypatch, [_entry("removed_vid1"), _entry("kept_video01"), _entry("new_video001")])
             await force_rescan(ch.id, db)
             rows = await _rows(db, ch.id)
+            queued_ids = set((await db.execute(select(DownloadQueue.video_id))).scalars().all())
             # The scan really does queue new videos here, but never the removed one
             assert rows["new_video001"].id in queued_ids
             assert rows["removed_vid1"].id not in queued_ids
             assert rows["removed_vid1"].status == "skipped"
             assert rows["removed_vid1"].retention_removed_at == MARK
     finally:
-        event.remove(DownloadQueue, "before_insert", record)
         await eng.dispose()
 
 

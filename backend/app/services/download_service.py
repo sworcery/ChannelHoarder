@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -135,6 +136,141 @@ _VIDEO_GONE_CODES = frozenset({
     ErrorCode.VIDEO_UNAVAILABLE, ErrorCode.VIDEO_PRIVATE, ErrorCode.VIDEO_REMOVED,
     ErrorCode.GEO_BLOCKED, ErrorCode.AGE_RESTRICTED,
 })
+
+
+_ENQUEUE_CHUNK = 500
+
+
+async def enqueue_video(
+    db: AsyncSession,
+    video: Video,
+    *,
+    priority: int = 0,
+    target_quality: str | None = None,
+    skip_min_quality: bool = False,
+) -> DownloadQueue:
+    """The one way to queue a video: set it "queued" and make sure it has a queue row.
+
+    Rules:
+    - A video never has two rows (download_queue.video_id is unique). An existing
+      row is reused; two racing callers end with one row.
+    - Reused row: priority only goes up; retry_after and quality_attempts reset and
+      skip_min_quality is set to what the caller asks (a fresh queue); target_quality
+      is replaced only when given.
+    - A row that is already running (started_at set) is left running: its video stays
+      "downloading" and only the priority bump applies (nothing else is reset).
+    - Error fields and retention_removed_at are cleared: queueing means "wanted again".
+    Flushes; the caller commits.
+    """
+    async def _load() -> DownloadQueue | None:
+        return (await db.execute(
+            select(DownloadQueue).where(DownloadQueue.video_id == video.id)
+        )).scalar_one_or_none()
+
+    entry = await _load()
+    if entry is None:
+        # Video fields first, so the row never exists (and gets dispatched) while the
+        # video still says something else. No savepoint: on SQLite one would commit.
+        video.status = "queued"
+        video.retention_removed_at = None
+        video.error_code = None
+        video.error_message = None
+        video.error_details = None
+        await db.flush()
+        inserted = await db.execute(
+            sqlite_insert(DownloadQueue)
+            .values(
+                video_id=video.id,
+                priority=priority,
+                target_quality=target_quality,
+                skip_min_quality=skip_min_quality,
+                quality_attempts=0,
+                progress_percent=0.0,
+            )
+            .on_conflict_do_nothing(index_elements=["video_id"])
+        )
+        entry = await _load()
+        if inserted.rowcount == 1:
+            return entry
+        # Lost a race with another request: fall through and reuse the winner's row.
+
+    entry.priority = max(entry.priority, priority)
+    if entry.started_at is None:
+        entry.retry_after = None
+        entry.quality_attempts = 0
+        entry.skip_min_quality = skip_min_quality
+        if target_quality is not None:
+            entry.target_quality = target_quality
+        video.status = "queued"
+        video.retention_removed_at = None
+        video.error_code = None
+        video.error_message = None
+        video.error_details = None
+    await db.flush()
+    return entry
+
+
+async def enqueue_videos(
+    db: AsyncSession,
+    videos: list[Video],
+    *,
+    priority: int = 0,
+    target_quality: str | None = None,
+) -> int:
+    """Bulk enqueue_video: same rules, a few statements per 500 videos instead of
+    several per video, so a 50,000-video request does not hold the write lock for
+    minutes. Returns how many new queue rows were created. Flushes; the caller
+    commits. The videos' in-memory state is not refreshed (the DB rows are updated).
+    """
+    created = 0
+    for i in range(0, len(videos), _ENQUEUE_CHUNK):
+        ids = [v.id for v in videos[i:i + _ENQUEUE_CHUNK]]
+        await db.flush()
+        running = select(DownloadQueue.video_id).where(
+            DownloadQueue.video_id.in_(ids), DownloadQueue.started_at.isnot(None)
+        )
+        # Video fields first (skipping videos whose download is running)
+        await db.execute(
+            update(Video)
+            .where(Video.id.in_(ids), Video.id.notin_(running))
+            .values(
+                status="queued", retention_removed_at=None,
+                error_code=None, error_message=None, error_details=None,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        result = await db.execute(
+            sqlite_insert(DownloadQueue)
+            .values([
+                {
+                    "video_id": vid, "priority": priority, "target_quality": target_quality,
+                    "skip_min_quality": False, "quality_attempts": 0, "progress_percent": 0.0,
+                }
+                for vid in ids
+            ])
+            .on_conflict_do_nothing(index_elements=["video_id"])
+        )
+        created += result.rowcount or 0
+        # Rows that already existed: reuse (priority only goes up; running rows untouched)
+        reuse = {
+            "priority": func.max(DownloadQueue.priority, priority),
+            "retry_after": None, "quality_attempts": 0, "skip_min_quality": False,
+        }
+        if target_quality is not None:
+            reuse["target_quality"] = target_quality
+        await db.execute(
+            update(DownloadQueue)
+            .where(DownloadQueue.video_id.in_(ids), DownloadQueue.started_at.is_(None))
+            .values(**reuse)
+            .execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            update(DownloadQueue)
+            .where(DownloadQueue.video_id.in_(ids), DownloadQueue.started_at.isnot(None))
+            .values(priority=func.max(DownloadQueue.priority, priority))
+            .execution_options(synchronize_session=False)
+        )
+    return created
 
 
 class DownloadService:
@@ -703,8 +839,13 @@ class DownloadService:
                 and video.retry_count < settings.MAX_RETRIES
             ):
                 video.retry_count += 1
-                video.status = "queued"
-                if queue_entry:
+                if not queue_entry:
+                    # Row was removed mid-download: nothing to retry, never leave "queued"
+                    # without a row. Only an in-flight video changes; a skipped one stays.
+                    if video.status == "downloading":
+                        video.status = "failed"
+                else:
+                    video.status = "queued"
                     queue_entry.started_at = None
                     queue_entry.progress_percent = 0
                     queue_entry.speed_bps = None

@@ -29,6 +29,7 @@ from urllib.parse import parse_qs, urlparse
 from sqlalchemy import select
 
 from app.models import Channel, DownloadQueue, Video
+from app.services.download_service import enqueue_video
 from app.services.import_service import VIDEO_EXTENSIONS
 from app.services.metadata_service import write_episode_nfo
 from app.services.naming_service import build_output_path, resolve_naming_template
@@ -490,14 +491,10 @@ def _release_claims(channel_ids: list[int]) -> None:
         release_claim(cid, "work")
 
 
-def _queue(db, video: Video) -> None:
-    video.status = "queued"
+async def _queue(db, video: Video) -> None:
     video.file_path = None
     video.file_size = None
-    video.error_code = None
-    video.error_message = None
-    video.error_details = None
-    db.add(DownloadQueue(video_id=video.id))
+    await enqueue_video(db, video)
 
 
 async def _has_queue_entry(db, video_id: int) -> bool:
@@ -520,7 +517,7 @@ async def _fix_lost(db, item, action: str) -> tuple[str, str]:
         video.status = "queued"
         video.file_path = None
     else:
-        _queue(db, video)
+        await _queue(db, video)
     return "fixed", "Queued for re-download."
 
 
@@ -585,5 +582,5 @@ async def _fix_misplaced(db, item) -> tuple[str, str]:
             row.file_path = None
             row.file_size = None
         else:
-            _queue(db, row)
+            await _queue(db, row)
     return "fixed", f"Moved to {target}; '{row.title}' queued for re-download."

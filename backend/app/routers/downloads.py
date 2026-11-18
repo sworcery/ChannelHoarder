@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -14,6 +14,7 @@ from app.deps import get_db
 from app.models import Channel, DownloadLog, DownloadQueue, Video
 from app.services import queue_state
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
+from app.services.download_service import enqueue_video, enqueue_videos
 from app.services.queue_order import queue_order_by
 from app.services.settings_service import get_setting
 from app.services.ytdlp_service import YtdlpService
@@ -21,6 +22,27 @@ from app.utils.file_utils import escape_like, move_video_files, status_after_deq
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+async def _delete_idle(db: AsyncSession, *conditions) -> list[int]:
+    """Delete matching queue rows that have not started; returns their video ids."""
+    result = await db.execute(
+        delete(DownloadQueue)
+        .where(*conditions, DownloadQueue.started_at.is_(None))
+        .returning(DownloadQueue.video_id)
+        .execution_options(synchronize_session=False)
+    )
+    return [row[0] for row in result.all()]
+
+
+async def _reset_dequeued(db: AsyncSession, video_ids: list[int], statuses: tuple[str, ...]) -> None:
+    """Give videos whose row was just deleted their resting status back."""
+    for i in range(0, len(video_ids), 500):
+        videos = (await db.execute(
+            select(Video).where(Video.id.in_(video_ids[i:i + 500]), Video.status.in_(statuses))
+        )).scalars().all()
+        for video in videos:
+            video.status = status_after_dequeue(video)
 
 
 @router.get("/queue")
@@ -89,9 +111,7 @@ async def add_to_queue(body: QueueAdd, db: AsyncSession = Depends(get_db)):
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Video already in queue")
 
-    video.status = "queued"
-    video.retention_removed_at = None
-    db.add(DownloadQueue(video_id=body.video_id, priority=body.priority))
+    await enqueue_video(db, video, priority=body.priority)
     await db.commit()
     return {"message": "Video added to queue"}
 
@@ -99,36 +119,30 @@ async def add_to_queue(body: QueueAdd, db: AsyncSession = Depends(get_db)):
 @router.post("/queue/bulk-remove")
 async def bulk_remove_from_queue(body: BulkQueueRemove, db: AsyncSession = Depends(get_db)):
     """Remove multiple items from the queue at once."""
-    result = await db.execute(
-        select(DownloadQueue)
-        .options(joinedload(DownloadQueue.video))
-        .where(DownloadQueue.id.in_(body.queue_ids))
-    )
-    entries = result.scalars().unique().all()
-    removed = 0
-    for entry in entries:
-        if entry.video and entry.video.status in ("queued", "downloading"):
-            entry.video.status = status_after_dequeue(entry.video)
-        await db.delete(entry)
-        removed += 1
+    deleted = await _delete_idle(db, DownloadQueue.id.in_(body.queue_ids))
+    removed = len(deleted)
+    await _reset_dequeued(db, deleted, ("queued", "downloading"))
+    # Rows still there were running: yt-dlp keeps going, so they stay
+    skipped = await db.scalar(
+        select(func.count(DownloadQueue.id)).where(DownloadQueue.id.in_(body.queue_ids))
+    ) or 0
     await db.commit()
-    return {"message": f"Removed {removed} items from queue", "removed": removed}
+    message = f"Removed {removed} items from queue"
+    if skipped:
+        message += f"; left {skipped} running downloads alone"
+    return {"message": message, "removed": removed}
 
 
 @router.delete("/queue/{queue_id}", status_code=204)
 async def remove_from_queue(queue_id: int, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(DownloadQueue).where(DownloadQueue.id == queue_id))
-    entry = result.scalar_one_or_none()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Queue entry not found")
-
-    # Reset video status
-    result = await db.execute(select(Video).where(Video.id == entry.video_id))
-    video = result.scalar_one_or_none()
-    if video and video.status in ("queued", "downloading"):
-        video.status = status_after_dequeue(video)
-
-    await db.delete(entry)
+    # Delete only an idle row; the started_at test is part of the DELETE itself
+    deleted = await _delete_idle(db, DownloadQueue.id == queue_id)
+    if not deleted:
+        exists = await db.scalar(select(DownloadQueue.id).where(DownloadQueue.id == queue_id))
+        if exists is None:
+            raise HTTPException(status_code=404, detail="Queue entry not found")
+        raise HTTPException(status_code=409, detail="Cannot remove a download that is already running")
+    await _reset_dequeued(db, deleted, ("queued", "downloading"))
     await db.commit()
 
 
@@ -188,17 +202,7 @@ async def retry_download(video_id: int, db: AsyncSession = Depends(get_db)):
     if video.status not in ("failed", "skipped"):
         raise HTTPException(status_code=400, detail=f"Cannot retry video with status '{video.status}'")
 
-    video.status = "queued"
-    video.retention_removed_at = None
-    video.error_code = None
-    video.error_message = None
-    video.error_details = None
-
-    # Check if already in queue
-    existing = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
-    if not existing.scalar_one_or_none():
-        db.add(DownloadQueue(video_id=video.id))
-
+    await enqueue_video(db, video)
     await db.commit()
     return {"message": f"Video '{video.title}' queued for retry"}
 
@@ -215,21 +219,7 @@ async def download_anyway(video_id: int, db: AsyncSession = Depends(get_db)):
             detail="Only a video that failed the minimum-quality check can be downloaded anyway",
         )
 
-    video.status = "queued"
-    video.retention_removed_at = None
-    video.error_code = None
-    video.error_message = None
-    video.error_details = None
-
-    entry = (await db.execute(
-        select(DownloadQueue).where(DownloadQueue.video_id == video.id)
-    )).scalar_one_or_none()
-    if entry:
-        entry.skip_min_quality = True
-        entry.retry_after = None
-    else:
-        db.add(DownloadQueue(video_id=video.id, skip_min_quality=True))
-
+    await enqueue_video(db, video, skip_min_quality=True)
     await db.commit()
     return {"message": f"Video '{video.title}' queued at the best available quality"}
 
@@ -239,23 +229,7 @@ async def retry_all_failed(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Video).where(Video.status == "failed"))
     videos = result.scalars().all()
 
-    # Batch-load existing queue entries to avoid N+1
-    video_ids = [v.id for v in videos]
-    existing_result = await db.execute(
-        select(DownloadQueue.video_id).where(DownloadQueue.video_id.in_(video_ids))
-    )
-    already_queued = {row[0] for row in existing_result.all()}
-
-    count = 0
-    for video in videos:
-        video.status = "queued"
-        video.error_code = None
-        video.error_message = None
-        video.error_details = None
-
-        if video.id not in already_queued:
-            db.add(DownloadQueue(video_id=video.id))
-            count += 1
+    count = await enqueue_videos(db, videos)
 
     await db.commit()
     return {"message": f"Queued {count} failed videos for retry", "count": count}
@@ -303,21 +277,15 @@ async def resume_queue(db: AsyncSession = Depends(get_db)):
 async def clear_queue(db: AsyncSession = Depends(get_db)):
     """Remove all non-active items from the download queue and reset video statuses."""
     # Only clear items that haven't started (don't interrupt active downloads)
-    result = await db.execute(
-        select(DownloadQueue)
-        .options(joinedload(DownloadQueue.video))
-        .where(DownloadQueue.started_at.is_(None))
-    )
-    entries = result.scalars().unique().all()
-    count = 0
-    for entry in entries:
-        if entry.video and entry.video.status in ("queued",):
-            entry.video.status = status_after_dequeue(entry.video)
-        await db.delete(entry)
-        count += 1
+    deleted = await _delete_idle(db)
+    count = len(deleted)
+    await _reset_dequeued(db, deleted, ("queued",))
     await db.commit()
     logger.info("Cleared %d items from download queue", count)
-    return {"message": f"Cleared {count} items from queue", "cleared": count}
+    return {
+        "message": f"Cleared {count} items from queue. Running downloads are left alone.",
+        "cleared": count,
+    }
 
 
 @router.post("/queue/{queue_id}/priority")

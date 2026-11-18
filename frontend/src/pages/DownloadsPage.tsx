@@ -684,13 +684,15 @@ export default function DownloadsPage() {
                               <Zap className="h-4 w-4 text-green-500" />
                             </button>
                           )}
-                          <button
-                            onClick={() => removeFromQueue.mutate(entry.id)}
-                            className="p-1.5 hover:bg-accent rounded"
-                            title="Remove from queue"
-                          >
-                            <XCircle className="h-4 w-4 text-muted-foreground" />
-                          </button>
+                          {!entry.started_at && (
+                            <button
+                              onClick={() => removeFromQueue.mutate(entry.id)}
+                              className="p-1.5 hover:bg-accent rounded"
+                              title="Remove from queue"
+                            >
+                              <XCircle className="h-4 w-4 text-muted-foreground" />
+                            </button>
+                          )}
                         </div>
                       </div>
 

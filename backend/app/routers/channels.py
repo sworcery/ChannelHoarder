@@ -26,6 +26,7 @@ from app.services.channel_service import (
     claim_channel, release_claim, set_move_all_running, try_claim,
 )
 from app.services import channel_service as _channel_service
+from app.services.download_service import enqueue_video, enqueue_videos
 from app.services.import_service import scan_folder_for_imports, import_matched_files
 from app.utils.renumber import renumber_channel_episodes as _renumber_channel_episodes
 
@@ -85,11 +86,8 @@ async def download_all_missing(db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
-    queued = 0
-    for video in videos:
-        video.status = "queued"
-        db.add(DownloadQueue(video_id=video.id))
-        queued += 1
+    queued = len(videos)
+    await enqueue_videos(db, videos)
 
     await db.commit()
     return {"message": f"Queued {queued} videos for download across all channels.", "queued": queued}
@@ -625,11 +623,8 @@ async def queue_all_videos(channel_id: int, db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
-    queued = 0
-    for video in videos:
-        video.status = "queued"
-        db.add(DownloadQueue(video_id=video.id))
-        queued += 1
+    queued = len(videos)
+    await enqueue_videos(db, videos)
 
     await db.commit()
     return {"message": f"Queued {queued} videos for download.", "queued": queued}
@@ -656,12 +651,8 @@ async def bulk_queue_videos(
     )
     videos = result.scalars().all()
 
-    queued = 0
-    for video in videos:
-        video.status = "queued"
-        video.retention_removed_at = None  # picked by hand, so it's wanted again
-        db.add(DownloadQueue(video_id=video.id))
-        queued += 1
+    queued = len(videos)
+    await enqueue_videos(db, videos)  # picked by hand, so it's wanted again
 
     await db.commit()
     return {"message": f"Queued {queued} videos for download", "queued": queued}
@@ -836,17 +827,8 @@ async def redownload_video(
     if not video:
         raise HTTPException(status_code=404, detail="Video not found")
 
-    video.error_code = None
-    video.error_message = None
-    video.error_details = None
     video.retry_count = 0
-    video.status = "queued"
-    video.retention_removed_at = None
-
-    # Add to queue if not already there
-    queue_check = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
-    if not queue_check.scalar_one_or_none():
-        db.add(DownloadQueue(video_id=video.id))
+    await enqueue_video(db, video)
 
     await db.commit()
     return {"message": f"Re-queued '{video.title}' for download"}
@@ -1221,11 +1203,8 @@ async def download_missing_season(
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
-    queued = 0
-    for video in videos:
-        video.status = "queued"
-        db.add(DownloadQueue(video_id=video.id))
-        queued += 1
+    queued = len(videos)
+    await enqueue_videos(db, videos)
     await db.commit()
     return {"message": f"Queued {queued} videos from Season {season}", "queued": queued}
 
@@ -1256,12 +1235,9 @@ async def upgrade_quality(channel_id: int, db: AsyncSession = Depends(get_db)):
     )
     videos = result.scalars().all()
 
-    queued = 0
-    for video in videos:
-        if not quality_met(video.quality_downloaded, cutoff):
-            video.status = "queued"
-            db.add(DownloadQueue(video_id=video.id))
-            queued += 1
+    to_queue = [v for v in videos if not quality_met(v.quality_downloaded, cutoff)]
+    queued = len(to_queue)
+    await enqueue_videos(db, to_queue)
 
     await db.commit()
     return {"message": f"Queued {queued} videos for quality upgrade", "queued": queued}

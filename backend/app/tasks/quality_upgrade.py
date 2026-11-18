@@ -10,6 +10,7 @@ from sqlalchemy import select
 
 from app.database import async_session
 from app.models import Channel, DownloadQueue, Video
+from app.services.download_service import enqueue_videos
 from app.utils.quality_utils import quality_met
 
 logger = logging.getLogger(__name__)
@@ -50,12 +51,9 @@ async def check_quality_upgrades():
             )
             videos = result.scalars().all()
 
-            queued = 0
-            for video in videos:
-                if not quality_met(video.quality_downloaded, cutoff):
-                    video.status = "queued"
-                    db.add(DownloadQueue(video_id=video.id, target_quality=channel.quality))
-                    queued += 1
+            to_queue = [v for v in videos if not quality_met(v.quality_downloaded, cutoff)]
+            queued = len(to_queue)
+            await enqueue_videos(db, to_queue, target_quality=channel.quality)
 
             if queued > 0:
                 total_queued += queued

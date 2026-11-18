@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import AppSetting, Channel, Video, DownloadQueue
 from app.schemas import ChannelCreate
+from app.services.download_service import enqueue_video
 from app.services.import_service import (
     import_matched_files, load_owned_paths, scan_folder_for_imports,
 )
@@ -1045,8 +1046,7 @@ class ChannelService:
             else:
                 # Auto-queue for download (if enabled for this channel)
                 if channel.auto_download:
-                    self.db.add(DownloadQueue(video_id=video.id))
-                    video.status = "queued"
+                    await enqueue_video(self.db, video)
                 else:
                     video.status = "pending"
 
