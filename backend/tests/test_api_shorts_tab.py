@@ -158,7 +158,7 @@ class TestApiScanShortsTab:
         assert videos["regular"].is_short is False
         assert os.path.exists(files["regular"])
 
-    async def test_downloaded_long_short_is_reclassified_and_cleaned(self, tmp_path):
+    async def test_downloaded_long_short_is_reclassified_but_file_kept(self, tmp_path):
         videos, _, files = await _api_scan(
             tmp_path,
             [_api_entry("old_long_short", 170), _api_entry("regular", 170)],
@@ -166,7 +166,8 @@ class TestApiScanShortsTab:
             existing={"old_long_short": True, "regular": True},
         )
         short = videos["old_long_short"]
-        assert (short.is_short, short.episode, short.status, short.file_path) == (True, 0, "skipped", None)
-        assert not os.path.exists(files["old_long_short"])
+        # A re-flag never deletes a file that is already downloaded
+        assert (short.is_short, short.episode, short.status) == (True, 0, "completed")
+        assert short.file_path and os.path.exists(files["old_long_short"])
         assert videos["regular"].is_short is False
         assert os.path.exists(files["regular"])

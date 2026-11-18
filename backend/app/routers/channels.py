@@ -710,25 +710,28 @@ async def bulk_skip_videos(
     )
     videos = result.scalars().all()
 
-    # Batch-load queue entries to avoid N+1
+    # Rows are removed atomically and never while the download runs
     video_ids = [v.id for v in videos]
-    queue_result = await db.execute(
-        select(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids))
-    )
-    queue_entries = {q.video_id: q for q in queue_result.scalars().all()}
+    with_row = set((await db.execute(
+        select(DownloadQueue.video_id).where(DownloadQueue.video_id.in_(video_ids))
+    )).scalars().all())
+    removed = set(await queue_service.remove_idle(db, DownloadQueue.video_id.in_(video_ids)))
+    running = with_row - removed
 
     skipped = 0
     for video in videos:
-        queue_entry = queue_entries.get(video.id)
-        if queue_entry:
-            await db.delete(queue_entry)
+        if video.id in running:
+            continue
         # Skipping a queued re-download or upgrade cancels it; the video keeps its file
         # and stays downloaded instead of being hidden as skipped.
         video.status = "completed" if has_kept_file(video) else "skipped"
         skipped += 1
 
     await db.commit()
-    return {"message": f"Skipped {skipped} videos", "skipped": skipped}
+    message = f"Skipped {skipped} videos"
+    if running:
+        message += f"; {len(running)} still downloading and left as they are"
+    return {"message": message, "skipped": skipped, "running": len(running)}
 
 
 @router.post("/{channel_id}/videos/bulk-unskip")
@@ -788,12 +791,15 @@ async def _bulk_delete_videos(channel_id: int, body: BulkDeleteRequest, db: Asyn
     for q in queue_result.scalars().all():
         await db.delete(q)
 
+    protected = (await other_recorded(db, channel_id))[0] if body.delete_files else set()
     deleted = 0
     with_files = 0
     files_removed = 0
     for video in videos:
         if body.delete_files and video.file_path:
-            files_removed += await asyncio.to_thread(delete_video_files, video.file_path)
+            # A file another channel's video also records stays; only this row lets go
+            if not (protected and file_keys(video.file_path) & protected):
+                files_removed += await asyncio.to_thread(delete_video_files, video.file_path)
             with_files += 1
 
         video.status = "skipped"
@@ -832,7 +838,9 @@ async def _delete_video(channel_id: int, video_id: int, delete_files: bool, db: 
 
     files_removed = False
     if delete_files and video.file_path:
-        files_removed = await asyncio.to_thread(delete_video_files, video.file_path) > 0
+        protected, _ = await other_recorded(db, channel_id)
+        if not (protected and file_keys(video.file_path) & protected):
+            files_removed = await asyncio.to_thread(delete_video_files, video.file_path) > 0
 
     # Remove from queue if present
     queue_result = await db.execute(
@@ -892,7 +900,9 @@ async def _delete_video_file(channel_id: int, video_id: int, db: AsyncSession):
 
     files_removed = False
     if video.file_path:
-        files_removed = await asyncio.to_thread(delete_video_files, video.file_path) > 0
+        protected, _ = await other_recorded(db, channel_id)
+        if not (protected and file_keys(video.file_path) & protected):
+            files_removed = await asyncio.to_thread(delete_video_files, video.file_path) > 0
 
     video.file_path = None
     video.file_size = None
@@ -977,6 +987,7 @@ async def toggle_video_short(
         raise HTTPException(status_code=404, detail="Video not found")
 
     video.is_short = body.is_short
+    video.short_locked = True  # a manual choice; scans must not flip it back
     if body.is_short:
         video.episode = 0  # Shorts are excluded from episode numbering
     await db.commit()
@@ -1003,6 +1014,7 @@ async def toggle_video_livestream(
         raise HTTPException(status_code=404, detail="Video not found")
 
     video.is_livestream = body.is_livestream
+    video.livestream_locked = True
     if body.is_livestream:
         video.episode = 0  # Livestreams are excluded from episode numbering
     await db.commit()
@@ -1086,10 +1098,12 @@ async def bulk_reclassify_videos(
     for video in videos:
         if body.set_short is not None:
             video.is_short = body.set_short
+            video.short_locked = True
             if body.set_short:
                 video.episode = 0
         if body.set_livestream is not None:
             video.is_livestream = body.set_livestream
+            video.livestream_locked = True
             if body.set_livestream:
                 video.episode = 0
         count += 1
@@ -1729,7 +1743,9 @@ async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
         moved_files = 0
         folder_before = channel_folder_name(channel)
         try:
-            moved_files, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
+            others_keys, other_stems = await other_recorded(db, channel.id)
+            moved_files, errors, left = await _move_channel_contents(
+                db, channel, old_dir, new_dir, others_keys or None, other_stems or None)
             if not errors:
                 channel.download_dir = None if _is_default_dir(new_dir) else new_dir
                 await db.commit()
@@ -1834,6 +1850,10 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
         # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
         infos = [(c.id, c.channel_name, c.download_dir, channel_folder_name(c)) for c in channels]
 
+        # Worked out before any channel moves: once one channel leaves a shared folder the
+        # others no longer look shared, and would take the file the first one left behind.
+        shared_before = {c[0]: await other_recorded(db, c[0]) for c in infos}
+
         for cid, cname, cdir, cfolder in infos:
             old_dir = old_dirs.get(cid, cdir or settings.DOWNLOAD_DIR)
             if _same_channel_folder(cfolder, old_dir, new_dir):
@@ -1847,7 +1867,9 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
                     continue
                 claimed = True
                 channel = await db.get(Channel, cid)
-                channel_moved, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
+                others_keys, other_stems = shared_before[cid]
+                channel_moved, errors, left = await _move_channel_contents(
+                    db, channel, old_dir, new_dir, others_keys or None, other_stems or None)
                 if not errors:
                     if channel_folder_name(channel) != cfolder:
                         renamed.append(f"'{cfolder}' -> '{channel_folder_name(channel)}'")
@@ -2034,6 +2056,7 @@ async def detect_channel_shorts(
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_short == False)
+        .where(Video.short_locked == False)  # a video the user unmarked stays unmarked
     )
     videos = result.scalars().all()
 
@@ -2071,6 +2094,7 @@ async def detect_clean_shorts_preview(
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_short == False)
+        .where(Video.short_locked == False)  # a video the user unmarked stays unmarked
     )
     all_non_shorts = result.scalars().all()
 
@@ -2160,6 +2184,7 @@ async def _detect_clean_shorts_confirm(channel_id: int, db: AsyncSession, video_
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_short == False)
+        .where(Video.short_locked == False)  # a video the user unmarked stays unmarked
         .where(Video.id.in_(video_ids))
     )
     detected = 0
@@ -2300,6 +2325,7 @@ async def detect_channel_livestreams(
         select(Video)
         .where(Video.channel_id == channel_id)
         .where(Video.is_livestream == False)
+        .where(Video.livestream_locked == False)  # a video the user unmarked stays unmarked
     )
     videos = result.scalars().all()
 

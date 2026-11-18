@@ -1,6 +1,7 @@
 import { useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
+import { formatBytes } from "@/lib/utils"
 import { useToast } from "@/components/ui/toaster"
 import { HelpIcon } from "@/components/ui/HelpIcon"
 import { Button } from "@/components/ui/Button"
@@ -163,7 +164,7 @@ export default function GeneralTab() {
           </div>
           <div className="flex justify-between">
             <span className="text-muted-foreground">Storage Used</span>
-            <span>{stats?.storage_used_formatted || "0 B"}</span>
+            <span>{formatBytes(stats?.storage_used_bytes ?? 0)}</span>
           </div>
         </div>
       </Card>

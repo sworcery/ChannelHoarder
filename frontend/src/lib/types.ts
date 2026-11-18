@@ -135,7 +135,7 @@ export interface DashboardAlert {
   severity: "critical" | "warning" | "info"
   title: string
   message: string
-  action: { label: string; kind: "link" | "resume_queue"; target: string | null }
+  action: { label: string; kind: "link" | "resume_queue" | "scan_all"; target: string | null }
 }
 
 export interface DownloadLog {

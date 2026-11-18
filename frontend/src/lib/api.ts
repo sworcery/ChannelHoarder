@@ -27,25 +27,19 @@ interface PaginatedResponse<T> {
   limit?: number
 }
 
-interface StorageInfo {
-  total_bytes: number
-  used_bytes: number
-  free_bytes: number
-  total_formatted: string
-  used_formatted: string
-  free_formatted: string
-  paths: { path: string; free_bytes: number; free_formatted: string }[]
-}
-
 interface SettingsData {
   [key: string]: string | number | boolean | string[] | null
 }
 
-interface DetectCleanPreview {
-  reclassified: number
+export interface DetectCleanPreview {
+  threshold: number
+  new_shorts_count: number
+  new_shorts: { video_id: number; title: string; duration: number | null; status: string; has_file: boolean; file_size: number }[]
+  existing_shorts: { video_id: number; title: string; duration: number | null; file_size: number; matches_rule: boolean; reason: string }[]
+  existing_shorts_with_files: number
   files_to_delete: number
-  renumber_changes: number
-  details: { video_id: string; title: string; has_file: boolean; file_path?: string }[]
+  disk_space_freed: number
+  will_renumber: boolean
 }
 
 export const api = {
@@ -100,10 +94,6 @@ export const api = {
     request<{ message: string; detected: number; deleted: number; renamed: number; threshold: number }>(`/channels/${channelId}/shorts/detect-clean/confirm`, { method: "POST", body: JSON.stringify({ video_ids: videoIds }) }),
 
   // Livestream management
-  getChannelLivestreams: (channelId: number, status?: string) => {
-    const qs = status ? `?status=${status}` : ""
-    return request<PaginatedResponse<Video>>(`/channels/${channelId}/livestreams${qs}`)
-  },
   deleteChannelLivestreams: (channelId: number) =>
     request<{ deleted: number; message: string }>(`/channels/${channelId}/livestreams/delete`, { method: "POST" }),
   detectChannelLivestreams: (channelId: number) =>
@@ -122,7 +112,7 @@ export const api = {
       body: JSON.stringify({ video_ids: videoIds }),
     }),
   bulkSkipVideos: (channelId: number, videoIds: number[]) =>
-    request<{ skipped: number }>(`/channels/${channelId}/videos/bulk-skip`, {
+    request<{ skipped: number; message?: string; running?: number }>(`/channels/${channelId}/videos/bulk-skip`, {
       method: "POST",
       body: JSON.stringify({ video_ids: videoIds }),
     }),
@@ -166,9 +156,6 @@ export const api = {
     request<MessageResponse>(`/channels/${channelId}/videos/${videoId}/short`, { method: "PATCH", body: JSON.stringify({ is_short: isShort }) }),
   bulkMonitorVideos: (channelId: number, videoIds: number[], monitored: boolean) =>
     request<MessageResponse>(`/channels/${channelId}/videos/bulk-monitor`, { method: "POST", body: JSON.stringify({ video_ids: videoIds, monitored }) }),
-  monitorAllVideos: (channelId: number, monitored: boolean) =>
-    request<MessageResponse>(`/channels/${channelId}/monitor-all`, { method: "POST", body: JSON.stringify({ monitored }) }),
-
   // File management
   moveFilesPreview: (channelId: number, newDownloadDir: string) =>
     request<{ channel_id: number; channel_name: string; source_dir: string; dest_dir: string; same_path: boolean; file_count: number; missing_count: number; total_size: number; db_records: number }>(`/channels/${channelId}/move-files/preview`, { method: "POST", body: JSON.stringify({ new_download_dir: newDownloadDir }) }),
@@ -220,8 +207,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ queue_ids: queueIds }),
     }),
-  addToQueue: (videoId: number, priority = 0) =>
-    request<MessageResponse>("/downloads/queue", { method: "POST", body: JSON.stringify({ video_id: videoId, priority }) }),
   removeFromQueue: (queueId: number) =>
     request<void>(`/downloads/queue/${queueId}`, { method: "DELETE" }),
   getHistory: (params?: { skip?: number; limit?: number; status?: string; search?: string; error_code?: string; channel_id?: number }) => {
@@ -258,8 +243,6 @@ export const api = {
   pauseQueue: () => request<MessageResponse>("/downloads/pause", { method: "POST" }),
   resumeQueue: () => request<MessageResponse>("/downloads/resume", { method: "POST" }),
   clearQueue: () => request<MessageResponse>("/downloads/clear-queue", { method: "POST" }),
-  setQueuePriority: (queueId: number, priority: number) =>
-    request<MessageResponse>(`/downloads/queue/${queueId}/priority`, { method: "POST", body: JSON.stringify({ priority }) }),
   moveQueueItemToTop: (queueId: number) =>
     request<MessageResponse>(`/downloads/queue/${queueId}/move-to-top`, { method: "POST" }),
   downloadNow: (queueId: number) =>
@@ -277,7 +260,6 @@ export const api = {
   getStats: () => request<DashboardStats>("/dashboard/stats"),
   getAlerts: () => request<DashboardAlert[]>("/dashboard/alerts"),
   getRecentDownloads: (limit = 20) => request<Video[]>(`/dashboard/recent?limit=${limit}`),
-  getStorage: () => request<StorageInfo>("/dashboard/storage"),
 
   // Auth
   uploadCookies: async (file: File) => {
@@ -287,7 +269,6 @@ export const api = {
     if (!res.ok) throw new Error("Upload failed")
     return res.json()
   },
-  getCookieStatus: () => request<{ status: string; message: string; age_hours?: number; size?: number }>("/auth/cookies/status"),
   validateCookies: () => request<{ status: string; message: string }>("/auth/cookies/validate", { method: "POST" }),
   deleteCookies: () => request<void>("/auth/cookies", { method: "DELETE" }),
   setApiKey: (apiKey: string) =>
@@ -347,7 +328,6 @@ export const api = {
     request<{ message: string }>("/system/shared-folders/move", { method: "POST", body: JSON.stringify({ channel_id: channelId }) }),
   getYtdlpVersion: () => request<{ version: string }>("/system/ytdlp/version"),
   getDiagnostics: () => request<{ generated_at: string; app_version: string; ytdlp_version: string; pot_status: string; cookies_status: string; api_key_configured: boolean; disk_free_bytes: number; disk_free_formatted: string; disk_status: string; disk_where: string; total_channels: number; total_downloads: number; total_failed: number; recent_errors: { id: number; error_code: string; message: string; created_at: string }[]; system_info: Record<string, string> }>("/system/diagnostics"),
-  getVideoDiagnostics: (videoId: number) => request<Record<string, unknown>>(`/system/diagnostics/${videoId}`),
   getLogs: (params?: { skip?: number; limit?: number; error_code?: string; event?: string; search?: string }) => {
     const qs = new URLSearchParams()
     if (params?.skip) qs.set("skip", String(params.skip))

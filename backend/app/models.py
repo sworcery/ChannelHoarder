@@ -71,6 +71,9 @@ class Video(Base):
         # History page orders by downloaded_at with no status filter, so the composite
         # (status, downloaded_at) index above can't serve it; this standalone one can.
         Index("ix_videos_downloaded_at", "downloaded_at"),
+        # other_recorded looks up files another channel records at the same path; it runs
+        # at the end of every scan and before deletes and moves.
+        Index("ix_videos_file_path", "file_path"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -87,6 +90,9 @@ class Video(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
     is_short: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     is_livestream: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    # Set when the user marks/unmarks by hand; scans then never change that flag
+    short_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    livestream_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     monitored: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     file_path: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
     file_size: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)

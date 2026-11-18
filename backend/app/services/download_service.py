@@ -130,6 +130,16 @@ QUALITY_RETRY_DELAYS = (timedelta(hours=1), timedelta(hours=6), timedelta(hours=
 # A failed format lookup that has no clearer cause is retried after a short pause.
 LOOKUP_FAILED_MARKER = "could not read the available formats"
 LOOKUP_RETRY_DELAY = timedelta(minutes=10)
+# Automatic retries wait longer each time instead of running on the next tick; the
+# last step repeats. Rate limits back off further.
+RETRY_BACKOFF = (timedelta(minutes=2), timedelta(minutes=10), timedelta(minutes=30), timedelta(minutes=60))
+RATE_LIMIT_BACKOFF = (timedelta(minutes=15), timedelta(hours=1), timedelta(hours=3))
+
+
+def retry_delay(code: ErrorCode, attempt: int) -> timedelta:
+    """How long before automatic retry number `attempt` (1-based) of a failed download."""
+    steps = RATE_LIMIT_BACKOFF if code == ErrorCode.RATE_LIMITED else RETRY_BACKOFF
+    return steps[min(max(attempt, 1), len(steps)) - 1]
 
 # Errors that mean this video can't be fetched again (as opposed to cookies, yt-dlp
 # or disk trouble that a later run can get past).
@@ -681,7 +691,14 @@ class DownloadService:
                             .where(Video.status == "completed")
                         )
                     ) or 0
-                    channel.health_status = "healthy"
+                    # SCAN_FAILED and METADATA_DEGRADED belong to the scan and stay; an
+                    # error left by an earlier failed download is over now. Health and
+                    # the code come from what is still failed (the scan's own rule).
+                    if channel.last_error_code not in (
+                        ErrorCode.SCAN_FAILED.value, ErrorCode.METADATA_DEGRADED.value,
+                    ):
+                        from app.services.channel_service import ChannelService
+                        await ChannelService(db)._clear_scan_failed(channel)
 
                 if queue_entry:
                     await db.delete(queue_entry)
@@ -757,7 +774,7 @@ class DownloadService:
         quality_waiting = False
         async with async_session() as db:
             diagnostics = DiagnosticsService(db)
-            diagnosis = diagnostics.classify_download_error(error_str)
+            diagnosis = diagnostics.classify_download_error(error_str, exc=error)
             code = ErrorCode(diagnosis.code)
 
             logger.error("Download failed for %s: [%s] %s", vdata.title, code.value, error_str)
@@ -857,10 +874,13 @@ class DownloadService:
                     queue_entry.speed_bps = None
                     queue_entry.eta_seconds = None
                     queue_entry.priority = max(queue_entry.priority - 1, -10)
-                    if LOOKUP_FAILED_MARKER in error_str.lower():
-                        queue_entry.retry_after = (
-                            datetime.now(timezone.utc) + LOOKUP_RETRY_DELAY
-                        ).replace(tzinfo=None)
+                    delay = (
+                        LOOKUP_RETRY_DELAY if LOOKUP_FAILED_MARKER in error_str.lower()
+                        else retry_delay(code, video.retry_count)
+                    )
+                    queue_entry.retry_after = (
+                        datetime.now(timezone.utc) + delay
+                    ).replace(tzinfo=None)
 
             else:
                 video.status = "failed"

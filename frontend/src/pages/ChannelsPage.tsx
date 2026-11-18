@@ -471,7 +471,7 @@ export default function ChannelsPage() {
           <p className="text-xs text-muted-foreground -mt-2">
             Downloads every video the channel has published unless you set a date. Uncheck to list videos and pick what to download.
           </p>
-          <Field label="Download from date (optional)" hint="Leave empty to include everything.">
+          <Field label="Download from date" hint="Leave empty to include everything.">
             <Input
               type="date"
               value={addFromDate}

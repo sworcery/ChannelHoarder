@@ -20,10 +20,12 @@ class DiagnosticsService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    def classify_download_error(self, error_str: str, stderr: str = "") -> ErrorDiagnosis:
+    def classify_download_error(
+        self, error_str: str, stderr: str = "", exc: BaseException | None = None,
+    ) -> ErrorDiagnosis:
         """Classify an error and return a full diagnosis."""
         combined = f"{error_str}\n{stderr}"
-        code = classify_error(combined)
+        code = classify_error(combined, exc)
         info = ERROR_CATALOG.get(code, ERROR_CATALOG[ErrorCode.UNKNOWN])
 
         system_ctx = self._get_system_context_sync()

@@ -51,7 +51,7 @@
     <Config Name="PUID" Target="PUID" Default="99" Description="User ID for file permissions. Use 99 for nobody on Unraid." Type="Variable" Display="advanced" Required="false">99</Config>
     <Config Name="PGID" Target="PGID" Default="100" Description="Group ID for file permissions. Use 100 for users on Unraid." Type="Variable" Display="advanced" Required="false">100</Config>
     <Config Name="TZ" Target="TZ" Default="America/New_York" Description="Timezone (e.g. America/New_York, America/Chicago, Europe/London)" Type="Variable" Display="always" Required="false">America/New_York</Config>
-    <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="info" Description="Logging level (debug, info, warning, error)" Type="Variable" Display="advanced" Required="false">info</Config>
+    <Config Name="LOG_LEVEL" Target="LOG_LEVEL" Default="info" Description="Logging level (debug, info, warning, error). Starting value only; change it in Settings > General" Type="Variable" Display="advanced" Required="false">info</Config>
     <Config Name="YouTube API Key" Target="YOUTUBE_API_KEY" Default="" Description="Optional: YouTube Data API v3 key for faster and more reliable channel discovery" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
     <Config Name="PO Token Server" Target="POT_SERVER_ENABLED" Default="true" Description="Enable built-in PO token server for YouTube authentication (recommended)" Type="Variable" Display="advanced" Required="false">true</Config>
 </Container>

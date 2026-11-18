@@ -222,10 +222,17 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
         .where(Channel.next_scan_at < cutoff)
     )).scalar() or 0
     if overdue:
-        alerts.append(_alert("overdue_scans", "info",
-                             f"{overdue} channel{'s' if overdue != 1 else ''} overdue for a scan",
-                             "Scans are more than a day late. The scan window may be too short for your library; try widening it.",
-                             "Open scan settings", "link", "/settings?tab=scanning"))
+        from app.services.settings_service import read_scan_window
+        window_start, _window_end = await read_scan_window(db)
+        title = f"{overdue} channel{'s' if overdue != 1 else ''} overdue for a scan"
+        if window_start is not None:
+            alerts.append(_alert("overdue_scans", "info", title,
+                                 "Scans are more than a day late. The scan window may be too short for your library; try widening it.",
+                                 "Open scan settings", "link", "/settings?tab=scanning&anchor=scan-window"))
+        else:
+            alerts.append(_alert("overdue_scans", "info", title,
+                                 "Scans are more than a day late. The channels will catch up on their own; Scan All starts them now.",
+                                 "Scan All", "scan_all", None))
 
     return alerts
 

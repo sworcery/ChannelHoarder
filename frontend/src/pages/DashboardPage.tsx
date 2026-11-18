@@ -121,7 +121,8 @@ export default function DashboardPage() {
         <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={stats.total_failed > 0 ? "see Downloads → Failed" : "none"} color={stats.total_failed > 0 ? "text-danger" : undefined}
           to={stats.total_failed > 0 ? "/downloads" : undefined}
           onNavigate={() => { try { localStorage.setItem("downloads_tab", "failed") } catch { /* storage unavailable */ } }} />
-        <StatCard icon={HardDrive} label="Storage" value={formatBytes(stats.free_space_bytes)} unit="free" sub={`${formatBytes(stats.storage_used_bytes)} used`} />
+        <StatCard icon={HardDrive} label="Storage free" value={formatBytes(stats.free_space_bytes).split(" ")[0]}
+          unit={formatBytes(stats.free_space_bytes).split(" ")[1]} sub={`${formatBytes(stats.storage_used_bytes)} used`} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -244,9 +245,10 @@ function StatCard({
     <div className="flex items-center gap-3">
       <Icon className={`h-8 w-8 flex-shrink-0 ${color || "text-primary"}`} />
       <div className="min-w-0">
-        <p className="text-2xl font-bold whitespace-nowrap">
-          {value}
-          {unit && <span className="ml-1 text-sm font-medium text-muted-foreground">{unit}</span>}
+        {/* The unit drops under the number when the card is narrow, so nothing spills out. */}
+        <p className="flex flex-wrap items-baseline gap-x-1 text-2xl font-bold">
+          <span className="whitespace-nowrap">{value}</span>
+          {unit && <span className="text-sm font-medium text-muted-foreground">{unit}</span>}
         </p>
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{sub}</p>

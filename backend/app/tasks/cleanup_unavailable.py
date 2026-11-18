@@ -23,7 +23,7 @@ async def cleanup_unavailable_videos(db: AsyncSession) -> int:
     result = await db.execute(
         select(Video.id).where(
             func.lower(func.trim(Video.title)).in_(list(_UNAVAILABLE_TITLES)),
-            Video.status != "downloaded",
+            Video.status != "completed",
             Video.file_path.is_(None),
         )
     )

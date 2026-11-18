@@ -102,6 +102,15 @@ function AlertAction({ alert, size }: { alert: DashboardAlert; size?: "sm" | "md
     onError: (e: Error) => toast(e.message, "error"),
   })
 
+  const scanAll = useMutation({
+    mutationFn: () => api.scanAll(),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["dashboard-alerts"] })
+      toast(r.message)
+    },
+    onError: (e: Error) => toast(e.message, "error"),
+  })
+
   const { action } = alert
   const go = () => {
     const target = action.target || "/"
@@ -115,9 +124,9 @@ function AlertAction({ alert, size }: { alert: DashboardAlert; size?: "sm" | "md
   return (
     <Button
       size={size}
-      variant="outline"
-      loading={action.kind === "resume_queue" && resume.isPending}
-      onClick={() => (action.kind === "resume_queue" ? resume.mutate() : go())}
+      variant={action.kind === "resume_queue" ? "success" : "outline"}
+      loading={(action.kind === "resume_queue" && resume.isPending) || (action.kind === "scan_all" && scanAll.isPending)}
+      onClick={() => (action.kind === "resume_queue" ? resume.mutate() : action.kind === "scan_all" ? scanAll.mutate() : go())}
     >
       {action.label}
     </Button>
@@ -169,6 +178,7 @@ export function AlertStrip({ variant, hide }: { variant: "full" | "slim"; hide?:
     <Banner
       role="status"
       tone={TONE[top.severity]}
+      inlineAction
       className="items-center rounded-none border-x-0 border-t-0 px-4 py-2"
       action={
         <div className="flex items-center gap-1">

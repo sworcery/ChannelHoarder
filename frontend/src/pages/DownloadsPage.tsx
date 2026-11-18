@@ -158,14 +158,20 @@ function DownloadRow({
           )}
           <div className="flex-1 min-w-[10rem]">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <p className="font-medium break-words sm:truncate flex-1 min-w-0 basis-40">{title}</p>
+              <p className="font-medium break-words sm:truncate flex-1 min-w-0 basis-full sm:basis-40">{title}</p>
               {status}
             </div>
-            {meta && <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 flex-wrap">{meta}</div>}
+            {(meta || actions) && (
+              <div className="flex items-center gap-x-3 gap-y-1 text-xs text-muted-foreground mt-1 flex-wrap">
+                {meta}
+                {/* On phones the buttons sit on the meta line; from sm up they sit at the row's right edge */}
+                {actions && <div className="ml-auto flex items-center gap-0.5 sm:hidden">{actions}</div>}
+              </div>
+            )}
             {details}
           </div>
           {actions && (
-            <div className="flex flex-wrap items-center justify-end gap-0.5 w-full sm:w-auto sm:shrink-0">{actions}</div>
+            <div className="hidden sm:flex flex-wrap items-center justify-end gap-0.5 sm:w-auto sm:shrink-0">{actions}</div>
           )}
         </div>
         {footer}
@@ -563,7 +569,7 @@ export default function DownloadsPage() {
     }
     if (entry.retry_after && new Date(entry.retry_after).getTime() > Date.now()) {
       return {
-        label: entry.quality_attempts > 0
+        label: entry.quality_attempts > 0 && entry.video?.error_code === "QUALITY_TOO_LOW"
           ? <>Waiting for higher quality, retrying <DateTime value={entry.retry_after} /></>
           : <>Retrying <DateTime value={entry.retry_after} /></>,
         icon: <Clock className="h-3.5 w-3.5 text-warning" />,
@@ -625,9 +631,9 @@ export default function DownloadsPage() {
         }
         details={
           <>
-            {code && (
+            {code && (!onFailed || hasDetails) && (
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${color}`} />
+                {!onFailed && <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${color}`} />}
                 {!onFailed && (
                   <>
                     <span className={`text-xs font-medium ${color}`}>{errorLabel(errorCatalog, code)}</span>
@@ -985,7 +991,7 @@ export default function DownloadsPage() {
                             <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
                           </Button>
                         )}
-                        {!entry.started_at && entry.quality_attempts > 0 && entry.retry_after && (
+                        {!entry.started_at && entry.quality_attempts > 0 && entry.video?.error_code === "QUALITY_TOO_LOW" && entry.retry_after && (
                           <Button
                             size="sm"
                             onClick={() => downloadAnywayMutation.mutate(video.id)}

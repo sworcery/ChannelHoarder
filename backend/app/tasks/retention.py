@@ -7,8 +7,8 @@ from sqlalchemy import select
 
 from app.database import async_session
 from app.models import Channel, Video
-from app.services.channel_service import ChannelService, release_claim, try_claim
-from app.utils.file_utils import delete_video_files
+from app.services.channel_service import ChannelService, other_recorded, release_claim, try_claim
+from app.utils.file_utils import delete_video_files, file_keys
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,7 @@ async def _apply_expired(db, channel: Channel) -> None:
         return
 
     service = ChannelService(db)
+    protected, _ = await other_recorded(db, channel_id)
     removed = 0
     missing = 0
     for video in videos:
@@ -90,12 +91,15 @@ async def _apply_expired(db, channel: Channel) -> None:
         if not await asyncio.to_thread(os.path.exists, path):
             missing += 1
             continue
-        await asyncio.to_thread(delete_video_files, path)
-        if await asyncio.to_thread(os.path.exists, path):
+        # A file another channel's video also records stays on disk; only this row lets go
+        shared = bool(protected) and bool(await asyncio.to_thread(file_keys, path) & protected)
+        if not shared:
+            await asyncio.to_thread(delete_video_files, path)
+        if not shared and await asyncio.to_thread(os.path.exists, path):
             logger.error("Retention: could not delete %s; leaving video %s as completed",
                          path, video.video_id)
             continue
-        await service._auto_delete_video_files(video)
+        await service._auto_delete_video_files(video, protected)
         video.retention_removed_at = datetime.now(timezone.utc).replace(tzinfo=None)
         await db.commit()  # release the write lock between deletions
         removed += 1

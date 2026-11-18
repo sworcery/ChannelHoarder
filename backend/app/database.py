@@ -161,6 +161,11 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN is_livestream BOOLEAN DEFAULT 0 NOT NULL")
             )
+        for col in ("short_locked", "livestream_locked"):
+            if col not in video_columns:
+                await conn.execute(
+                    text(f"ALTER TABLE videos ADD COLUMN {col} BOOLEAN DEFAULT 0 NOT NULL")
+                )
         if "retention_removed_at" not in video_columns:
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN retention_removed_at DATETIME")

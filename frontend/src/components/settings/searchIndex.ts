@@ -54,10 +54,10 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { label: "Random Jitter", keywords: "random delay download timing", tab: "antidetect", anchorId: "random-jitter" },
   { label: "Scan Jitter", keywords: "random delay between channels scan order", tab: "antidetect", anchorId: "scan-jitter" },
 
-  { label: "Telegram", keywords: "bot token chat id notifications", tab: "notifications", anchorId: "telegram" },
-  { label: "Pushover", keywords: "push phone app token user key notifications", tab: "notifications", anchorId: "pushover" },
-  { label: "Discord", keywords: "webhook url notifications", tab: "notifications", anchorId: "discord" },
-  { label: "Notification Events", keywords: "alerts which events trigger", tab: "notifications", anchorId: "notification-events" },
+  { label: "Telegram", keywords: "bot token chat id notifications connect",tab: "notifications", anchorId: "telegram" },
+  { label: "Pushover", keywords: "push phone app token user key notifications connect",tab: "notifications", anchorId: "pushover" },
+  { label: "Discord", keywords: "webhook url notifications connect",tab: "notifications", anchorId: "discord" },
+  { label: "Notification Events", keywords: "alerts which events trigger connect",tab: "notifications", anchorId: "notification-events" },
 
   { label: "Copy Diagnostic Report", keywords: "support bug report issue copy", tab: "diagnostics", anchorId: "diagnostic-report" },
   { label: "Statistics", keywords: "failed downloads totals", tab: "diagnostics", anchorId: "diagnostic-statistics" },
@@ -77,6 +77,8 @@ export const POINTER_INDEX: readonly PointerEntry[] = [
   { label: "Download folder", keywords: "path directory location output where files saved", text: "Set per channel (in its settings), or with DOWNLOAD_DIR in the container settings." },
   { label: "Minimum quality", keywords: "min quality cutoff resolution upgrade", text: "Set per channel: open the channel's page and change its Quality settings." },
   { label: "Retention", keywords: "delete old videos days keep cleanup", text: "Set per channel: open the channel's page and use its \"Delete videos after (days)\" field." },
+  { label: "Shorter than (minimum duration)", keywords: "shorter min minimum duration length short videos skip", text: "Set per channel: open a channel, then Edit." },
+  { label: "Auto-download", keywords: "auto download automatic new videos", text: "Set per channel: open a channel, then Edit." },
   { label: "Theme", keywords: "dark light mode appearance colour color", text: "Use the theme button in the page header." },
   { label: "Timezone", keywords: "time zone clock tz", text: "Set with the TZ variable in the container settings." },
   { label: "Proxy", keywords: "http socks vpn", text: "ChannelHoarder has no proxy setting." },

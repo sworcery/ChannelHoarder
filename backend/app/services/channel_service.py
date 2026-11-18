@@ -54,6 +54,16 @@ _DEGRADED_OVERWRITABLE = (
     ErrorCode.QUALITY_TOO_LOW.value,
 )
 
+# Codes that describe the whole install, not one video: a failed scan must not hide
+# them. Every other code (including old per-video download errors) gives way to a
+# listing failure.
+_INSTALL_WIDE_CODES = (
+    ErrorCode.DISK_FULL.value,
+    ErrorCode.AUTH_EXPIRED.value,
+    ErrorCode.PO_TOKEN_FAILURE.value,
+    ErrorCode.YTDLP_OUTDATED.value,
+)
+
 # YouTube Shorts are <= 60s. This is the shorts-classification cutoff and is kept
 # separate from Channel.min_video_duration, which is a download length filter - reusing
 # the filter as the shorts threshold caused already-downloaded videos to be reclassified
@@ -111,8 +121,8 @@ class ScanFailed(ChannelListingError):
 async def record_scan_error(db: AsyncSession, channel: Channel, error: Exception, *, notify: bool = True) -> None:
     """The one place a failed scan is recorded (tick, Scan Now, Scan All, RSS).
 
-    Marks the channel unhealthy with SCAN_FAILED (only over our own or informational
-    codes, never a more severe one), advances next_scan_at so a dead channel is
+    Marks the channel unhealthy with SCAN_FAILED (over any code except the install-wide
+    ones: disk full, cookies, PO token, outdated yt-dlp), advances next_scan_at so a dead channel is
     retried on the normal schedule, stamps the attempt for the Scan Now cooldown and
     sends the scan_failed webhook once per outage. last_scanned_at stays as it was.
     Downloads never replace SCAN_FAILED, so the outage stays one outage."""
@@ -123,7 +133,7 @@ async def record_scan_error(db: AsyncSession, channel: Channel, error: Exception
     await db.rollback()
     await db.refresh(channel)
     first_failure = False
-    if channel.last_error_code in _DEGRADED_OVERWRITABLE:
+    if channel.last_error_code not in _INSTALL_WIDE_CODES:
         first_failure = channel.last_error_code != ErrorCode.SCAN_FAILED.value
         channel.health_status = "unhealthy"
         channel.last_error_code = ErrorCode.SCAN_FAILED.value
@@ -140,12 +150,12 @@ async def record_scan_error(db: AsyncSession, channel: Channel, error: Exception
 
 async def other_recorded(db: AsyncSession, channel_id: int) -> tuple[set[str], set[str]]:
     """Identity keys (path, device:inode) and sidecar-stem keys of every file another
-    channel's video records in this channel's folder. Those files must not be moved or
-    renamed for this channel.
+    channel's video records in this channel's folder, plus any file another channel's
+    video records at the same path as one of this channel's videos (whatever folder
+    either is set to now). Those files must not be moved, renamed or deleted for this
+    channel.
 
-    Runs at the end of every scan, so it costs nothing unless another channel's folder
-    setting resolves to this channel's folder (only old installs have such shared
-    folders); then only those channels' files are looked at.
+    Runs at the end of every scan; one indexed lookup unless a file is actually shared.
     """
     from app.utils.file_utils import channel_folder_name, file_keys, stem_key
 
@@ -160,13 +170,25 @@ async def other_recorded(db: AsyncSession, channel_id: int) -> tuple[set[str], s
                 and _folder_key(c.download_dir, channel_folder_name(c)) == mine]
 
     sharing = await asyncio.to_thread(_sharing)
-    if not sharing:
-        return set(), set()
-    paths = (await db.execute(
+    paths: list[str] = []
+    if sharing:
+        paths = list((await db.execute(
+            select(Video.file_path).where(
+                Video.channel_id.in_(sharing), Video.file_path.isnot(None), Video.file_path != ""
+            )
+        )).scalars().all())
+    # A file another channel's video records at the same stored path as one of mine is
+    # shared too, whatever folder either channel is set to now (e.g. after a move left it).
+    mine = select(Video.file_path).where(
+        Video.channel_id == channel_id, Video.file_path.isnot(None), Video.file_path != ""
+    )
+    paths += (await db.execute(
         select(Video.file_path).where(
-            Video.channel_id.in_(sharing), Video.file_path.isnot(None), Video.file_path != ""
+            Video.channel_id != channel_id, Video.file_path.in_(mine)
         )
     )).scalars().all()
+    if not paths:
+        return set(), set()
 
     def _build() -> tuple[set[str], set[str]]:
         keys: set[str] = set()
@@ -1417,7 +1439,8 @@ class ChannelService:
         1. Determine if it should be flagged as short/livestream using the same signals
            used for new videos (tab source first, then heuristics).
         2. If the classification flipped from False -> True and the filter is disabled,
-           delete the downloaded files and reset status to skipped.
+           skip the video if it has no file yet. A downloaded file is never deleted
+           by a re-flag, and manually marked (locked) videos are left alone.
         3. Update the database flags.
 
         Returns the number of videos whose classification changed.
@@ -1488,29 +1511,32 @@ class ChannelService:
                     should_be_livestream = True
 
             # Check if classification flipped
-            short_flipped = should_be_short and not video.is_short
-            livestream_flipped = should_be_livestream and not video.is_livestream
+            # A manual mark/unmark (short_locked / livestream_locked) is never undone by a scan.
+            short_flipped = should_be_short and not video.is_short and not video.short_locked
+            livestream_flipped = (should_be_livestream and not video.is_livestream
+                                  and not video.livestream_locked)
 
             if not short_flipped and not livestream_flipped:
                 continue
 
-            # Apply reclassification
+            # Apply reclassification. A file already on disk is never deleted because of
+            # a re-flag; only videos with no file are skipped.
             if short_flipped:
                 video.is_short = True
                 # Auto-clean if shorts aren't allowed
-                if not shorts_allowed:
+                if not shorts_allowed and not video.file_path:
                     await self._auto_delete_video_files(video)
                     logger.info("Reclassified short and cleaned up: %s (%s)", video.video_id, video.title)
 
             if livestream_flipped:
                 video.is_livestream = True
                 # Auto-clean if livestreams aren't allowed
-                if not livestreams_allowed:
+                if not livestreams_allowed and not video.file_path:
                     await self._auto_delete_video_files(video)
                     logger.info("Reclassified livestream and cleaned up: %s (%s)", video.video_id, video.title)
 
             # Reset episode to 0 for excluded categories
-            if should_be_short or should_be_livestream:
+            if short_flipped or livestream_flipped:
                 video.episode = 0
 
             changed += 1
@@ -1521,11 +1547,13 @@ class ChannelService:
 
         return changed
 
-    async def _auto_delete_video_files(self, video: Video):
-        """Delete downloaded files for a video and reset its fields to skipped state."""
-        from app.utils.file_utils import delete_video_files
+    async def _auto_delete_video_files(self, video: Video, protected: set[str] | None = None):
+        """Delete downloaded files for a video and reset its fields to skipped state.
+        A file in `protected` (recorded by another channel's video) stays on disk; only
+        this row lets go of it."""
+        from app.utils.file_utils import delete_video_files, file_keys
 
-        if video.file_path:
+        if video.file_path and not (protected and file_keys(video.file_path) & protected):
             await asyncio.to_thread(delete_video_files, video.file_path)
 
         # Remove from queue if present

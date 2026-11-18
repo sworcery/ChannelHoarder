@@ -1,6 +1,6 @@
 import { useParams, useNavigate, useLocation, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { api, type DetectCleanPreview } from "@/lib/api"
 import { cn, formatDate, formatBytes, formatDuration, formatVideoCounts } from "@/lib/utils"
 import { HEALTH_COLORS, HEALTH_LABELS } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
@@ -47,7 +47,21 @@ import {
   Pencil,
   CalendarDays,
 } from "lucide-react"
-import { useState, useCallback, useMemo, useEffect, useRef } from "react"
+import { Fragment, useState, useCallback, useMemo, useEffect, useRef } from "react"
+
+/** A path that may wrap after a slash; <wbr> adds no characters, so a copied path stays exact. */
+function PathText({ path }: { path: string }) {
+  return (
+    <>
+      {path.split("/").map((seg, i) => (
+        <Fragment key={i}>
+          {i > 0 && <>/<wbr /></>}
+          {seg}
+        </Fragment>
+      ))}
+    </>
+  )
+}
 
 export default function ChannelDetailPage() {
   const { id } = useParams()
@@ -124,6 +138,12 @@ export default function ChannelDetailPage() {
   // Set once scanMutation exists (below); the polls read it through this ref because they
   // are created before the mutation.
   const scanPendingRef = useRef(false)
+
+  const { data: health } = useQuery({
+    queryKey: ["system-health"],
+    queryFn: api.getHealth,
+    staleTime: 300000,
+  })
 
   const { data: channel } = useQuery({
     queryKey: ["channel", channelId],
@@ -246,7 +266,7 @@ export default function ChannelDetailPage() {
   const [movingFiles, setMovingFiles] = useState(false)
   const [movePreview, setMovePreview] = useState<any>(null)
   const [movePreviewOpen, setMovePreviewOpen] = useState(false)
-  const [detectCleanPreview, setDetectCleanPreview] = useState<any>(null)
+  const [detectCleanPreview, setDetectCleanPreview] = useState<DetectCleanPreview | null>(null)
   const [detectCleanOpen, setDetectCleanOpen] = useState(false)
   const [detectCleanLoading, setDetectCleanLoading] = useState(false)
   const [forceRescanOpen, setForceRescanOpen] = useState(false)
@@ -336,7 +356,7 @@ export default function ChannelDetailPage() {
     onSuccess: (data: any) => {
       invalidateVideos()
       setSelectedVideoIds(new Set())
-      toast(`Skipped ${data.skipped} videos`)
+      toast(data.message || `Skipped ${data.skipped} videos`)
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
@@ -526,7 +546,7 @@ export default function ChannelDetailPage() {
 
           {channel.folder_path && (
             <p className="mt-2 text-sm text-muted-foreground">
-              Folder: <code className="font-mono text-xs break-all text-foreground">{channel.folder_path}</code>
+              Folder: <code className="font-mono text-xs text-foreground [overflow-wrap:anywhere]"><PathText path={channel.folder_path} /></code>
             </p>
           )}
 
@@ -542,7 +562,7 @@ export default function ChannelDetailPage() {
               disabled={scanMutation.isPending}
             >
               <RefreshCw className={`h-4 w-4 ${scanMutation.isPending ? "animate-spin" : ""}`} />
-              Scan
+              Scan Now
             </Button>
             <Button
               variant="primary"
@@ -1011,6 +1031,7 @@ export default function ChannelDetailPage() {
         footer={<Button onClick={() => setEditModalOpen(false)}>Close</Button>}
       >
         <div className="space-y-6">
+          <p className="text-sm text-muted-foreground">Changes here save as you go.</p>
           {/* Download Settings */}
           <div>
             <h3 className="text-sm font-semibold mb-3">Download Settings</h3>
@@ -1075,7 +1096,7 @@ export default function ChannelDetailPage() {
                   <Input
                     type="text"
                     value={editDownloadDir ?? channel.download_dir ?? ""}
-                    placeholder="/downloads (default)"
+                    placeholder={health?.download_dir ? `Leave blank for default (${health.download_dir})` : "Leave blank for the default download folder"}
                     onChange={(e) => setEditDownloadDir(e.target.value)}
                   />
                 </Field>
@@ -1120,9 +1141,14 @@ export default function ChannelDetailPage() {
                   </>
                 )}
               </div>
+              {editDownloadDir !== null && editDownloadDir !== (channel.download_dir ?? "") && (
+                <p className="sm:col-span-2 -mt-2 text-xs text-muted-foreground">
+                  Save only: the next scan moves this channel's existing files to the new folder. Use Save &amp; Move to see what moves first.
+                </p>
+              )}
               {channel.folder_path && (
                 <p className="sm:col-span-2 -mt-2 text-xs text-muted-foreground">
-                  This channel's folder: <code className="font-mono break-all">{channel.folder_path}</code>
+                  This channel's folder: <code className="font-mono [overflow-wrap:anywhere]"><PathText path={channel.folder_path} /></code>
                 </p>
               )}
             </div>
@@ -1131,7 +1157,7 @@ export default function ChannelDetailPage() {
           {/* Start Date Filter */}
           <div className="flex items-end gap-1 max-w-xs">
             <Field
-              label="Download From Date"
+              label="Download from date"
               help={<HelpIcon text="Only videos published on or after this date are downloaded. Applies to future scans. Already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" />}
             >
               <Input
@@ -1259,7 +1285,7 @@ export default function ChannelDetailPage() {
               <Switch
                 checked={!!channel.title_filter_is_regex}
                 onCheckedChange={(v) => updateMutation.mutate({ title_filter_is_regex: v })}
-                label="Regex mode"
+                label="Regex (treat the filter as a regular expression)"
               />
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
@@ -1345,7 +1371,7 @@ export default function ChannelDetailPage() {
                     title="Rebuild records of videos that are not downloaded and re-scan"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    Force Re-scan
+                    Force Rescan
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
@@ -2123,12 +2149,12 @@ export default function ChannelDetailPage() {
         )}
       </Dialog>
 
-      {/* Force Re-scan Dialog. Confirm closes the dialog and runs in the background, as before. */}
+      {/* Force Rescan Dialog. Confirm closes the dialog and runs in the background, as before. */}
       <Dialog
         open={forceRescanOpen}
         onClose={() => setForceRescanOpen(false)}
         size="sm"
-        title="Force Re-scan"
+        title="Force Rescan"
         footer={
           <>
             <Button onClick={() => setForceRescanOpen(false)}>
@@ -2145,7 +2171,7 @@ export default function ChannelDetailPage() {
                 }).catch((e: any) => toast(e.message, "error"))
               }}
             >
-              Force Re-scan
+              Force Rescan
             </Button>
           </>
         }

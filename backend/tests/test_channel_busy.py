@@ -346,9 +346,9 @@ async def test_move_all_marks_channel_moving_and_clears_it(monkeypatch, tmp_path
     seen = []
     real = channels_router._move_channel_contents
 
-    async def spy(db, channel, old_dir, new_dir):
+    async def spy(db, channel, old_dir, new_dir, *args):
         seen.append(channel.id in cs._moving_channels)
-        return await real(db, channel, old_dir, new_dir)
+        return await real(db, channel, old_dir, new_dir, *args)
 
     monkeypatch.setattr(channels_router, "_move_channel_contents", spy)
     await channels_router._move_all_task(str(tmp_path / "other"), {cid: str(root)})

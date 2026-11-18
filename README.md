@@ -158,20 +158,16 @@ A channel's videos are listed as episodes. Shorts (60 seconds or less, or on the
 <details>
 <summary><b>Show details</b></summary>
 
-When a download fails, ChannelHoarder classifies the error and provides actionable information:
+When a download fails, ChannelHoarder classifies the error and tells you the cause and what to do. The **Failed** tab on the Downloads page groups failures by cause and gives one tip per group; open a row's Details for the full explanation. The common causes:
 
-| Error Code | Meaning | Auto-Recovery |
-|---|---|---|
-| `RATE_LIMITED` | YouTube is throttling requests | Increases delay automatically |
-| `GEO_BLOCKED` | Video not available in your region | No |
-| `VIDEO_UNAVAILABLE` | Video was deleted or made private | No |
-| `FORMAT_UNAVAILABLE` | No downloadable format (player client hit a DRM/SABR restriction) | Retries; set player client to Default (automatic) if persistent |
-| `PO_TOKEN_FAILURE` | PO token server is not responding | Retries after health check |
-| `YTDLP_OUTDATED` | yt-dlp needs an update | Update the image; each build ships current yt-dlp |
-| `FFMPEG_ERROR` | Post-processing failed | Retries up to 3 times |
-| `DISK_FULL` | Not enough storage space | No |
-| `NETWORK_ERROR` | Connection issue | Retries with backoff |
-| `AUTH_EXPIRED` | Authentication needs refresh | Retries with new token |
+- **Rate limited, network error, download stalled, merge (ffmpeg) error, PO token failure.** These retry on their own, up to **Max Retries** (Settings > General). Once the retries run out, fix the cause (raise the download delay, check the connection and free disk space, check the PO token server) and use **Retry all**.
+- **Disk full.** The queue pauses until you free space on the downloads volume and press **Resume**.
+- **Quality too low.** Only formats below the channel's minimum quality were offered. They retry after 1, 6 and 24 hours; use **Download anyway** to take the best quality now.
+- **Authentication required or age restricted.** Upload fresh cookies in Settings > Authentication, then retry.
+- **Scan failed.** The channel's video list could not be read. The scan tries again on its next run; see Settings > Diagnostics if it keeps failing.
+- **No usable format.** Set the player client to Default (automatic) in Settings > Authentication, then retry.
+- **Unavailable, private, removed or geo-blocked.** The video itself is gone or blocked, so a retry will not help.
+- **yt-dlp outdated.** Update the image; each build ships a current yt-dlp.
 
 Each channel also shows a health indicator: **Green** (recent downloads succeeded), **Yellow** (some recent failures), or **Red** (most/all recent downloads failing, with the specific error reason shown).
 
@@ -237,7 +233,7 @@ If you already added channels to an existing TV library, move them to the new li
 | `PUID` | `1000` | User ID for file permissions |
 | `PGID` | `1000` | Group ID for file permissions |
 | `TZ` | `America/New_York` | Timezone for scheduling |
-| `LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warning`, `error`) |
+| `LOG_LEVEL` | `info` | Logging level (`debug`, `info`, `warning`, `error`). Starting value only; change it in Settings > General |
 | `YOUTUBE_API_KEY` | *(empty)* | Optional YouTube Data API v3 key for reliable channel discovery |
 | `POT_SERVER_ENABLED` | `true` | Enable the built-in PO token server |
 | `POT_SERVER_URL` | `http://127.0.0.1:4416` | PO token server address (internal to container) |
@@ -247,13 +243,13 @@ If you already added channels to an existing TV library, move them to the new li
 | `TEMP_DIR` | *(empty)* | Optional folder for in-progress downloads, such as a volume on an SSD. Finished videos are then moved into their download folder, so a slow or external download drive only gets the finished file. Empty means downloads happen inside the download folder itself |
 | `COOKIE_WATCH_DIR` | `/cookies` | Directory watched for cookie file updates |
 | `MAX_CONCURRENT_DOWNLOADS` | `1` | Maximum simultaneous downloads |
-| `MAX_RETRIES` | `3` | Retry attempts for failed downloads |
+| `MAX_RETRIES` | `3` | Retry attempts for failed downloads. Starting value only; change it in Settings > General |
 | `DOWNLOAD_DELAY_MIN` | `10` | Minimum delay between downloads (seconds) |
 | `DOWNLOAD_DELAY_MAX` | `30` | Maximum delay between downloads (seconds) |
 | `JITTER_ENABLED` | `true` | Add random 0–10s jitter between downloads |
-| `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings |
+| `USER_AGENT_ROTATION` | `true` | Rotate browser user-agent strings. Starting value only; change it in Settings > Anti-Detection |
 
-From 2.0, `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting values only. Whatever is saved in Settings wins.
+`MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting values only. Once a value is saved in Settings, its variable no longer applies.
 
 </details>
 
@@ -295,7 +291,7 @@ All settings are on the **Settings** page, in seven tabs. Type in the search box
 - **Notifications** - Telegram, Pushover, and Discord configuration with test buttons, per-event toggles
 - **Diagnostics** - System overview and the diagnostic report, error logs, system logs, the Library Check and Shared Folders repair tools
 
-Environment variables set the starting values; see the table above.
+Environment variables are starting values; once a value is saved in Settings, its variable no longer applies (see the table above).
 
 </details>
 
@@ -480,6 +476,11 @@ Two tools fix problems older versions could leave behind. Both show what they fo
 <summary><b>Show details</b></summary>
 
 **Queue not downloading / stuck**
+- Look for a **Queue paused** banner on the Downloads page. It gives the reason: paused by you, disk full, or cookies expired. Press **Resume** (disk full needs free space first; expired cookies need a fresh upload)
+- The strip across the top of the app lists anything that needs you (a pause, a full disk, expired cookies, overdue scans); its button goes to the fix
+- If a scan window is set (Settings → Scanning), scans only run inside it, so channels can wait for the next window
+- A row reading **Waiting for higher quality** is held back on purpose: only low formats were offered, and it retries after 1, 6 and 24 hours. **Download anyway** skips the wait
+- A row reading **Waiting: channel is finishing its current download first** (or moving files, or scanning) starts by itself once that work ends
 - Check Settings → Authentication: the PO token status must read **Running**. If it says **Not responding**, restart the container; uploading cookies works as a fallback
 - Check Settings → Diagnostics → System Logs for error details
 - If cookies expired, upload fresh ones via Settings → Authentication

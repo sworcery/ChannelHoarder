@@ -176,7 +176,7 @@ async def test_overdue_scans(env):
         alerts = await dashboard.get_alerts(db)
         assert _ids(alerts) == ["overdue_scans"]
         assert alerts[0]["title"].startswith("1 channel overdue")
-        assert "widen" in alerts[0]["message"]
+        assert "catch up" in alerts[0]["message"]
 
 
 async def test_priority_order(env, monkeypatch):

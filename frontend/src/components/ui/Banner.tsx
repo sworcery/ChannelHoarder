@@ -27,10 +27,12 @@ interface BannerProps {
   className?: string
   /** Override the live-region role; use "status" for a condition that stays on screen. */
   role?: "alert" | "status"
+  /** Keep the action beside the text on phones; by default it drops under the text. */
+  inlineAction?: boolean
   children?: ReactNode
 }
 
-export function Banner({ tone = "info", title, action, className, role, children }: BannerProps) {
+export function Banner({ tone = "info", title, action, className, role, inlineAction, children }: BannerProps) {
   const Icon = ICONS[tone]
   return (
     <div
@@ -42,7 +44,7 @@ export function Banner({ tone = "info", title, action, className, role, children
         {title && <p className="font-semibold">{title}</p>}
         {children && <div className={cn(title && "mt-0.5", "text-foreground/80")}>{children}</div>}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className={cn("shrink-0", !inlineAction && "max-sm:basis-full")}>{action}</div>}
     </div>
   )
 }

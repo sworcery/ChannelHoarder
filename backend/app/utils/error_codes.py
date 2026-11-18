@@ -1,3 +1,4 @@
+import errno
 from enum import Enum
 from dataclasses import dataclass
 
@@ -280,9 +281,25 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
 }
 
 
-def classify_error(error_str: str) -> ErrorCode:
-    """Classify an error string into an ErrorCode."""
+def _has_enospc(exc: BaseException | None) -> bool:
+    """True if the exception (or anything it was raised from) is an out-of-space OSError."""
+    seen = 0
+    while exc is not None and seen < 10:
+        if isinstance(exc, OSError) and exc.errno == errno.ENOSPC:
+            return True
+        exc = exc.__cause__ or exc.__context__
+        seen += 1
+    return False
+
+
+def classify_error(error_str: str, exc: BaseException | None = None) -> ErrorCode:
+    """Classify an error string into an ErrorCode. Out-of-space is decided first, by
+    errno when the exception is known, else by text: error messages carry full paths,
+    and a folder named "Sign in" or "Network" must not hide a full disk."""
     error_lower = error_str.lower()
+
+    if _has_enospc(exc) or "no space left" in error_lower or "disk full" in error_lower or "enospc" in error_lower:
+        return ErrorCode.DISK_FULL
 
     if "live event" in error_lower or "premieres in" in error_lower or "will begin in" in error_lower:
         return ErrorCode.LIVESTREAM_SCHEDULED
@@ -322,9 +339,6 @@ def classify_error(error_str: str) -> ErrorCode:
 
     if any(x in error_lower for x in ["connection", "timeout", "dns", "socket", "network", "ssl"]):
         return ErrorCode.NETWORK_ERROR
-
-    if "no space left" in error_lower or "disk full" in error_lower or "enospc" in error_lower:
-        return ErrorCode.DISK_FULL
 
     if "ffmpeg" in error_lower or "postprocess" in error_lower or "muxing" in error_lower:
         return ErrorCode.FFMPEG_ERROR
