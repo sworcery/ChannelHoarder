@@ -84,37 +84,150 @@ def move_video_files(old_path: str, new_path: str, overwrite: bool = False) -> i
 
     Returns the number of files moved.
     """
-    moved = 0
     os.makedirs(os.path.dirname(new_path), exist_ok=True)
+    _place_file(old_path, new_path, overwrite)
+    return 1 + move_sidecar_files(old_path, new_path, overwrite)
 
-    # shutil.move falls through to os.rename on POSIX, which silently overwrites
-    # an existing destination. Without overwrite, refuse rather than destroy a
-    # different video that already occupies new_path (possible with a custom
-    # naming template that lacks unique tokens like {video_id}).
-    if os.path.exists(new_path) and os.path.abspath(old_path) != os.path.abspath(new_path):
+
+def _place_file(src: str, dst: str, overwrite: bool) -> None:
+    """Move src to dst without ever deleting the only copy of a file.
+
+    If dst already exists and is the very same file (case-insensitive filesystem,
+    two bind mounts of one folder), nothing on disk is touched.
+    A different file at dst is replaced only when overwrite is set and the sizes
+    match; otherwise FileExistsError is raised and both files are left alone.
+    """
+    if os.path.exists(dst):
+        if os.path.samefile(src, dst):
+            # Already reachable at dst (same path, case-insensitive name, another
+            # mount of the same folder, or a hard link). Touch nothing: any rename
+            # here could strand or delete the only copy. Callers record dst.
+            return
         if not overwrite:
+            raise FileExistsError(f"Refusing to move {src} onto existing file {dst}")
+        if os.path.getsize(src) != os.path.getsize(dst):
             raise FileExistsError(
-                f"Refusing to move {old_path} onto existing file {new_path}"
+                f"Refusing to replace {dst} with a different file {src} (sizes differ)"
             )
-        os.remove(new_path)
-    shutil.move(old_path, new_path)
-    moved += 1
+    # Same filesystem: one atomic rename (replacing an allowed dst in place).
+    try:
+        os.replace(src, dst)
+        return
+    except OSError:
+        pass
+    # Another filesystem (e.g. a different bind mount): copy under a temporary
+    # name and only then take dst's name, so a failed copy never leaves a
+    # half-written file at dst that would block every retry.
+    tmp = dst + ".chmove"
+    try:
+        shutil.copyfile(src, tmp)
+        try:
+            shutil.copystat(src, tmp)
+        except OSError:
+            pass  # e.g. NTFS/exFAT refusing permission or time changes
+        os.replace(tmp, dst)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    os.remove(src)
 
+
+def move_sidecar_files(old_path: str, new_path: str, overwrite: bool = False) -> int:
+    """Move the sidecar files of a video (nfo, thumbnails, subtitles). Returns the count moved."""
+    moved = 0
     old_base = os.path.splitext(old_path)[0]
     new_base = os.path.splitext(new_path)[0]
     for ext in ASSOCIATED_EXTENSIONS:
         old_extra = old_base + ext
         if os.path.exists(old_extra):
-            new_extra = new_base + ext
             try:
-                if overwrite and os.path.exists(new_extra):
-                    os.remove(new_extra)
-                shutil.move(old_extra, new_extra)
+                _place_file(old_extra, new_base + ext, overwrite)
                 moved += 1
             except Exception as e:
                 logger.warning("Failed to move sidecar %s: %s", old_extra, e)
-
     return moved
+
+
+_CHANNEL_IMAGE_STEMS = ("poster", "fanart", "banner", "folder", "logo", "landscape", "clearart")
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _is_channel_metadata_name(name: str) -> bool:
+    low = name.lower()
+    if low == "tvshow.nfo":
+        return True
+    stem, ext = os.path.splitext(low)
+    if ext not in _IMAGE_EXTS:
+        return False
+    if stem in _CHANNEL_IMAGE_STEMS:
+        return True
+    # Kodi/Plex season artwork in the show root, e.g. season01-poster.jpg
+    return stem.startswith("season") and stem.rsplit("-", 1)[-1] in _CHANNEL_IMAGE_STEMS
+
+
+def move_channel_metadata(old_channel_dir: str, new_channel_dir: str) -> tuple[int, list[str]]:
+    """Move a channel's own metadata (tvshow.nfo, channel and season artwork).
+
+    Never overwrites a destination file and never touches other files.
+    Returns (files moved, error messages).
+    """
+    moved = 0
+    errors: list[str] = []
+    if not os.path.isdir(old_channel_dir):
+        return moved, errors
+
+    def _move_matching(src_dir: str, dst_dir: str) -> None:
+        nonlocal moved
+        try:
+            names = os.listdir(src_dir)
+        except OSError as e:
+            errors.append(f"{src_dir}: {e}")
+            return
+        for name in names:
+            src = os.path.join(src_dir, name)
+            if not os.path.isfile(src) or not _is_channel_metadata_name(name):
+                continue
+            dst = os.path.join(dst_dir, name)
+            if os.path.exists(dst):
+                continue
+            try:
+                os.makedirs(dst_dir, exist_ok=True)
+                shutil.move(src, dst)
+                moved += 1
+            except Exception as e:
+                errors.append(f"{src}: {e}")
+
+    _move_matching(old_channel_dir, new_channel_dir)
+    try:
+        subdirs = [d for d in os.listdir(old_channel_dir)
+                   if d.lower().startswith("season") and os.path.isdir(os.path.join(old_channel_dir, d))]
+    except OSError:
+        subdirs = []
+    for d in subdirs:
+        _move_matching(os.path.join(old_channel_dir, d), os.path.join(new_channel_dir, d))
+    return moved, errors
+
+
+def count_files(root: str) -> int:
+    """Count files left under root."""
+    return sum(len(files) for _, _, files in os.walk(root))
+
+
+def remove_empty_dirs(root: str) -> None:
+    """Remove empty folders under root and root itself if empty, bottom-up.
+
+    Uses os.rmdir only, so anything holding a file is kept. Never goes above root.
+    """
+    if not os.path.isdir(root) or os.path.islink(root):
+        return
+    for dirpath, _dirs, _files in os.walk(root, topdown=False):
+        try:
+            os.rmdir(dirpath)
+        except OSError:
+            pass
 
 
 def delete_video_files(file_path: str) -> int:

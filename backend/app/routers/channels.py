@@ -1402,11 +1402,122 @@ async def move_all_preview(
     }
 
 
+def _same_channel_folder(channel_name: str, old_dir: str, new_dir: str) -> bool:
+    safe_name = sanitize_filename(channel_name)
+    return _same_location(os.path.join(old_dir, safe_name), os.path.join(new_dir, safe_name))
+
+
+def _same_location(a: str, b: str) -> bool:
+    """True when a and b are the same place. Uses device/inode when both exist
+    (case-insensitive filesystems, overlapping bind mounts), realpath otherwise."""
+    try:
+        if os.path.exists(a) and os.path.exists(b):
+            return os.path.samefile(a, b)
+    except OSError:
+        pass
+    return os.path.realpath(a) == os.path.realpath(b)
+
+
+def _is_default_dir(new_dir: str) -> bool:
+    return os.path.realpath(new_dir) == os.path.realpath(settings.DOWNLOAD_DIR)
+
+
+def _remap_path(file_path: str, old_dir: str, new_dir: str) -> str | None:
+    """Re-root file_path from old_dir to new_dir; None if it isn't under old_dir."""
+    old_n = os.path.normpath(old_dir)
+    new_n = os.path.normpath(new_dir)
+    fp = os.path.normpath(file_path)
+    if not fp.startswith(old_n.rstrip(os.sep) + os.sep):
+        return None
+    return os.path.join(new_n, fp[len(old_n.rstrip(os.sep)) + 1:])
+
+
+async def _move_channel_contents(
+    db: AsyncSession, channel: Channel, old_dir: str, new_dir: str
+) -> tuple[int, list[str], int]:
+    """Move one channel's videos and metadata from old_dir to new_dir.
+
+    Each video's new file_path is committed right after its files move; a video
+    whose move fails keeps its files and DB path. Nothing is deleted except
+    folders left empty inside the old channel folder.
+    Returns (videos moved, error messages, untracked files left behind).
+    """
+    from app.utils.file_utils import (
+        count_files, move_channel_metadata, move_sidecar_files, remove_empty_dirs,
+    )
+
+    safe_name = sanitize_filename(channel.channel_name)
+    old_channel_dir = os.path.join(old_dir, safe_name)
+    new_channel_dir = os.path.join(new_dir, safe_name)
+    moved = 0
+    errors: list[str] = []
+
+    # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
+    result = await db.execute(
+        select(Video.id, Video.file_path).where(
+            Video.channel_id == channel.id, Video.file_path.isnot(None)
+        )
+    )
+    for video_pk, old_path in result.all():
+        if not old_path:
+            continue
+        new_path = _remap_path(old_path, old_dir, new_dir)
+        if new_path is None or _same_location(new_path, old_path):
+            continue
+        try:
+            if os.path.exists(old_path):
+                await asyncio.to_thread(move_video_files, old_path, new_path, True)
+            elif os.path.exists(new_path):
+                # An earlier run moved the file but didn't record it: heal the path
+                # and bring over any sidecars it left behind.
+                await asyncio.to_thread(move_sidecar_files, old_path, new_path, True)
+            else:
+                continue
+            video = await db.get(Video, video_pk)
+            video.file_path = new_path
+            await db.commit()
+        except Exception as e:
+            logger.warning("Failed to move %s: %s", old_path, e)
+            errors.append(f"{old_path}: {e}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            continue
+        moved += 1
+
+    if not errors:
+        _, meta_errors = await asyncio.to_thread(
+            move_channel_metadata, old_channel_dir, new_channel_dir
+        )
+        for err in meta_errors:
+            logger.warning("Channel metadata not moved: %s", err)
+
+    await asyncio.to_thread(remove_empty_dirs, old_channel_dir)
+    left = await asyncio.to_thread(count_files, old_channel_dir) if os.path.isdir(old_channel_dir) else 0
+    return moved, errors, left
+
+
+def _failure_message(errors: list[str]) -> str:
+    return f"{len(errors)} errors, first: " + "; ".join(errors[:3])
+
+
+# Moves in flight. Two moves of the same files at once could race between one
+# task's finished copy and the other's equal-size replace, so they're refused.
+_moving_channels: set[int] = set()
+_move_all_running = False
+
+
 async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
     """Background task to move a channel's files using DB file_path as source of truth."""
-    import shutil
+    try:
+        await _move_channel_task_inner(channel_id, new_dir, old_dir)
+    finally:
+        _moving_channels.discard(channel_id)
+
+
+async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
     from app.database import async_session
-    from app.utils.file_utils import sanitize_filename
     from app.services.notification_service import NotificationService
 
     async with async_session() as db:
@@ -1414,50 +1525,44 @@ async def _move_channel_task(channel_id: int, new_dir: str, old_dir: str):
         if not channel:
             return
 
-        safe_name = sanitize_filename(channel.channel_name)
-        new_channel_dir = os.path.join(new_dir, safe_name)
+        if _same_channel_folder(channel.channel_name, old_dir, new_dir):
+            # Another name for the same folder (second mount, different case).
+            await NotificationService.broadcast("move_complete", {
+                "channel_name": channel.channel_name,
+                "message": f"'{channel.channel_name}' is already in that folder; nothing to move",
+            })
+            return
+
+        logger.info("Moving channel '%s' files to %s", channel.channel_name, new_dir)
+        name = channel.channel_name
         moved_files = 0
-        errors = 0
+        try:
+            moved_files, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
+            if not errors:
+                channel.download_dir = None if _is_default_dir(new_dir) else new_dir
+                await db.commit()
+        except Exception as e:
+            logger.error("Move of '%s' crashed: %s", name, e, exc_info=True)
+            errors, left = [str(e)], 0
 
-        logger.info("Moving channel '%s' files to %s", channel.channel_name, new_channel_dir)
+        if errors:
+            # Keep the channel's folder setting so the unmoved videos stay where they are.
+            await NotificationService.broadcast("move_complete", {
+                "channel_name": name,
+                "failed": True,
+                "message": (f"Move of '{name}' FAILED: {moved_files} files moved, "
+                            + _failure_message(errors)),
+            })
+            logger.error("Move failed for '%s': %d moved, %s", name, moved_files,
+                         _failure_message(errors))
+            return
 
-        result = await db.execute(
-            select(Video).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
-        )
-        for video in result.scalars().all():
-            if not video.file_path:
-                continue
-
-            new_path = video.file_path.replace(old_dir, new_dir, 1)
-            if new_path == video.file_path:
-                continue
-
-            if not os.path.exists(video.file_path):
-                continue
-
-            try:
-                await asyncio.to_thread(move_video_files, video.file_path, new_path, True)
-                video.file_path = new_path
-                moved_files += 1
-            except Exception as e:
-                logger.warning("Failed to move %s: %s", video.file_path, e)
-                errors += 1
-
-        old_channel_dir = os.path.join(old_dir, safe_name)
-        if os.path.isdir(old_channel_dir):
-            try:
-                shutil.rmtree(old_channel_dir)
-            except OSError:
-                pass
-
-        channel.download_dir = new_dir if new_dir != settings.DOWNLOAD_DIR else None
-        await db.commit()
-
+        extra = f", {left} other files left in the old folder" if left else ""
         await NotificationService.broadcast("move_complete", {
             "channel_name": channel.channel_name,
-            "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files, {errors} errors)",
+            "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files{extra})",
         })
-        logger.info("Move complete for '%s': %d files moved, %d errors", channel.channel_name, moved_files, errors)
+        logger.info("Move complete for '%s': %d files moved, %d left", channel.channel_name, moved_files, left)
 
 
 @router.post("/{channel_id}/move-files", status_code=202)
@@ -1489,12 +1594,16 @@ async def move_channel_files(
     if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
         return {"message": f"'{channel.channel_name}' is already in {body.new_download_dir}"}
 
+    if channel_id in _moving_channels or _move_all_running:
+        raise HTTPException(status_code=409, detail="A move of this channel's files is already running")
+
     # Count files to decide sync vs async
     file_count = await db.scalar(
         select(func.count(Video.id)).where(Video.channel_id == channel_id, Video.file_path.isnot(None))
     ) or 0
 
     # Do NOT update channel.download_dir here - the background task handles it after move completes
+    _moving_channels.add(channel_id)
     asyncio.create_task(_move_channel_task(channel_id, body.new_download_dir, old_dir))
 
     return {"message": f"Moving '{channel.channel_name}' to {body.new_download_dir} ({file_count} files)"}
@@ -1502,9 +1611,15 @@ async def move_channel_files(
 
 async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
     """Background task to move all channels."""
-    import shutil
+    global _move_all_running
+    try:
+        await _move_all_task_inner(new_dir, old_dirs)
+    finally:
+        _move_all_running = False
+
+
+async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
     from app.database import async_session
-    from app.utils.file_utils import sanitize_filename
     from app.services.notification_service import NotificationService
 
     async with async_session() as db:
@@ -1512,60 +1627,55 @@ async def _move_all_task(new_dir: str, old_dirs: dict[int, str]):
         channels = result.scalars().all()
 
         total_moved = 0
-        total_errors = 0
+        all_errors: list[str] = []
+        total_left = 0
         channels_moved = 0
+        channels_failed = 0
 
-        for channel in channels:
-            old_dir = old_dirs.get(channel.id, channel.download_dir or settings.DOWNLOAD_DIR)
-            if old_dir == new_dir:
+        # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
+        infos = [(c.id, c.channel_name, c.download_dir) for c in channels]
+
+        for cid, cname, cdir in infos:
+            old_dir = old_dirs.get(cid, cdir or settings.DOWNLOAD_DIR)
+            if _same_channel_folder(cname, old_dir, new_dir):
                 continue
 
-            safe_name = sanitize_filename(channel.channel_name)
-            new_channel_dir = os.path.join(new_dir, safe_name)
-
-            vid_result = await db.execute(
-                select(Video).where(Video.channel_id == channel.id, Video.file_path.isnot(None))
-            )
-            channel_moved = 0
-            for video in vid_result.scalars().all():
-                if not video.file_path:
-                    continue
-
-                new_path = video.file_path.replace(old_dir, new_dir, 1)
-                if new_path == video.file_path:
-                    continue
-
-                if not os.path.exists(video.file_path):
-                    continue
-
+            try:
+                channel = await db.get(Channel, cid)
+                channel_moved, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
+                if not errors:
+                    channel = await db.get(Channel, cid)
+                    channel.download_dir = None if _is_default_dir(new_dir) else new_dir
+                    await db.commit()
+            except Exception as e:
+                logger.error("Move of '%s' crashed: %s", cname, e, exc_info=True)
+                channel_moved, errors, left = 0, [f"{cname}: {e}"], 0
                 try:
-                    await asyncio.to_thread(move_video_files, video.file_path, new_path, True)
-                    video.file_path = new_path
-                    channel_moved += 1
-                except Exception as e:
-                    logger.warning("Failed to move %s: %s", video.file_path, e)
-                    total_errors += 1
-
-            # Clean up empty source directories
-            old_channel_dir = os.path.join(old_dir, safe_name)
-            if os.path.isdir(old_channel_dir):
-                try:
-                    shutil.rmtree(old_channel_dir)
-                except OSError:
+                    await db.rollback()  # else every later channel fails with PendingRollbackError
+                except Exception:
                     pass
+            total_moved += channel_moved
+            total_left += left
+            if errors:
+                # Leave this channel's folder setting alone; its unmoved videos stay put.
+                channels_failed += 1
+                all_errors.extend(errors)
+                continue
 
             if channel_moved > 0:
                 channels_moved += 1
-                total_moved += channel_moved
 
-            channel.download_dir = new_dir if new_dir != settings.DOWNLOAD_DIR else None
-
-        await db.commit()
-
-        await NotificationService.broadcast("move_complete", {
-            "message": f"Moved {channels_moved} channels to {new_dir} ({total_moved} files, {total_errors} errors)",
-        })
-        logger.info("Move all complete: %d channels, %d files moved, %d errors", channels_moved, total_moved, total_errors)
+        extra = f", {total_left} other files left in old folders" if total_left else ""
+        if all_errors:
+            message = (f"Move all FAILED for {channels_failed} channels ({channels_moved} moved, "
+                       f"{total_moved} files): " + _failure_message(all_errors))
+            logger.error(message)
+        else:
+            message = f"Moved {channels_moved} channels to {new_dir} ({total_moved} files{extra})"
+            logger.info("Move all complete: %d channels, %d files moved", channels_moved, total_moved)
+        await NotificationService.broadcast(
+            "move_complete", {"message": message, "failed": bool(all_errors)}
+        )
 
 
 @router.post("/move-all", status_code=202)
@@ -1580,11 +1690,16 @@ async def move_all_channels(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    global _move_all_running
+    if _move_all_running or _moving_channels:
+        raise HTTPException(status_code=409, detail="A move is already running; wait for it to finish")
+
     # Capture all old directories BEFORE any changes
     result = await db.execute(select(Channel).where(Channel.channel_id != "__standalone__"))
     channels = result.scalars().all()
     old_dirs = {ch.id: (ch.download_dir or settings.DOWNLOAD_DIR) for ch in channels}
 
+    _move_all_running = True
     asyncio.create_task(_move_all_task(body.new_download_dir, old_dirs))
 
     return {"message": f"Moving all channels to {body.new_download_dir}"}

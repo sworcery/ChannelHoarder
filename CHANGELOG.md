@@ -5,6 +5,19 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.50] - unreleased
+
+### Fixed
+- **Moving a channel's download folder no longer deletes files.** After moving a channel (or using Move All), the old folder was deleted outright, even when some videos had failed to move and with any files ChannelHoarder doesn't track (posters, `tvshow.nfo`, your own files). Moving everything to the same folder with a trailing slash, such as `/downloads/`, could delete every channel in the default folder. Now:
+  - only empty folders are removed;
+  - the channel's posters and `tvshow.nfo` move with it;
+  - any other files stay where they are and are counted;
+  - each video is recorded as moved as soon as it's done;
+  - a move to another drive copies under a temporary name first;
+  - a failure is shown as an error that stays on screen, and the channel keeps its old folder setting so nothing is stranded.
+  
+  A folder reached by two paths (another Docker mount of the same folder, or a different upper/lower case on drives that ignore case) is recognised as the same folder rather than treated as a destination to clear. Running the move again picks up where a failed one stopped, and a second move of the same channel can't start while one is running.
+
 ## [1.9.49] - 2026-11-17
 
 ### Added

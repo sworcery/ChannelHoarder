@@ -59,7 +59,11 @@ function GlobalNotifications() {
   useEffect(() => {
     return subscribe((msg) => {
       if (msg.type === "move_complete") {
-        toast(msg.payload.message || "File move complete")
+        if (msg.payload.failed) {
+          toast(msg.payload.message || "File move failed", "error")
+        } else {
+          toast(msg.payload.message || "File move complete")
+        }
       }
     })
   }, [subscribe, toast])
