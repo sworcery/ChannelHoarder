@@ -61,6 +61,10 @@ async def lifespan(app: FastAPI):
             await db.commit()
             logger.info("Reset %d stale queue entries on startup", len(stale))
 
+        # Queue flags: rewrite old raw values into canonical JSON (before the generic fix below)
+        from app.services.queue_state import normalize_flags
+        await normalize_flags(db)
+
         # Fix corrupt settings values (last_successful_auth written without json.dumps in older versions)
         from app.models import AppSetting as _AS
         import json as _json

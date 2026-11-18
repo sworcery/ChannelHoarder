@@ -12,6 +12,7 @@ from app.deps import get_db
 from app.models import AppSetting, Channel
 from app.schemas import SettingsUpdate, NamingPreviewRequest, NamingPreviewResponse
 from app.services.channel_service import pick_channel_folder
+from app.services.queue_state import FLAG_KEYS
 from app.utils.file_utils import channel_folder_name, sanitize_filename
 from app.services.naming_service import preview_naming, DEFAULT_TEMPLATE
 
@@ -197,7 +198,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
     SENSITIVE_KEYS = {
         "telegram_bot_token", "pushover_app_token", "pushover_user_key",
         "youtube_api_key", "telegram_chat_id", "discord_webhook_url",
-    }
+    } | set(FLAG_KEYS)  # queue pause / cookie state belongs to this install, not the backup
     settings_dict = {}
     for s in settings_list:
         if s.key in SENSITIVE_KEYS:
@@ -261,7 +262,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
     # Merge settings
     for key, value in data.get("settings", {}).items():
         # Skip sensitive keys that shouldn't be imported
-        if key in ("last_successful_auth",):
+        if key == "last_successful_auth" or key in FLAG_KEYS:
             continue
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
         setting = result.scalar_one_or_none()

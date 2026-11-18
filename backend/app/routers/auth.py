@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session
 from app.models import AppSetting
+from app.services.queue_state import get_cookies_expired, resume_if_paused_for_cookies
 from app.services.youtube_api_service import YouTubeAPIService
 
 logger = logging.getLogger(__name__)
@@ -58,23 +59,13 @@ async def upload_cookies(file: UploadFile = File(...)):
 
     # Clear the cookies_expired flag since we have fresh cookies
     async with async_session() as db:
-        result = await db.execute(
-            select(AppSetting).where(
-                AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
-            )
-        )
-        flags = {s.key: s for s in result.scalars().all()}
-        if flags.get("cookies_expired"):
-            flags["cookies_expired"].value = "false"
-        if flags.get("queue_paused") and flags["queue_paused"].value == "true":
-            flags["queue_paused"].value = "false"
-            logger.info("Queue auto-unpaused after fresh cookie upload")
-        if flags.get("queue_pause_reason"):
-            flags["queue_pause_reason"].value = ""
+        resumed = await resume_if_paused_for_cookies(db)
         await db.commit()
 
-    logger.info("Cookies uploaded: %d bytes (expired flag cleared, queue unpaused)", len(content))
-    return {"message": "Cookies uploaded successfully. Queue resumed.", "size": len(content)}
+    logger.info("Cookies uploaded: %d bytes (expired flag cleared%s)", len(content),
+                ", queue resumed" if resumed else "")
+    return {"message": "Cookies uploaded successfully." + (" Queue resumed." if resumed else ""),
+            "size": len(content)}
 
 
 class CookiePushRequest(BaseModel):
@@ -95,23 +86,12 @@ async def push_cookies(body: CookiePushRequest):
 
     # Clear expired flag and unpause queue (same logic as file upload)
     async with async_session() as db:
-        result = await db.execute(
-            select(AppSetting).where(
-                AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
-            )
-        )
-        flags = {s.key: s for s in result.scalars().all()}
-        if flags.get("cookies_expired"):
-            flags["cookies_expired"].value = "false"
-        if flags.get("queue_paused") and flags["queue_paused"].value == "true":
-            flags["queue_paused"].value = "false"
-            logger.info("Queue auto-unpaused after cookie push")
-        if flags.get("queue_pause_reason"):
-            flags["queue_pause_reason"].value = ""
+        resumed = await resume_if_paused_for_cookies(db)
         await db.commit()
 
-    logger.info("Cookies pushed via API: %d bytes", len(content))
-    return {"message": "Cookies received successfully. Queue resumed.", "size": len(content)}
+    logger.info("Cookies pushed via API: %d bytes%s", len(content), " (queue resumed)" if resumed else "")
+    return {"message": "Cookies received successfully." + (" Queue resumed." if resumed else ""),
+            "size": len(content)}
 
 
 @router.get("/cookies/status")
@@ -256,13 +236,11 @@ async def get_auth_status():
 
         async with async_session() as db:
             result = await db.execute(
-                select(AppSetting).where(
-                    AppSetting.key.in_(["cookies_expired", "last_successful_auth"])
-                )
+                select(AppSetting).where(AppSetting.key == "last_successful_auth")
             )
             db_settings = {s.key: s.value for s in result.scalars().all()}
 
-            if db_settings.get("cookies_expired") == "true":
+            if await get_cookies_expired(db):
                 cookies_status = "expired"
                 cookies_message = "Cookies expired  - please upload fresh cookies.txt"
 

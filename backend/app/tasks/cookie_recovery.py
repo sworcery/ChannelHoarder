@@ -1,11 +1,9 @@
 import asyncio
 import logging
 
-from sqlalchemy import select
-
 from app.database import async_session
-from app.models import AppSetting
 from app.services.notification_service import NotificationService
+from app.services.queue_state import REASON_COOKIES, get_pause_state, resume_if_paused_for_cookies
 from app.services.ytdlp_service import YtdlpService
 
 logger = logging.getLogger(__name__)
@@ -21,16 +19,8 @@ async def check_cookie_recovery():
     yt-dlp auth test to decide whether to resume.
     """
     async with async_session() as db:
-        result = await db.execute(
-            select(AppSetting).where(
-                AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
-            )
-        )
-        flags = {s.key: s for s in result.scalars().all()}
-
-        paused = flags.get("queue_paused")
-        reason = flags.get("queue_pause_reason")
-        if not (paused and paused.value == "true" and reason and reason.value == "cookies_expired"):
+        paused, reason = await get_pause_state(db)
+        if not (paused and reason == REASON_COOKIES):
             return  # Not paused for cookies - nothing to recover
 
         # Cheap auth test (flat metadata extract) - run in a thread to avoid
@@ -40,11 +30,7 @@ async def check_cookie_recovery():
         if not success:
             return  # Still failing - leave it paused
 
-        expired = flags.get("cookies_expired")
-        if expired:
-            expired.value = "false"
-        paused.value = "false"
-        reason.value = ""
+        await resume_if_paused_for_cookies(db)
         await db.commit()
 
         logger.info("Cookie recovery: yt-dlp auth test passed, cookies_expired cleared, queue resumed")

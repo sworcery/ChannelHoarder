@@ -1,10 +1,6 @@
 import logging
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.config import settings
-from app.models import AppSetting
 
 logger = logging.getLogger(__name__)
 
@@ -17,14 +13,11 @@ async def flag_cookies_expired(db: AsyncSession) -> None:
     Tampermonkey/watcher push fresh ones. Deleting the file causes a loop
     where freshly pushed cookies get invalidated by in-flight failures.
     """
-    for key, value in [("cookies_expired", "true"), ("queue_paused", "true"), ("queue_pause_reason", "cookies_expired")]:
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == key)
-        )
-        flag = result.scalar_one_or_none()
-        if flag:
-            flag.value = value
-        else:
-            db.add(AppSetting(key=key, value=value))
+    from app.services.queue_state import REASON_COOKIES, get_pause_state, pause_queue, set_cookies_expired
+
+    await set_cookies_expired(db, True)
+    paused, _reason = await get_pause_state(db)
+    if not paused:  # keep an existing manual / disk_full pause as it is
+        await pause_queue(db, REASON_COOKIES)
 
     logger.warning("Cookies flagged as expired - queue auto-paused (cookie file preserved)")

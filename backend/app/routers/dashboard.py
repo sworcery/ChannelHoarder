@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.models import AppSetting, Channel, Video, DownloadQueue
+from app.models import Channel, Video, DownloadQueue
 from app.schemas import DashboardStats, VideoResponse
+from app.services.queue_state import get_cookies_expired
 from app.services.storage_service import get_storage_usage, format_bytes
 from app.services.ytdlp_service import YtdlpService
 
@@ -60,11 +61,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     )
     custom_dirs = [row[0] for row in custom_dirs_result.all()]
 
-    cookie_flag = await db.execute(
-        select(AppSetting).where(AppSetting.key == "cookies_expired")
-    )
-    cookie_setting = cookie_flag.scalar_one_or_none()
-    cookies_expired = cookie_setting is not None and cookie_setting.value == "true"
+    cookies_expired = await get_cookies_expired(db)
 
     storage = await asyncio.to_thread(lambda: get_storage_usage(custom_dirs=custom_dirs))
 

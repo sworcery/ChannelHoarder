@@ -14,12 +14,10 @@ import logging
 import shutil
 from pathlib import Path
 
-from sqlalchemy import select
-
 from app.config import settings
 from app.database import async_session
-from app.models import AppSetting
 from app.services.notification_service import NotificationService
+from app.services.queue_state import resume_if_paused_for_cookies
 
 logger = logging.getLogger(__name__)
 
@@ -72,17 +70,12 @@ async def watch_cookie_file() -> None:
 
     # Clear expired flag and unpause queue
     async with async_session() as db:
-        for key, value in [("cookies_expired", "false"), ("queue_paused", "false"), ("queue_pause_reason", "")]:
-            result = await db.execute(
-                select(AppSetting).where(AppSetting.key == key)
-            )
-            flag = result.scalar_one_or_none()
-            if flag and flag.value != value:
-                flag.value = value
+        resumed = await resume_if_paused_for_cookies(db)
         await db.commit()
 
-    logger.info("Cookies imported, expired flag cleared, queue unpaused")
+    logger.info("Cookies imported, expired flag cleared%s", ", queue resumed" if resumed else "")
 
     await NotificationService.broadcast("cookies_refreshed", {
-        "message": f"Fresh cookies imported from {source.name} ({file_size} bytes). Queue resumed.",
+        "message": f"Fresh cookies imported from {source.name} ({file_size} bytes)."
+                   + (" Queue resumed." if resumed else ""),
     })

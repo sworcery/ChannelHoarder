@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, Channel, Video, DownloadQueue, DownloadLog
+from app.services import queue_state
 from app.services.diagnostics_service import DiagnosticsService
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
@@ -538,7 +539,7 @@ class DownloadService:
                 # Track last successful auth time and auto-recover from expired state
                 result = await db.execute(
                     select(AppSetting).where(
-                        AppSetting.key.in_(["last_successful_auth", "cookies_expired", "queue_paused", "queue_pause_reason"])
+                        AppSetting.key == "last_successful_auth"
                     )
                 )
                 db_flags = {s.key: s for s in result.scalars().all()}
@@ -547,14 +548,10 @@ class DownloadService:
                     db_flags["last_successful_auth"].value = now_str
                 else:
                     db.add(AppSetting(key="last_successful_auth", value=now_str))
-                if db_flags.get("cookies_expired") and db_flags["cookies_expired"].value == "true":
-                    db_flags["cookies_expired"].value = "false"
-                    reason = db_flags.get("queue_pause_reason")
-                    pause = db_flags.get("queue_paused")
-                    if pause and pause.value == "true" and reason and reason.value == "cookies_expired":
-                        pause.value = "false"
-                        reason.value = ""
-                    logger.info("Auto-recovery: download succeeded, cookies_expired cleared, queue unpaused")
+                if await queue_state.get_cookies_expired(db):
+                    resumed = await queue_state.resume_if_paused_for_cookies(db)
+                    logger.info("Auto-recovery: download succeeded, cookies_expired cleared%s",
+                                ", queue resumed" if resumed else "")
 
                 await db.commit()
                 # A re-download that landed on a different name replaces the old file

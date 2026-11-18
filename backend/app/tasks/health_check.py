@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import async_session
 from app.models import AppSetting, SystemHealthLog
 from app.services.notification_service import NotificationService
+from app.services.queue_state import get_cookies_expired, resume_if_paused_for_cookies
 from app.services.ytdlp_service import YtdlpService
 
 logger = logging.getLogger(__name__)
@@ -87,23 +88,13 @@ async def check_system_health():
 
         if success:
             # Auto-recover: if cookies were previously flagged expired but yt-dlp works now, clear the flag
-            result = await db.execute(
-                select(AppSetting).where(
-                    AppSetting.key.in_(["cookies_expired", "queue_paused", "queue_pause_reason"])
-                )
-            )
-            flags = {s.key: s for s in result.scalars().all()}
-            expired_flag = flags.get("cookies_expired")
-            if expired_flag and expired_flag.value == "true":
-                expired_flag.value = "false"
-                reason_flag = flags.get("queue_pause_reason")
-                pause_flag = flags.get("queue_paused")
-                if pause_flag and pause_flag.value == "true" and reason_flag and reason_flag.value == "cookies_expired":
-                    pause_flag.value = "false"
-                    reason_flag.value = ""
-                logger.info("Auto-recovery: yt-dlp test passed, cookies_expired cleared, queue unpaused")
+            if await get_cookies_expired(db):
+                resumed = await resume_if_paused_for_cookies(db)
+                logger.info("Auto-recovery: yt-dlp test passed, cookies_expired cleared%s",
+                            ", queue resumed" if resumed else "")
                 await NotificationService.broadcast("cookies_refreshed", {
-                    "message": "Cookies are working again. Queue resumed automatically.",
+                    "message": "Cookies are working again."
+                               + (" Queue resumed automatically." if resumed else ""),
                 })
         else:
             await NotificationService.broadcast("health_alert", {

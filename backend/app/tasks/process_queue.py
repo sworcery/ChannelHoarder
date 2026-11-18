@@ -10,6 +10,7 @@ from app.database import async_session
 from app.models import AppSetting, Channel, DownloadQueue, Video
 from app.services.download_service import DownloadService
 from app.services.queue_order import queue_order_by
+from app.services.queue_state import get_pause_state
 from app.services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
@@ -44,11 +45,8 @@ async def process_download_queue():
 
     async with async_session() as db:
         # Check if queue is paused
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "queue_paused")
-        )
-        pause_setting = result.scalar_one_or_none()
-        if pause_setting and pause_setting.value == "true":
+        paused, _reason = await get_pause_state(db)
+        if paused:
             return  # Queue is paused  - don't start new downloads
 
         # Unstick any downloads that have been "active" for more than 4 hours

@@ -11,7 +11,8 @@ from sqlalchemy.orm import joinedload
 
 from app.config import settings as app_settings
 from app.deps import get_db
-from app.models import AppSetting, Channel, DownloadLog, DownloadQueue, Video
+from app.models import Channel, DownloadLog, DownloadQueue, Video
+from app.services import queue_state
 from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryResponse, VideoResponse
 from app.services.queue_order import queue_order_by
 from app.services.settings_service import get_setting
@@ -242,27 +243,17 @@ async def get_active_downloads(db: AsyncSession = Depends(get_db)):
 
 # --- Queue control: pause / resume / clear ---
 
-PAUSE_KEY = "queue_paused"
-
-
 @router.get("/paused")
 async def get_pause_status(db: AsyncSession = Depends(get_db)):
     """Check if the download queue is paused."""
-    result = await db.execute(select(AppSetting).where(AppSetting.key == PAUSE_KEY))
-    setting = result.scalar_one_or_none()
-    paused = setting is not None and setting.value == "true"
+    paused, _reason = await queue_state.get_pause_state(db)
     return {"paused": paused}
 
 
 @router.post("/pause")
 async def pause_queue(db: AsyncSession = Depends(get_db)):
     """Pause the download queue. In-flight downloads will finish, but no new ones will start."""
-    result = await db.execute(select(AppSetting).where(AppSetting.key == PAUSE_KEY))
-    setting = result.scalar_one_or_none()
-    if setting:
-        setting.value = "true"
-    else:
-        db.add(AppSetting(key=PAUSE_KEY, value="true"))
+    await queue_state.pause_queue(db, queue_state.REASON_MANUAL)
     await db.commit()
     logger.info("Download queue PAUSED")
     return {"paused": True, "message": "Queue paused. In-flight downloads will complete."}
@@ -270,13 +261,8 @@ async def pause_queue(db: AsyncSession = Depends(get_db)):
 
 @router.post("/resume")
 async def resume_queue(db: AsyncSession = Depends(get_db)):
-    """Resume the download queue."""
-    result = await db.execute(select(AppSetting).where(AppSetting.key == PAUSE_KEY))
-    setting = result.scalar_one_or_none()
-    if setting:
-        setting.value = "false"
-    else:
-        db.add(AppSetting(key=PAUSE_KEY, value="false"))
+    """Resume the download queue (clears the pause reason)."""
+    await queue_state.resume_queue(db)
     await db.commit()
     logger.info("Download queue RESUMED")
     return {"paused": False, "message": "Queue resumed. Downloads will start within 30 seconds."}
