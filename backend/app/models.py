@@ -96,6 +96,8 @@ class Video(Base):
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     discovered_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
     downloaded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Set when retention deleted the file on purpose; scans and bulk actions leave these alone
+    retention_removed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.now())
 
     channel: Mapped["Channel"] = relationship("Channel", back_populates="videos", lazy="noload")

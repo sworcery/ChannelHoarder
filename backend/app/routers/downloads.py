@@ -89,6 +89,7 @@ async def add_to_queue(body: QueueAdd, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Video already in queue")
 
     video.status = "queued"
+    video.retention_removed_at = None
     db.add(DownloadQueue(video_id=body.video_id, priority=body.priority))
     await db.commit()
     return {"message": "Video added to queue"}
@@ -187,6 +188,7 @@ async def retry_download(video_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=400, detail=f"Cannot retry video with status '{video.status}'")
 
     video.status = "queued"
+    video.retention_removed_at = None
     video.error_code = None
     video.error_message = None
     video.error_details = None

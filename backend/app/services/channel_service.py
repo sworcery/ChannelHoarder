@@ -5,6 +5,7 @@ import re
 import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from sqlalchemy import or_, select, func
 from sqlalchemy.exc import IntegrityError
@@ -313,8 +314,28 @@ class ChannelService:
         finally:
             _scanning_channels.discard(channel.id)
 
-    async def _scan_channel_inner(self, channel: Channel) -> int:
-        """Internal scan implementation."""
+    async def fetch_video_list(self, channel: Channel) -> list[dict]:
+        """Fetch the channel's current video listing ([] when it can't be read)."""
+        from app.utils.platform_utils import supports_api, is_playlist_url
+
+        platform = getattr(channel, "platform", "youtube")
+        is_playlist = is_playlist_url(channel.channel_url)
+        # Try YouTube Data API first (only for channels that support it, not playlists), fall back to yt-dlp
+        # yt-dlp path fetches all tabs (videos/shorts/streams) separately for better classification
+        if self.yt_api and supports_api(platform) and not is_playlist:
+            try:
+                video_list = await self.yt_api.get_channel_videos(channel.channel_id)
+                await self._tag_shorts_from_tab(channel, video_list, platform)
+                return video_list
+            except Exception as e:
+                logger.warning("YouTube API failed for %s, falling back to yt-dlp: %s", channel.channel_name, e)
+        # Playlists and non-API platforms always use yt-dlp
+        return await asyncio.to_thread(
+            self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
+        )
+
+    async def _scan_channel_inner(self, channel: Channel, video_list: Optional[list[dict]] = None) -> int:
+        """Internal scan implementation. A prefetched listing skips the fetch."""
         from app.utils.platform_utils import supports_api, supports_rss, is_playlist_url
         logger.info("Scanning channel: %s", channel.channel_name)
 
@@ -345,22 +366,8 @@ class ChannelService:
         if platform == "youtube" and not is_playlist:
             await self._backfill_channel_art(channel)
 
-        # Try YouTube Data API first (only for channels that support it, not playlists), fall back to yt-dlp
-        # yt-dlp path fetches all tabs (videos/shorts/streams) separately for better classification
-        if self.yt_api and supports_api(platform) and not is_playlist:
-            try:
-                video_list = await self.yt_api.get_channel_videos(channel.channel_id)
-                await self._tag_shorts_from_tab(channel, video_list, platform)
-            except Exception as e:
-                logger.warning("YouTube API failed for %s, falling back to yt-dlp: %s", channel.channel_name, e)
-                video_list = await asyncio.to_thread(
-                    self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
-                )
-        else:
-            # Playlists and non-API platforms always use yt-dlp
-            video_list = await asyncio.to_thread(
-                self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
-            )
+        if video_list is None:
+            video_list = await self.fetch_video_list(channel)
 
         logger.info("Video list returned %d entries for %s (url: %s)",
                     len(video_list) if video_list else 0, channel.channel_name, channel.channel_url)
@@ -690,6 +697,7 @@ class ChannelService:
                     existing_video.episode = episode
                     existing_video.status = "pending"
                     existing_video.monitored = True
+                    existing_video.retention_removed_at = None
                     existing_video.is_short = False
                     existing_video.file_path = None
                     existing_video.file_size = None

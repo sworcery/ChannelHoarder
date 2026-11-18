@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -73,6 +73,7 @@ async def download_all_missing(db: AsyncSession = Depends(get_db)):
         select(Video)
         .where(Video.status.in_(["pending", "failed"]))
         .where(Video.monitored == True)
+        .where(Video.retention_removed_at.is_(None))
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
@@ -578,6 +579,7 @@ async def queue_all_videos(channel_id: int, db: AsyncSession = Depends(get_db)):
         .where(Video.channel_id == channel_id)
         .where(Video.status.in_(["pending", "failed"]))
         .where(Video.monitored == True)
+        .where(Video.retention_removed_at.is_(None))
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
@@ -616,6 +618,7 @@ async def bulk_queue_videos(
     queued = 0
     for video in videos:
         video.status = "queued"
+        video.retention_removed_at = None  # picked by hand, so it's wanted again
         db.add(DownloadQueue(video_id=video.id))
         queued += 1
 
@@ -675,6 +678,7 @@ async def bulk_unskip_videos(
     unskipped = 0
     for video in videos:
         video.status = "pending"
+        video.retention_removed_at = None
         unskipped += 1
 
     await db.commit()
@@ -784,6 +788,7 @@ async def redownload_video(
     video.error_details = None
     video.retry_count = 0
     video.status = "queued"
+    video.retention_removed_at = None
 
     # Add to queue if not already there
     queue_check = await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == video.id))
@@ -946,6 +951,8 @@ async def toggle_video_monitored(
         raise HTTPException(status_code=404, detail="Video not found")
 
     video.monitored = body.monitored
+    if body.monitored:
+        video.retention_removed_at = None
     await db.commit()
     return {"message": f"{'Monitoring' if body.monitored else 'Unmonitoring'} {video.title}", "monitored": body.monitored}
 
@@ -966,6 +973,8 @@ async def bulk_monitor_videos(
     count = 0
     for video in videos:
         video.monitored = body.monitored
+        if body.monitored:
+            video.retention_removed_at = None
         count += 1
     await db.commit()
     return {"message": f"{'Monitored' if body.monitored else 'Unmonitored'} {count} videos", "count": count}
@@ -1093,7 +1102,9 @@ async def monitor_all_videos(
         raise HTTPException(status_code=404, detail="Channel not found")
 
     result = await db.execute(
-        update(Video).where(Video.channel_id == channel_id).values(monitored=body.monitored)
+        update(Video)
+        .where(Video.channel_id == channel_id, Video.retention_removed_at.is_(None))
+        .values(monitored=body.monitored)
     )
     count = result.rowcount
     await db.commit()
@@ -1110,7 +1121,11 @@ async def monitor_season(
     """Set monitored state for all videos in a season."""
     result = await db.execute(
         update(Video)
-        .where(Video.channel_id == channel_id, Video.season == season)
+        .where(
+            Video.channel_id == channel_id,
+            Video.season == season,
+            Video.retention_removed_at.is_(None),
+        )
         .values(monitored=body.monitored)
     )
     count = result.rowcount
@@ -1132,6 +1147,7 @@ async def download_missing_season(
         .where(Video.season == season)
         .where(Video.status.in_(["pending", "failed"]))
         .where(Video.monitored == True)
+        .where(Video.retention_removed_at.is_(None))
         .where(Video.id.notin_(subquery))
     )
     videos = result.scalars().all()
@@ -2056,51 +2072,110 @@ async def force_rescan(
     channel_id: int,
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete all video records for a channel and trigger a fresh scan.
+    """Rebuild a channel's stuck video records and re-scan it.
 
-    Use this to recover from stuck channels (e.g. orphan records from before
-    foreign key fixes). Removes all videos, queue entries, and logs, then
-    re-scans the channel from scratch.
+    Use this to recover from stuck channels. Only monitored videos that are
+    pending, failed or queued and have no file are deleted (with their queue
+    entries and logs) and rebuilt from a fresh scan. Downloaded, skipped,
+    unmonitored, retention-removed and downloading videos are kept as they are.
+    The listing is fetched first, and nothing changes if it is empty or can't be
+    read. Afterwards files on disk are re-linked by video id and episodes are
+    renumbered in date order.
     """
-    from sqlalchemy import delete as sa_delete
-
     result = await db.execute(select(Channel).where(Channel.id == channel_id))
     channel = result.scalar_one_or_none()
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Videos downloaded and then deliberately removed (retention): keep them skipped
-    removed_result = await db.execute(
-        select(Video.video_id).where(
-            Video.channel_id == channel.id,
-            Video.status == "skipped",
-            Video.monitored.is_(False),
-            Video.downloaded_at.is_not(None),
-        )
-    )
-    removed_video_ids = [r[0] for r in removed_result.all()]
+    if channel_id in _scanning_channels:
+        raise HTTPException(status_code=409, detail="A scan is running for this channel. Try again when it finishes.")
 
-    # Delete all child records
-    video_ids = select(Video.id).where(Video.channel_id == channel.id)
+    # Held for the whole run so scheduled and RSS scans skip this channel
+    _scanning_channels.add(channel_id)
+    try:
+        return await _force_rescan_locked(channel, db)
+    finally:
+        _scanning_channels.discard(channel_id)
+
+
+async def _number_rebuilt_rows(db: AsyncSession, channel_id: int, kept_ids: set[int]) -> None:
+    """Give rows the rescan re-created episode numbers no kept row uses.
+
+    The scan numbers new rows after the rows already in a season, which can repeat
+    a kept episode number (Plex then shows only one of the two). Kept rows keep
+    their numbers and files are never renamed: a rebuilt row takes its date-order
+    position when that number is free, otherwise the season's next free number.
+    """
+    rows = (await db.execute(
+        select(Video).where(Video.channel_id == channel_id)
+        .order_by(Video.upload_date.asc(), Video.id.asc())
+    )).scalars().all()
+    by_season: dict[int, list[Video]] = {}
+    for v in rows:
+        if not v.is_short and not v.is_livestream:
+            by_season.setdefault(v.season, []).append(v)
+    changed = False
+    for season_rows in by_season.values():
+        used = {v.episode for v in season_rows if v.id in kept_ids}
+        for position, v in enumerate(season_rows, 1):
+            if v.id in kept_ids:
+                continue
+            episode = position if position not in used else max(used, default=0) + 1
+            used.add(episode)
+            if v.episode != episode:
+                v.episode = episode
+                changed = True
+    if changed:
+        await db.commit()
+
+
+async def _force_rescan_locked(channel: Channel, db: AsyncSession):
+    from sqlalchemy import delete as sa_delete
+
+    service = ChannelService(db)
+    try:
+        video_list = await service.fetch_video_list(channel)
+    except Exception as e:
+        logger.error("Force rescan listing failed for %s: %s", channel.channel_name, e, exc_info=True)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not read the channel's video list ({e}). Nothing was changed.",
+        )
+    if not video_list:
+        raise HTTPException(
+            status_code=502,
+            detail="The channel's video list came back empty, so nothing was changed. Try again later.",
+        )
+
+    # Only stuck rows are rebuilt: monitored, pending/failed/queued, no file, no
+    # marker. Downloaded, skipped, unmonitored, retention-removed and downloading
+    # rows are kept as they are, so a partial or failed scan can never turn one of
+    # them into a "new" video that gets queued, and choices the user made stay.
+    disposable = (
+        Video.channel_id == channel.id,
+        Video.status.in_(("pending", "failed", "queued")),
+        Video.monitored.is_(True),
+        or_(Video.file_path.is_(None), Video.file_path == ""),
+        Video.retention_removed_at.is_(None),
+    )
+    kept_ids = set((await db.execute(
+        select(Video.id).where(Video.channel_id == channel.id).except_(select(Video.id).where(*disposable))
+    )).scalars().all())
+    video_ids = select(Video.id).where(*disposable)
     await db.execute(sa_delete(DownloadLog).where(DownloadLog.video_id.in_(video_ids)))
     await db.execute(sa_delete(DownloadQueue).where(DownloadQueue.video_id.in_(video_ids)))
-    deleted_count = await db.scalar(
-        select(func.count(Video.id)).where(Video.channel_id == channel.id)
-    ) or 0
-    await db.execute(sa_delete(Video).where(Video.channel_id == channel.id))
+    deleted_count = await db.scalar(select(func.count(Video.id)).where(*disposable)) or 0
+    await db.execute(sa_delete(Video).where(*disposable))
 
     # Reset channel health
     channel.health_status = "healthy"
     channel.last_error_code = None
-    channel.total_videos = 0
-    channel.downloaded_count = 0
 
     await db.commit()
 
-    # Trigger fresh scan
-    service = ChannelService(db)
+    # Fresh scan from the listing fetched above (the scan lock is already held)
     try:
-        new_count = await service.scan_channel(channel)
+        new_count = await service._scan_channel_inner(channel, video_list=video_list)
     except Exception as e:
         logger.error("Force rescan failed for %s: %s", channel.channel_name, e, exc_info=True)
         return {
@@ -2109,25 +2184,7 @@ async def force_rescan(
             "new_videos": 0,
         }
 
-    # Re-apply the "deliberately removed" state before file matching
-    if removed_video_ids:
-        for i in range(0, len(removed_video_ids), 500):
-            chunk = removed_video_ids[i:i + 500]
-            await db.execute(
-                update(Video)
-                .where(Video.channel_id == channel.id, Video.video_id.in_(chunk))
-                .values(status="skipped", monitored=False)
-            )
-            await db.execute(
-                sa_delete(DownloadQueue).where(
-                    DownloadQueue.video_id.in_(
-                        select(Video.id).where(
-                            Video.channel_id == channel.id, Video.video_id.in_(chunk)
-                        )
-                    )
-                )
-            )
-        await db.commit()
+    await _number_rebuilt_rows(db, channel.id, kept_ids)
 
     # Match existing files on disk back to the new video records by video ID
     import re
@@ -2167,15 +2224,21 @@ async def force_rescan(
                 select(Video).where(
                     Video.channel_id == channel.id,
                     Video.video_id.in_(list(file_map.keys())),
+                    Video.status != "downloading",
                 )
             )
             matched_video_ids = []
             for video in result.scalars().all():
+                # A file already on record (and still on disk) is never replaced;
+                # a recorded file that has gone missing may be re-linked by its id.
+                if video.file_path and os.path.exists(video.file_path):
+                    continue
                 mp4_path = file_map.get(video.video_id)
                 if mp4_path and mp4_path.exists():
                     video.status = "completed"
                     video.file_path = str(mp4_path)
                     video.file_size = mp4_path.stat().st_size
+                    video.retention_removed_at = None  # the file is back on disk
                     if video.downloaded_at is None:
                         video.downloaded_at = datetime.fromtimestamp(
                             mp4_path.stat().st_mtime, tz=timezone.utc

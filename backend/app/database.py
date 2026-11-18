@@ -142,6 +142,18 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE videos ADD COLUMN is_livestream BOOLEAN DEFAULT 0 NOT NULL")
             )
+        if "retention_removed_at" not in video_columns:
+            await conn.execute(
+                text("ALTER TABLE videos ADD COLUMN retention_removed_at DATETIME")
+            )
+            # Old retention removals were only recognisable by this signature
+            await conn.execute(text(
+                "UPDATE videos SET retention_removed_at = downloaded_at "
+                "WHERE status = 'skipped' AND monitored = 0 "
+                "AND downloaded_at IS NOT NULL AND file_path IS NULL "
+                "AND is_short = 0 AND is_livestream = 0 "
+                "AND channel_id IN (SELECT id FROM channels WHERE retention_days IS NOT NULL)"
+            ))
         # Index for the history page (ORDER BY downloaded_at with no status filter).
         # create_all adds it on fresh installs; this covers existing databases.
         await conn.execute(text(

@@ -24,11 +24,13 @@ def _old():
     return (datetime.now(timezone.utc) - timedelta(days=60)).replace(tzinfo=None)
 
 
-def _video(ch, vid_id, path, status="completed", downloaded_at=None, monitored=True):
+def _video(ch, vid_id, path, status="completed", downloaded_at=None, monitored=True,
+           retention_removed_at=None):
     return Video(
         channel_id=ch.id, video_id=vid_id, title=vid_id, status=status,
         upload_date=date(2024, 1, 1), season=2024, episode=1, monitored=monitored,
         downloaded_at=downloaded_at, file_path=path, file_size=10,
+        retention_removed_at=retention_removed_at,
     )
 
 
@@ -141,22 +143,27 @@ def test_force_rescan_keeps_retention_deleted_video_skipped(tmp_path, monkeypatc
         from app.routers.channels import force_rescan
         eng, maker = await _setup(monkeypatch)
 
-        async def fake_scan(self, channel):
-            for vid in ("gone", "fresh"):
+        async def fake_list(self, channel):
+            return [{"id": "gone"}, {"id": "fresh"}]
+
+        async def fake_scan(self, channel, video_list=None):
+            for vid in ("fresh",):
                 self.db.add(Video(
                     channel_id=channel.id, video_id=vid, title=vid, status="pending",
                     upload_date=date(2024, 1, 1), season=2024, episode=1,
                 ))
             await self.db.commit()
-            return 2
+            return 1
 
-        monkeypatch.setattr(ChannelService, "scan_channel", fake_scan)
+        monkeypatch.setattr(ChannelService, "fetch_video_list", fake_list)
+        monkeypatch.setattr(ChannelService, "_scan_channel_inner", fake_scan)
         async with maker() as db:
             ch = Channel(channel_id="c", channel_name="C", channel_url="u", platform="youtube",
                          download_dir=str(tmp_path), health_status="unknown")
             db.add(ch)
             await db.flush()
-            db.add(_video(ch, "gone", None, status="skipped", downloaded_at=_old(), monitored=False))
+            db.add(_video(ch, "gone", None, status="skipped", downloaded_at=_old(), monitored=False,
+                          retention_removed_at=_old()))
             await db.commit()
             await force_rescan(ch.id, db=db)
             vids = {v.video_id: v for v in (await db.execute(select(Video))).scalars().all()}

@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   
   A folder reached by two paths (another Docker mount of the same folder, or a different upper/lower case on drives that ignore case) is recognised as the same folder rather than treated as a destination to clear. Running the move again picks up where a failed one stopped, and a second move of the same channel can't start while one is running.
 
+- **Force Rescan can no longer wipe a channel or bring back videos you removed.** It used to delete every video record of the channel before re-scanning, even when the channel's video list then failed to load or came back incomplete. The channel could end up empty, and the next scan queued the entire back catalogue again, including videos removed by "Delete videos after".
+  - **What it rebuilds now:** only stuck records (videos that are pending, failed or queued with no file). Downloaded videos, videos you skipped or unmonitored, and videos removed by "Delete videos after" are kept as they are.
+  - **Safety checks:** it refuses to run while the channel is being scanned, and changes nothing if the video list can't be read or is empty.
+  - **Episode numbers:** rebuilt videos get episode numbers that don't clash with kept ones, and no downloaded file is renamed. A file whose recorded location went missing is found again by its video ID.
+  - **Videos removed by "Delete videos after":** these are now remembered properly, with existing ones carried over. Season "Monitor", Download All and Download Missing leave them alone, and queuing, monitoring or retrying one yourself brings it back.
 - **Deleting files now asks first, and Re-download keeps your copy until the new one lands.**
   - **Confirmation:** on a channel's page, Delete (for selected videos), Delete File and Re-download used to act on one click. Delete and Delete File removed files right away, and the select-all box also covers videos in collapsed seasons. Each now shows a confirmation with the number of videos and the space their files use.
   - **Re-download:** it used to delete the existing file before downloading again, so a video taken down in the meantime was simply gone. Now the current file stays until the new download is complete. If the new download fails or comes back empty, the video keeps its file and stays downloaded.

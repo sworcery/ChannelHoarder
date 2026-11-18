@@ -84,6 +84,7 @@ async def _apply_to_channel(channel_id: int) -> None:
                              path, video.video_id)
                 continue
             await service._auto_delete_video_files(video)
+            video.retention_removed_at = datetime.now(timezone.utc).replace(tzinfo=None)
             await db.commit()  # release the write lock between deletions
             removed += 1
         logger.info("Retention: removed %d video(s) older than %d days for channel %s",

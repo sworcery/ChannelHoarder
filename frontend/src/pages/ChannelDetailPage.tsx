@@ -1157,7 +1157,7 @@ export default function ChannelDetailPage() {
                       <button
                         onClick={() => setForceRescanOpen(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-orange-300 text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                        title="Delete all video records and re-scan from scratch"
+                        title="Rebuild records of videos that are not downloaded and re-scan"
                       >
                         <RotateCcw className="h-3 w-3" />
                         Force Re-scan
@@ -1985,10 +1985,10 @@ export default function ChannelDetailPage() {
           <div className="bg-card rounded-lg shadow-xl w-full max-w-sm p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-2">Force Re-scan</h3>
             <p className="text-sm text-muted-foreground mb-2">
-              This will <strong>delete all video records</strong> for this channel and re-scan from scratch.
+              This will <strong>rebuild the records of videos that are not downloaded</strong> and re-scan the channel.
             </p>
             <p className="text-sm text-amber-600 mb-4">
-              Downloaded files on disk are NOT deleted, but database records for existing downloads will be lost. Use this to recover from stuck channels.
+              Downloaded videos, their files, and videos removed by "Delete videos after" are kept as they are. Use this to recover from stuck channels.
             </p>
             <div className="flex justify-end gap-2">
               <button

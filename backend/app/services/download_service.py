@@ -502,6 +502,7 @@ class DownloadService:
                     .where(Video.id != video.id)
                 ))
                 video.status = "completed"
+                video.retention_removed_at = None
                 video.file_path = mp4_path
                 video.file_size = file_size
                 video.downloaded_at = datetime.now(timezone.utc)
