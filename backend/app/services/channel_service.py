@@ -108,6 +108,36 @@ class ScanFailed(ChannelListingError):
     """The scan could not read the channel's video list; the failure is already recorded."""
 
 
+async def record_scan_error(db: AsyncSession, channel: Channel, error: Exception, *, notify: bool = True) -> None:
+    """The one place a failed scan is recorded (tick, Scan Now, Scan All, RSS).
+
+    Marks the channel unhealthy with SCAN_FAILED (only over our own or informational
+    codes, never a more severe one), advances next_scan_at so a dead channel is
+    retried on the normal schedule, stamps the attempt for the Scan Now cooldown and
+    sends the scan_failed webhook once per outage. last_scanned_at stays as it was.
+    Downloads never replace SCAN_FAILED, so the outage stays one outage."""
+    channel_name = channel.channel_name
+    channel_pk = channel.id
+    logger.error("Scan failed for %s: %s", channel_name, error)
+    # A failed scan may leave the session mid-transaction: drop its half-done changes
+    await db.rollback()
+    await db.refresh(channel)
+    first_failure = False
+    if channel.last_error_code in _DEGRADED_OVERWRITABLE:
+        first_failure = channel.last_error_code != ErrorCode.SCAN_FAILED.value
+        channel.health_status = "unhealthy"
+        channel.last_error_code = ErrorCode.SCAN_FAILED.value
+    channel.next_scan_at = await ChannelService(db)._compute_next_scan_at()
+    await db.commit()
+    _last_scan_attempt[channel_pk] = datetime.now(timezone.utc)
+    if notify and first_failure:
+        # Once per outage: a dead channel must not push a webhook every scan
+        await NotificationService.broadcast("scan_failed", {
+            "channel": channel_name,
+            "message": f"Scan of {channel_name} failed: {error}",
+        })
+
+
 async def other_recorded(db: AsyncSession, channel_id: int) -> tuple[set[str], set[str]]:
     """Identity keys (path, device:inode) and sidecar-stem keys of every file another
     channel's video records in this channel's folder. Those files must not be moved or
@@ -397,8 +427,7 @@ class ChannelService:
             enabled=data.enabled,
             auto_download=data.auto_download,
             health_status="healthy",
-            # Scan immediately on first tick so the user sees videos appear quickly
-            next_scan_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            next_scan_at=await self._first_scan_at(),
         )
 
         # Picking the folder and inserting must be one step, or two adds at the
@@ -552,28 +581,30 @@ class ChannelService:
             self.ytdlp.get_channel_video_list_all_tabs, channel.channel_url, platform
         )
 
-    async def _record_scan_failure(self, channel: Channel, error: Exception) -> None:
-        """A listing that could not be read is a failed scan, not a healthy empty one.
-        last_scanned_at stays as it was; next_scan_at still advances so a dead
-        channel is retried on the normal schedule, not every tick."""
-        logger.error("Scan failed for %s: could not read its video list: %s", channel.channel_name, error)
-        channel_name = channel.channel_name
-        channel_pk = channel.id
-        first_failure = channel.last_error_code != ErrorCode.SCAN_FAILED.value
-        if channel.last_error_code in _DEGRADED_OVERWRITABLE:
-            channel.health_status = "unhealthy"
-            channel.last_error_code = ErrorCode.SCAN_FAILED.value
-        channel.next_scan_at = await self._compute_next_scan_at()
-        await self.db.commit()
-        _last_scan_attempt[channel_pk] = datetime.now(timezone.utc)
-        message = f"Scan of {channel_name} failed: {error}"
-        if first_failure:
-            # Once per outage: a dead channel must not push a webhook every scan
-            await NotificationService.broadcast("scan_failed", {
-                "channel": channel_name,
-                "message": message,
-            })
-        raise ScanFailed(message)
+    async def _clear_scan_failed(self, channel: Channel) -> None:
+        """The listing reads again: drop SCAN_FAILED and set health from what is left."""
+        channel.last_error_code = None
+        failed_count = await self.db.scalar(
+            select(func.count(Video.id))
+            .where(Video.channel_id == channel.id)
+            .where(Video.status == "failed")
+        )
+        if failed_count and failed_count > 3:
+            # Same rule as a failed download (4+ failed videos = unhealthy), with a reason:
+            # the most common error code among the failed videos.
+            top = await self.db.execute(
+                select(Video.error_code)
+                .where(Video.channel_id == channel.id, Video.status == "failed",
+                       Video.error_code.isnot(None))
+                .group_by(Video.error_code)
+                .order_by(func.count(Video.id).desc())
+                .limit(1)
+            )
+            code = top.scalar_one_or_none()
+            channel.last_error_code = code
+            channel.health_status = "unhealthy" if code else "warning"
+        else:
+            channel.health_status = "healthy"
 
     async def _scan_channel_inner(self, channel: Channel, video_list: Optional[list[dict]] = None) -> int:
         """Internal scan implementation. A prefetched listing skips the fetch."""
@@ -606,7 +637,8 @@ class ChannelService:
             try:
                 video_list = await self.fetch_video_list(channel)
             except Exception as e:
-                await self._record_scan_failure(channel, e)  # always raises ScanFailed
+                await record_scan_error(self.db, channel, e)
+                raise ScanFailed(f"Scan of {channel.channel_name} failed: {e}") from e
 
         failed_tabs = list(getattr(video_list, "failed_tabs", None) or [])
         if failed_tabs:
@@ -632,8 +664,7 @@ class ChannelService:
                     channel.health_status = "warning"
                     channel.last_error_code = ErrorCode.METADATA_DEGRADED.value
             elif channel.last_error_code == ErrorCode.SCAN_FAILED.value:
-                channel.last_error_code = None
-                channel.health_status = "healthy"
+                await self._clear_scan_failed(channel)
             await self.db.commit()
             return 0
 
@@ -1106,8 +1137,7 @@ class ChannelService:
             channel.health_status = "healthy"
         if channel.last_error_code == ErrorCode.SCAN_FAILED.value and not failed_tabs:
             # The listing reads again: the earlier failure is over.
-            channel.last_error_code = None
-            channel.health_status = "healthy"
+            await self._clear_scan_failed(channel)
         if deferred_count > 0 or failed_tabs:
             # Videos were intentionally left out, so this scan is not "healthy" even
             # if other videos landed. Tell the user why and that it self-corrects, but
@@ -1510,6 +1540,18 @@ class ChannelService:
         video.monitored = False
         video.file_path = None
         video.file_size = None
+
+    async def _first_scan_at(self) -> datetime:
+        """When a new channel is first scanned: a random time inside the scan window (so a
+        batch of added channels spreads out), or now when no window is set. "Scan after
+        adding" calls Scan Now, which ignores the window."""
+        from app.services.settings_service import read_scan_window
+        from app.utils.scan_window import spread_into_window
+
+        start_hour, end_hour = await read_scan_window(self.db)
+        if start_hour is None or end_hour is None or start_hour == end_hour:
+            return datetime.now(timezone.utc).replace(tzinfo=None)
+        return spread_into_window(1, start_hour=start_hour, end_hour=end_hour)[0]
 
     async def _compute_next_scan_at(self) -> datetime:
         """Compute the next scan timestamp for a channel based on configured window."""

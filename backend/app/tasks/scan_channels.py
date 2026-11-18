@@ -7,7 +7,8 @@ from sqlalchemy import or_, select
 
 from app.database import async_session
 from app.models import AppSetting, Channel
-from app.services.channel_service import ChannelService, ScanFailed
+from app.services import channel_activity
+from app.services.channel_service import ChannelService, ScanFailed, record_scan_error
 from app.services.notification_service import NotificationService
 
 from app.services.settings_service import get_setting, read_scan_window
@@ -57,9 +58,32 @@ async def scan_due_channels():
         logger.info("Scan tick: %d channels due", len(due_channels))
         jitter_enabled, jitter_max = await _get_jitter_settings(db)
 
+    await scan_channel_list(
+        due_channels, async_session,
+        jitter_enabled=jitter_enabled, jitter_max=jitter_max, window=(start_hour, end_hour),
+    )
+
+
+async def scan_channel_list(
+    channels: list[tuple[int, str]],
+    session_factory,
+    *,
+    jitter_enabled: bool,
+    jitter_max: int,
+    window: tuple[int | None, int | None] | None = None,
+) -> tuple[int, int, int]:
+    """Scan channels one after another: the loop the scheduler tick and Scan All share.
+
+    Jitter sleeps between channels; a channel something else holds (moving, scanning,
+    file work) is skipped; each scan gets a fresh session so one failure cannot poison
+    the rest. window=(start, end) stops the run when the window closes (the tick);
+    None (manual Scan All) ignores it. Sends scan_complete at the end and returns
+    (scanned, new_videos, skipped_busy).
+    """
     total_new = 0
     attempted = 0
-    for i, (channel_id, channel_name) in enumerate(due_channels):
+    skipped = 0
+    for i, (channel_id, channel_name) in enumerate(channels):
         if jitter_enabled and i > 0 and jitter_max > 0:
             delay = random.uniform(0, jitter_max)
             logger.debug("Scan jitter: sleeping %.1fs before scanning %s", delay, channel_name)
@@ -67,51 +91,54 @@ async def scan_due_channels():
 
         # A long tick must not run on past the end of the window; the channels
         # left over stay due and go first when the window opens again
-        if not in_scan_window(start_hour, end_hour):
+        if window is not None and not in_scan_window(*window):
             logger.info("Scan window closed; %d due channels wait for the next window",
-                        len(due_channels) - i)
+                        len(channels) - i)
             break
+        if channel_activity.flag_reason(channel_id) is not None:
+            logger.info("Skipping scan for %s - the channel is busy", channel_name)
+            skipped += 1
+            continue
         attempted += 1
 
         # Fresh session per channel -- prevents rollback contamination and
         # avoids holding a connection during jitter sleeps
         try:
-            async with async_session() as db:
+            async with session_factory() as db:
                 channel = await db.get(Channel, channel_id)
-                if not channel:
+                if not channel or not channel.enabled:
+                    attempted -= 1
                     continue
-                service = ChannelService(db)
-                new_count = await service.scan_channel(channel)
+                try:
+                    new_count = await ChannelService(db).scan_channel(channel)
+                except ScanFailed as e:
+                    # Already recorded (unhealthy, SCAN_FAILED, next scan time, one notification)
+                    logger.warning("Scan failed for %s: %s", channel_name, e)
+                    continue
+                except Exception as e:
+                    await record_scan_error(db, channel, e)
+                    continue
                 total_new += new_count
                 if new_count > 0:
                     logger.info("Found %d new videos for %s", new_count, channel_name)
-        except ScanFailed as e:
-            # The scan already recorded the failure (unhealthy, SCAN_FAILED, next scan
-            # time, one notification); don't overwrite it with the generic handling.
-            logger.warning("Scan failed for %s: %s", channel_name, e)
-        except Exception as e:
-            logger.error("Scan failed for %s: %s", channel_name, e)
-            try:
-                async with async_session() as db:
-                    channel = await db.get(Channel, channel_id)
-                    if channel:
-                        channel.health_status = "warning"
-                        channel.last_error_code = "SCAN_FAILED"
-                        service = ChannelService(db)
-                        channel.next_scan_at = await service._compute_next_scan_at()
-                        await db.commit()
-            except Exception:
-                # next_scan_at wasn't updated, so scan_due_channels (which treats
-                # NULL as due) will retry this channel every 10-minute tick until the
-                # DB recovers - a real rate-limit risk. Surface it.
-                logger.warning(
-                    "Could not update scan status after failure for %s; it will be "
-                    "retried every tick until this clears", channel_name, exc_info=True,
-                )
+        except Exception:
+            # next_scan_at wasn't updated, so scan_due_channels (which treats
+            # NULL as due) will retry this channel every 10-minute tick until the
+            # DB recovers - a real rate-limit risk. Surface it.
+            logger.warning(
+                "Could not update scan status after failure for %s; it will be "
+                "retried every tick until this clears", channel_name, exc_info=True,
+            )
 
-    logger.info("Scan tick complete: scanned %d channels, found %d new videos", attempted, total_new)
+    logger.info("Scan complete: scanned %d channels, found %d new videos, %d busy skipped",
+                attempted, total_new, skipped)
 
-    await NotificationService.broadcast("scan_complete", {
-        "channels_scanned": attempted,
-        "new_videos": total_new,
-    })
+    if attempted:  # during Move All every tick would otherwise report "scanned 0"
+        await NotificationService.broadcast("scan_complete", {
+            "channels_scanned": attempted,
+            "new_videos": total_new,
+            "channels_skipped": skipped,
+            "message": (f"Scanned {attempted} channels, found {total_new} new videos"
+                        + (f", skipped {skipped} busy" if skipped else "")),
+        })
+    return attempted, total_new, skipped

@@ -74,6 +74,13 @@ async def test_scan_all_continues_past_failure_and_skips_standalone(monkeypatch,
         return 0
 
     monkeypatch.setattr(cs.ChannelService, "scan_channel", fake_scan)
+    # Scan All waits a random jitter between channels (up to minutes); none in tests.
+    from app.tasks import scan_channels
+
+    async def no_jitter(db):
+        return False, 0
+
+    monkeypatch.setattr(scan_channels, "_get_jitter_settings", no_jitter)
 
     async with maker() as db:
         resp = await system_router.trigger_scan_all(db)

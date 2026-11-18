@@ -24,6 +24,11 @@ moving_channels: set[int] = set()
 scanning_channels: set[int] = set()
 exclusive_scans: set[int] = set()
 working_channels: set[int] = set()
+# A subtitles job writes files into the channel folder. It only keeps out operations that
+# move, rename or delete those files (claims "move", "scan", "work"); downloads and plain
+# scans run beside it.
+subtitle_channels: set[int] = set()
+SUBTITLES_MESSAGE = "Subtitles are being downloaded for this channel; try again when they finish"
 draining_channels: dict[int, float] = {}
 DRAINING_MAX_SECONDS = 30 * 60
 DRAINING_MESSAGE = (
@@ -83,6 +88,7 @@ def activity(channel_id: int) -> dict:
         "scanning": channel_id in scanning_channels,
         "exclusive": channel_id in exclusive_scans,
         "working": channel_id in working_channels,
+        "subtitles": channel_id in subtitle_channels,
         "draining": channel_id in draining_channel_ids(),
         "downloading": channel_id in set(download_channels.values()),
     }
@@ -144,7 +150,8 @@ async def _download_reason(
 
 
 def _claim_set(kind: str) -> set[int]:
-    return {"move": moving_channels, "scan": exclusive_scans, "work": working_channels}[kind]
+    return {"move": moving_channels, "scan": exclusive_scans, "work": working_channels,
+            "subtitles": subtitle_channels}[kind]
 
 
 async def try_claim(
@@ -168,8 +175,12 @@ async def try_claim(
     reason = flag_reason(channel_id, from_move_all)
     if reason:
         return reason
+    if channel_id in subtitle_channels:
+        return SUBTITLES_MESSAGE
     claim = _claim_set(kind)
     claim.add(channel_id)
+    if kind == "subtitles":
+        return None  # downloads and scans run beside it: no download check, no draining
     try:
         reason = await _download_reason(db, channel_id, video_ids)
     except BaseException:

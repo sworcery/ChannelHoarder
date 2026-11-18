@@ -61,7 +61,7 @@ async def _queued(db, ch, vid, n, **row):
 
 def test_activity_reports_each_state():
     idle = {"moving": False, "scanning": False, "exclusive": False,
-            "working": False, "draining": False, "downloading": False}
+            "working": False, "subtitles": False, "draining": False, "downloading": False}
     assert ca.activity(1) == idle
     ca.moving_channels.add(1)
     assert ca.activity(1) == {**idle, "moving": True}

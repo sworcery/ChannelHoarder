@@ -22,7 +22,7 @@ from app.schemas import (
     ImportScanRequest, ImportConfirmRequest, RepairDatesConfirm,
 )
 from app.services.channel_service import (
-    ChannelService, SHORTS_MAX_DURATION, other_recorded, is_short,
+    ChannelService, SHORTS_MAX_DURATION, other_recorded, is_short, record_scan_error,
 )
 from app.services import channel_activity, queue_service
 from app.services.channel_activity import (
@@ -628,6 +628,10 @@ async def trigger_scan(channel_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
         logger.error("Scan failed for channel %s: %s", channel.channel_name, e, exc_info=True)
+        try:
+            await record_scan_error(db, channel, e)
+        except Exception:
+            logger.warning("Could not record the failed scan of %s", channel.channel_name, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Scan failed: {e}")
 
 
@@ -1294,7 +1298,19 @@ async def download_channel_subtitles(
     if eligible == 0:
         return {"message": "All videos already have subtitles or no completed videos found", "downloaded": 0}
 
-    asyncio.create_task(_download_channel_subtitles_task(channel_id, channel.channel_name))
+    # The job writes into the channel folder for as long as it takes: hold a light
+    # "subtitles" claim so a move, rename or delete is refused meanwhile (downloads and
+    # scans still run); the task releases it when it ends.
+    reason = await try_claim(db, channel_id, "subtitles")
+    if reason:
+        raise HTTPException(status_code=409, detail=reason)
+    try:
+        task = asyncio.create_task(_download_channel_subtitles_task(channel_id, channel.channel_name))
+    except BaseException:
+        release_claim(channel_id, "subtitles")
+        raise
+    _subtitle_tasks.add(task)
+    task.add_done_callback(_subtitle_tasks.discard)
 
     return {"message": f"Downloading subtitles for {eligible} videos in '{channel.channel_name}'"}
 
@@ -1349,8 +1365,21 @@ def _has_subtitles(file_path: str) -> bool:
     return False
 
 
+_subtitle_tasks: set[asyncio.Task] = set()  # kept so a running job isn't garbage-collected
+
+
 async def _download_channel_subtitles_task(channel_id: int, channel_name: str):
-    """Background task to download subtitles for all completed videos in a channel."""
+    """Background task: subtitles for a channel, releasing the endpoint's "subtitles" claim at the end."""
+    try:
+        await _download_channel_subtitles(channel_id, channel_name)
+    except Exception:
+        logger.exception("Subtitle download for '%s' failed", channel_name)
+    finally:
+        release_claim(channel_id, "subtitles")
+
+
+async def _download_channel_subtitles(channel_id: int, channel_name: str):
+    """Download subtitles for all completed videos in a channel."""
     from app.database import async_session
     from app.utils.platform_utils import build_video_url
     from app.services.ytdlp_service import YtdlpService

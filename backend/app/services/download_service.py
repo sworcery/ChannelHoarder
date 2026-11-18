@@ -881,7 +881,11 @@ class DownloadService:
                     video.error_message = None
                     video.error_details = None
 
-            channel.last_error_code = code.value
+            # SCAN_FAILED belongs to the scan: a failed download must not replace it, or
+            # the outage would look new again (another webhook) and recovery would miss it.
+            code_written = channel.last_error_code != ErrorCode.SCAN_FAILED.value
+            if code_written:
+                channel.last_error_code = code.value
             failed_count = await db.scalar(
                 select(func.count(Video.id))
                 .where(Video.channel_id == channel.id)
@@ -889,7 +893,7 @@ class DownloadService:
             )
             if failed_count and failed_count > 3:
                 channel.health_status = "unhealthy"
-            elif code in (ErrorCode.AUTH_EXPIRED, ErrorCode.PO_TOKEN_FAILURE):
+            elif code_written and code in (ErrorCode.AUTH_EXPIRED, ErrorCode.PO_TOKEN_FAILURE):
                 channel.health_status = "warning"
 
             # Flag cookies as expired and auto-pause queue

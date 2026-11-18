@@ -12,7 +12,7 @@ from sqlalchemy import select
 from app.database import async_session
 from app.models import Channel, Video
 from app.services.channel_activity import is_scan_blocked
-from app.services.channel_service import ChannelService
+from app.services.channel_service import ChannelService, ScanFailed, record_scan_error
 from app.services.settings_service import get_setting, read_scan_window
 from app.services.ytdlp_service import YtdlpService
 from app.utils.platform_utils import is_playlist_url, supports_rss
@@ -169,6 +169,21 @@ async def rss_check_tick():
         logger.info("RSS check: %d new video(s) in feed for %s, scanning", len(new_ids), name)
         try:
             await _scan(pk)
+        except ScanFailed as e:
+            # Already recorded. The new ids stay unhandled, but the channel waits as long as
+            # a broken feed does: a failing extractor must not get a full listing per interval.
+            logger.error("RSS-triggered scan failed for %s: %s", name, e)
+            _next_check[pk] = _now() + _BROKEN_FEED_RETRY
+            continue
         except Exception as e:
             logger.error("RSS-triggered scan failed for %s: %s", name, e)
+            _next_check[pk] = _now() + _BROKEN_FEED_RETRY
+            try:
+                async with async_session() as db:
+                    channel = await db.get(Channel, pk)
+                    if channel:
+                        await record_scan_error(db, channel, e)
+            except Exception:
+                logger.warning("Could not record the failed RSS scan of %s", name, exc_info=True)
+            continue
         _remember(pk, new_ids)

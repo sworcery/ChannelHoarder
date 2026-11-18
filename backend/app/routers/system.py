@@ -389,34 +389,37 @@ async def trigger_scan_all(db: AsyncSession = Depends(get_db)):
     if any(not t.done() for t in _scan_all_tasks):
         raise HTTPException(status_code=409, detail="Scan All is already running")
     result = await db.execute(
-        select(Channel.id).where(Channel.enabled == True, Channel.channel_id != "__standalone__")
+        select(Channel.id, Channel.channel_name)
+        .where(Channel.enabled == True, Channel.channel_id != "__standalone__")
+        .order_by(Channel.id)
     )
-    channel_ids = [row[0] for row in result.all()]
+    channels = [(row[0], row[1]) for row in result.all()]
 
-    _scan_all_tasks.add(task := asyncio.create_task(_scan_all_task(channel_ids)))
+    _scan_all_tasks.add(task := asyncio.create_task(_scan_all_task(channels)))
     task.add_done_callback(_scan_all_tasks.discard)
 
     return {
-        "message": f"Scanning {len(channel_ids)} channels in the background.",
-        "channels_scanned": len(channel_ids),
+        "message": f"Scanning {len(channels)} channels in the background.",
+        "channels_scanned": len(channels),
     }
 
 
 _scan_all_tasks: set[asyncio.Task] = set()
 
 
-async def _scan_all_task(channel_ids: list[int]) -> None:
-    """Scan each channel in its own session so one failure can't poison the rest.
-    Results reach the user through the scan's own notifications."""
+async def _scan_all_task(channels: list[tuple[int, str]]) -> None:
+    """Scan every enabled channel with the scheduler tick's loop (jitter, busy channels
+    skipped, scan_complete at the end), ignoring the scan window."""
     from app.database import async_session
-    from app.services.channel_service import ChannelService
 
-    for channel_id in channel_ids:
-        try:
-            async with async_session() as db:
-                channel = await db.get(Channel, channel_id)
-                if channel is None or not channel.enabled:
-                    continue
-                await ChannelService(db).scan_channel(channel)
-        except Exception as e:
-            logger.error("Scan All: scan of channel %s failed: %s", channel_id, e)
+    from app.tasks.scan_channels import _get_jitter_settings, scan_channel_list
+
+    try:
+        async with async_session() as db:
+            jitter_enabled, jitter_max = await _get_jitter_settings(db)
+        # The scheduler tick's loop, minus its window check: a manual Scan All runs now
+        await scan_channel_list(
+            channels, async_session, jitter_enabled=jitter_enabled, jitter_max=jitter_max,
+        )
+    except Exception as e:
+        logger.error("Scan All failed: %s", e)
