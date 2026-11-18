@@ -290,7 +290,10 @@ export const api = {
     const formData = new FormData()
     formData.append("file", file)
     const res = await fetch(`${BASE_URL}/settings/import`, { method: "POST", body: formData })
-    if (!res.ok) throw new Error("Import failed")
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(typeof body?.detail === "string" ? body.detail : "Import failed")
+    }
     return res.json()
   },
 

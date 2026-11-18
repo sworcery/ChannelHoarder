@@ -95,19 +95,10 @@ async def _get_webhook_settings() -> dict[str, str]:
         "discord_webhook_url",
         "webhook_events",
     ]
-    settings: dict[str, str] = {}
+    from app.services.settings_service import get_settings
     async with async_session() as db:
-        for key in keys:
-            result = await db.execute(
-                select(AppSetting).where(AppSetting.key == key)
-            )
-            row = result.scalar_one_or_none()
-            if row:
-                try:
-                    settings[key] = json.loads(row.value)
-                except (json.JSONDecodeError, TypeError):
-                    settings[key] = row.value
-    return settings
+        saved = await get_settings(db, keys)
+    return {k: v for k, v in saved.items() if v is not None}
 
 
 def _is_event_enabled(cfg: dict[str, str], event_type: str) -> bool:

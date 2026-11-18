@@ -265,7 +265,7 @@ class TestImportStagger:
             assert t is not None
             assert in_scan_window(start, end, t.replace(tzinfo=TZ).astimezone())
 
-    async def test_bad_imported_hour_counts_as_no_window(self):
+    async def test_bad_imported_hour_is_skipped_and_channels_still_scheduled(self):
         import io
 
         from fastapi import UploadFile
@@ -291,6 +291,8 @@ class TestImportStagger:
             upload = UploadFile(file=io.BytesIO(json.dumps(payload).encode()), filename="c.json")
             out = await settings_router.import_config(db=db, file=upload)
             assert out["imported_channels"] == 5
+            assert {s["key"] for s in out["skipped_settings"]} >= {"scan_window_start_hour"}
+            assert out["imported_settings"] == 0
             rows = (await db.execute(select(Channel.next_scan_at))).scalars().all()
         await eng.dispose()
         assert len(rows) == 5 and all(t is not None for t in rows)

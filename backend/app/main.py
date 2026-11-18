@@ -32,6 +32,9 @@ async def lifespan(app: FastAPI):
     await init_database()
     logger.info("Database initialized")
 
+    from app.services.settings_service import apply_log_level
+    logger.info("Log level: %s", await apply_log_level())
+
     # Reset any "active" queue entries left over from a previous run.
     # When the container restarts, in-flight downloads are killed but their
     # queue rows still have started_at set  - blocking new downloads until

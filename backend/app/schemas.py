@@ -233,7 +233,7 @@ class DashboardStats(UTCBaseModel):
 
 # --- Settings Schemas ---
 class SettingsUpdate(BaseModel):
-    default_quality: Optional[str] = None
+    default_quality: Optional[str] = Field(default=None, pattern="^(best|2160p|1080p|720p|480p)$")
     download_delay_min: Optional[int] = None
     download_delay_max: Optional[int] = None
     jitter_enabled: Optional[bool] = None
@@ -253,7 +253,7 @@ class SettingsUpdate(BaseModel):
 
     manual_scan_cooldown_minutes: Optional[int] = Field(default=None, ge=0, le=1440)  # "Scan Now" cooldown
     max_concurrent_downloads: Optional[int] = None
-    max_retries: Optional[int] = None
+    max_retries: Optional[int] = Field(default=None, ge=0, le=100)
     download_queue_order: Optional[str] = Field(default=None, pattern="^(queued|newest|oldest|shortest|longest)$")
     user_agent_rotation: Optional[bool] = None
     youtube_api_key: Optional[str] = None
@@ -281,6 +281,13 @@ class SettingsUpdate(BaseModel):
     max_video_duration: Optional[int] = None  # Max duration in seconds (0 = disabled)
     # System
     log_level: Optional[str] = None  # debug, info, warning, error
+
+    @field_validator("log_level")
+    @classmethod
+    def _log_level_known(cls, v):
+        if v is not None and v.lower() not in ("debug", "info", "warning", "error", "critical"):
+            raise ValueError("log_level must be debug, info, warning, error or critical")
+        return v.lower() if v is not None else v
 
 
 class SettingValue(BaseModel):

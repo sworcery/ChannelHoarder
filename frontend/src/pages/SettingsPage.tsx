@@ -153,7 +153,30 @@ function GeneralTab() {
   const handleImport = async (file: File) => {
     try {
       const result = await api.importConfig(file)
-      toast(`Imported ${result.imported_settings} settings, ${result.imported_channels} channels (${result.skipped_channels} already existed)`)
+      const skippedSettings: { key: string; reason: string }[] = result.skipped_settings ?? []
+      const skippedChannels: { channel_id: string; channel_name?: string; reason: string }[] = result.skipped_channels ?? []
+      const existing = skippedChannels.filter((c) => c.reason === "already exists").length
+      const notImported = skippedChannels.filter((c) => c.reason !== "already exists")
+      toast(`Imported ${result.imported_settings} settings, ${result.imported_channels} channels (${existing} already existed)`)
+      if (skippedSettings.length || notImported.length) {
+        // Group channels by reason so a restore onto an install missing a volume
+        // reads as one line per reason, not one long line per channel.
+        const byReason = new Map<string, string[]>()
+        for (const c of notImported) {
+          const names = byReason.get(c.reason) ?? []
+          names.push(c.channel_name || c.channel_id)
+          byReason.set(c.reason, names)
+        }
+        const parts = [
+          ...skippedSettings.map((s) => `Setting ${s.key}: ${s.reason}`),
+          ...[...byReason].map(([reason, names]) => {
+            const shown = names.slice(0, 3).join(", ")
+            const more = names.length > 3 ? ` and ${names.length - 3} more` : ""
+            return `${names.length} channel${names.length === 1 ? "" : "s"} (${shown}${more}): ${reason}`
+          }),
+        ]
+        toast(`Skipped: ${parts.join(" | ")}`, "error")
+      }
     } catch (e: any) {
       toast(e.message, "error")
     }

@@ -16,6 +16,7 @@ from app.database import async_session
 from app.models import AppSetting, Channel, Video, DownloadQueue, DownloadLog
 from app.services import queue_state
 from app.services.diagnostics_service import DiagnosticsService
+from app.services.settings_service import get_setting, get_settings
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
 from app.utils.file_utils import channel_folder_name
@@ -148,6 +149,7 @@ async def enqueue_video(
     priority: int = 0,
     target_quality: str | None = None,
     skip_min_quality: bool = False,
+    reset_retries: bool = False,
 ) -> DownloadQueue:
     """The one way to queue a video: set it "queued" and make sure it has a queue row.
 
@@ -160,8 +162,13 @@ async def enqueue_video(
     - A row that is already running (started_at set) is left running: its video stays
       "downloading" and only the priority bump applies (nothing else is reset).
     - Error fields and retention_removed_at are cleared: queueing means "wanted again".
+    - reset_retries (manual Retry / Download anyway) gives the video a fresh retry
+      count; automatic callers leave it so a failing video still ends up failed.
     Flushes; the caller commits.
     """
+    if reset_retries:
+        video.retry_count = 0
+
     async def _load() -> DownloadQueue | None:
         return (await db.execute(
             select(DownloadQueue).where(DownloadQueue.video_id == video.id)
@@ -216,6 +223,7 @@ async def enqueue_videos(
     *,
     priority: int = 0,
     target_quality: str | None = None,
+    reset_retries: bool = False,
 ) -> int:
     """Bulk enqueue_video: same rules, a few statements per 500 videos instead of
     several per video, so a 50,000-video request does not hold the write lock for
@@ -236,6 +244,7 @@ async def enqueue_videos(
             .values(
                 status="queued", retention_removed_at=None,
                 error_code=None, error_message=None, error_details=None,
+                **({"retry_count": 0} if reset_retries else {}),
             )
             .execution_options(synchronize_session=False)
         )
@@ -350,28 +359,10 @@ class DownloadService:
             )
 
             # Read download feature settings and global fallbacks while we have a DB session
-            import json
-            feature_result = await db.execute(
-                select(AppSetting).where(
-                    AppSetting.key.in_(["subtitles_enabled", "chapters_enabled", "sponsorblock_mode"])
-                )
-            )
-            feature_settings = {s.key: s.value for s in feature_result.scalars().all()}
-            subtitles_enabled = False
-            chapters_enabled = False
-            sponsorblock_mode = "off"
-            try:
-                subtitles_enabled = bool(json.loads(feature_settings.get("subtitles_enabled", "false")))
-            except Exception:
-                pass
-            try:
-                chapters_enabled = bool(json.loads(feature_settings.get("chapters_enabled", "false")))
-            except Exception:
-                pass
-            try:
-                sponsorblock_mode = json.loads(feature_settings.get("sponsorblock_mode", '"off"'))
-            except Exception:
-                pass
+            features = await get_settings(db, ["subtitles_enabled", "chapters_enabled", "sponsorblock_mode"])
+            subtitles_enabled = bool(features["subtitles_enabled"])
+            chapters_enabled = bool(features["chapters_enabled"])
+            sponsorblock_mode = features["sponsorblock_mode"] or "off"
 
             # Per-channel naming_template takes priority; fall back to global setting.
             # Shared with every rename/renumber path so a later scan can't compute a
@@ -663,6 +654,7 @@ class DownloadService:
                 video.file_size = file_size
                 video.downloaded_at = datetime.now(timezone.utc)
                 video.quality_downloaded = cdata.quality
+                video.retry_count = 0
                 video.error_code = None
                 video.error_message = None
                 video.error_details = None
@@ -836,7 +828,7 @@ class DownloadService:
             elif (
                 info.retry_strategy != "none"
                 and code != ErrorCode.QUALITY_TOO_LOW  # its waits ran out: fail for good
-                and video.retry_count < settings.MAX_RETRIES
+                and video.retry_count < await get_setting(db, "max_retries")
             ):
                 video.retry_count += 1
                 if not queue_entry:

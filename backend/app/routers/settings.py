@@ -6,6 +6,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from fastapi.responses import JSONResponse, PlainTextResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,10 +45,8 @@ async def get_all_settings(db: AsyncSession = Depends(get_db)):
     return settings_dict
 
 
-@router.put("/")
-async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
-    update_data = body.model_dump(exclude_unset=True)
-
+async def _check_update(db: AsyncSession, update_data: dict) -> None:
+    """Cross-field checks a SettingsUpdate can't do alone. Raises HTTPException 400."""
     # Validate scan window if either hour field is being updated
     if "scan_window_start_hour" in update_data or "scan_window_end_hour" in update_data:
         from app.utils.scan_window import validate_scan_window
@@ -81,6 +80,26 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid naming template: {e}")
 
+
+_HOUR_KEYS = ("scan_window_start_hour", "scan_window_end_hour")
+
+
+def _parse_settings_block(raw: dict) -> dict:
+    """Validate raw settings through SettingsUpdate; return the typed values.
+    Raises HTTPException 400 naming the first bad field."""
+    try:
+        return SettingsUpdate.model_validate(raw).model_dump(exclude_unset=True)
+    except ValidationError as e:
+        err = e.errors()[0]
+        field = ".".join(str(p) for p in err["loc"]) or "settings"
+        raise HTTPException(status_code=400, detail=f"Invalid value for '{field}': {err['msg']}")
+
+
+@router.put("/")
+async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_db)):
+    update_data = body.model_dump(exclude_unset=True)
+    await _check_update(db, update_data)
+
     logger.info("Saving settings: %s", list(update_data.keys()))
     for key, value in update_data.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
@@ -95,11 +114,10 @@ async def update_settings(body: SettingsUpdate, db: AsyncSession = Depends(get_d
     await db.commit()
     logger.info("Settings committed to database")
 
-    # Apply runtime-reactive settings immediately
-    if "log_level" in update_data:
-        level = update_data["log_level"].upper()
-        logging.getLogger().setLevel(getattr(logging, level, logging.INFO))
-        logger.info("Log level changed to %s", level)
+    # Apply runtime-reactive settings immediately (log level, User-Agent rotation)
+    if {"log_level", "user_agent_rotation"} & set(update_data):
+        from app.services.settings_service import apply_log_level
+        logger.info("Log level is %s", await apply_log_level(db))
 
     return {"message": "Settings updated", "updated": list(update_data.keys())}
 
@@ -256,15 +274,57 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON file")
 
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid backup file")
+    raw_settings = data.get("settings", {})
+    if not isinstance(raw_settings, dict):
+        raise HTTPException(status_code=400, detail="Invalid value for 'settings'")
+
+    channels_in = data.get("channels", [])
+    if not isinstance(channels_in, list):
+        raise HTTPException(status_code=400, detail="Invalid value for 'channels'")
+
+    # Each setting is validated on its own: one that no longer validates (an old
+    # naming template, an out-of-range value) is skipped and the current value kept.
+    # Per-install state and keys SettingsUpdate doesn't know are not imported.
+    known = set(SettingsUpdate.model_fields)
+    typed_settings: dict = {}
+    skipped_settings: list[dict] = []
+    for key, value in raw_settings.items():
+        if key not in known or key in FLAG_KEYS:
+            continue
+        try:
+            typed = _parse_settings_block({key: value})
+            if key not in _HOUR_KEYS:  # the window is checked as a pair below
+                await _check_update(db, typed)
+        except HTTPException as e:
+            skipped_settings.append({"key": key, "reason": str(e.detail)})
+            continue
+        typed_settings.update(typed)
+    hours = {k: typed_settings[k] for k in _HOUR_KEYS if k in typed_settings}
+    if hours and any(s["key"] in _HOUR_KEYS for s in skipped_settings):
+        # One hour of the backup's window is bad: keep the current window whole
+        # rather than mixing the backup's other hour into it.
+        for k in hours:
+            typed_settings.pop(k)
+            skipped_settings.append({"key": k, "reason": "skipped with the other scan window hour"})
+    elif hours:
+        try:
+            await _check_update(db, hours)
+        except HTTPException as e:
+            for k in hours:
+                typed_settings.pop(k)
+                skipped_settings.append({"key": k, "reason": str(e.detail)})
+
+    from app.config import settings as app_config
+    from app.utils.file_utils import validate_download_path
+
     imported_settings = 0
     imported_channels = 0
-    skipped_channels = 0
+    skipped_channels: list[dict] = []
 
     # Merge settings
-    for key, value in data.get("settings", {}).items():
-        # Skip sensitive keys that shouldn't be imported
-        if key == "last_successful_auth" or key in FLAG_KEYS:
-            continue
+    for key, value in typed_settings.items():
         result = await db.execute(select(AppSetting).where(AppSetting.key == key))
         setting = result.scalar_one_or_none()
         if setting:
@@ -280,14 +340,28 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
 
     # Add channels that don't exist yet
     new_channels: list[Channel] = []
-    for ch_data in data.get("channels", []):
+    for ch_data in channels_in:
+        if not isinstance(ch_data, dict):
+            continue
         cid = ch_data.get("channel_id")
         if not cid:
             continue
+        name = str(ch_data.get("channel_name") or cid)
         result = await db.execute(select(Channel).where(Channel.channel_id == cid))
         if result.scalar_one_or_none():
-            skipped_channels += 1
+            skipped_channels.append({"channel_id": cid, "channel_name": name, "reason": "already exists"})
             continue
+        # A channel whose folder isn't allowed or mounted here is skipped, never
+        # imported with its path cleared.
+        download_dir = ch_data.get("download_dir")
+        if download_dir:
+            try:
+                if not isinstance(download_dir, str):
+                    raise ValueError("Its download folder in the backup isn't a path")
+                validate_download_path(download_dir, app_config.allowed_download_roots)
+            except ValueError as e:
+                skipped_channels.append({"channel_id": cid, "channel_name": name, "reason": str(e)})
+                continue
         channel = Channel(
             channel_id=cid,
             channel_name=ch_data.get("channel_name", "Imported"),
@@ -323,7 +397,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
         from app.services.settings_service import get_setting
         from app.utils.scan_window import spread_into_window, usable_window
 
-        # A window that doesn't validate (hand-edited config) counts as none
+        # An unusable saved window (e.g. start equals end) counts as none
         start_h, end_h = usable_window(
             await get_setting(db, "scan_window_start_hour", None),
             await get_setting(db, "scan_window_end_hour", None),
@@ -334,10 +408,13 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             ch.next_scan_at = t
 
     await db.commit()
+    from app.services.settings_service import apply_log_level
+    await apply_log_level(db)
     return {
         "imported_settings": imported_settings,
         "imported_channels": imported_channels,
         "skipped_channels": skipped_channels,
+        "skipped_settings": skipped_settings,
     }
 
 
@@ -373,12 +450,20 @@ async def get_setting(key: str, db: AsyncSession = Depends(get_db)):
 
 @router.put("/{key}")
 async def update_setting(key: str, value: str, db: AsyncSession = Depends(get_db)):
+    if key not in SettingsUpdate.model_fields:
+        raise HTTPException(status_code=400, detail=f"Unknown setting '{key}'")
+    typed = _parse_settings_block({key: value})[key]
+    await _check_update(db, {key: typed})
+
     result = await db.execute(select(AppSetting).where(AppSetting.key == key))
     setting = result.scalar_one_or_none()
     if setting:
-        setting.value = json.dumps(value)
+        setting.value = json.dumps(typed)
     else:
-        db.add(AppSetting(key=key, value=json.dumps(value)))
+        db.add(AppSetting(key=key, value=json.dumps(typed)))
 
     await db.commit()
-    return {"key": key, "value": value}
+    if key in ("log_level", "user_agent_rotation"):
+        from app.services.settings_service import apply_log_level
+        await apply_log_level(db)
+    return {"key": key, "value": typed}

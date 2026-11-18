@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models import Channel, DownloadLog, SystemHealthLog, Video
 from app.schemas import DiagnosticReport, ErrorDiagnosis
+from app.services.settings_service import get_setting
 from app.utils.error_codes import ErrorCode, ERROR_CATALOG, classify_error
 
 logger = logging.getLogger(__name__)
@@ -99,11 +100,11 @@ class DiagnosticsService:
                 "js_runtime": ytdlp.get_js_runtime_status() or "MISSING (Deno/Bun not found)",
                 "config_dir": settings.CONFIG_DIR,
                 "download_dir": settings.DOWNLOAD_DIR,
-                "max_concurrent": settings.MAX_CONCURRENT_DOWNLOADS,
-                "max_retries": settings.MAX_RETRIES,
-                "delay_range": f"{settings.DOWNLOAD_DELAY_MIN}-{settings.DOWNLOAD_DELAY_MAX}s",
-                "jitter": settings.JITTER_ENABLED,
-                "ua_rotation": settings.USER_AGENT_ROTATION,
+                "max_concurrent": await get_setting(self.db, "max_concurrent_downloads"),
+                "max_retries": await get_setting(self.db, "max_retries"),
+                "delay_range": f"{await get_setting(self.db, 'download_delay_min')}-{await get_setting(self.db, 'download_delay_max')}s",
+                "jitter": await get_setting(self.db, "jitter_enabled"),
+                "ua_rotation": await get_setting(self.db, "user_agent_rotation"),
             },
         )
 
@@ -166,10 +167,14 @@ class DiagnosticsService:
                 for log in logs
             ],
             "system_context": self._get_system_context_sync(),
-            "copy_text": self._build_copy_text(video, channel, diagnosis, logs),
+            "copy_text": self._build_copy_text(
+                video, channel, diagnosis, logs,
+                f"{await get_setting(self.db, 'download_delay_min')}-"
+                f"{await get_setting(self.db, 'download_delay_max')}s",
+            ),
         }
 
-    def _build_copy_text(self, video, channel, diagnosis, logs) -> str:
+    def _build_copy_text(self, video, channel, diagnosis, logs, delay_range: str) -> str:
         """Build a formatted text block for copy-to-clipboard."""
         from app.services.ytdlp_service import YtdlpService
         ytdlp = YtdlpService()
@@ -218,7 +223,7 @@ class DiagnosticsService:
             f"PO Tokens: {'configured' if settings.POT_SERVER_ENABLED else 'disabled'}",
             f"Cookies: {'present' if settings.has_cookies else 'not configured'}",
             f"API Key: {'configured' if settings.has_youtube_api_key else 'not configured'}",
-            f"Delay: {settings.DOWNLOAD_DELAY_MIN}-{settings.DOWNLOAD_DELAY_MAX}s",
+            f"Delay: {delay_range}",
             "=== End Report ===",
         ])
 

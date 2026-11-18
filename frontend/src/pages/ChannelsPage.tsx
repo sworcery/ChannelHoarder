@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
@@ -88,6 +88,21 @@ export default function ChannelsPage() {
   const { toast } = useToast()
 
   const debouncedSearch = useDebounce(search, 300)
+
+  // Add Channel starts at the saved Default Quality
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+  const defaultQuality = appSettings?.default_quality ? String(appSettings.default_quality) : "best"
+  // Applied once per open, after the settings have loaded, so a refetch can't undo the user's pick
+  const qualitySeeded = useRef(false)
+  useEffect(() => {
+    if (!showAdd) { qualitySeeded.current = false; return }
+    if (!appSettings || qualitySeeded.current) return
+    qualitySeeded.current = true
+    setAddQuality(defaultQuality)
+  }, [showAdd, appSettings, defaultQuality])
 
   const { data: channels, isLoading } = useQuery({
     queryKey: ["channels", debouncedSearch],

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { extractChannelUrls } from "@/lib/bulkImport"
 import { useToast } from "@/components/ui/toaster"
@@ -34,6 +34,21 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
 
   // Leaving the page stops the import instead of letting it run on unseen
   useEffect(() => () => { stopRef.current = true }, [])
+
+  // Start at the saved Default Quality each time the dialog opens
+  const { data: appSettings } = useQuery({
+    queryKey: ["app-settings"],
+    queryFn: api.getSettings,
+  })
+  const defaultQuality = appSettings?.default_quality ? String(appSettings.default_quality) : "best"
+  // Applied once per open, after the settings have loaded, so a refetch can't undo the user's pick
+  const qualitySeeded = useRef(false)
+  useEffect(() => {
+    if (!open) { qualitySeeded.current = false; return }
+    if (!appSettings || qualitySeeded.current) return
+    qualitySeeded.current = true
+    setQuality(defaultQuality)
+  }, [open, appSettings, defaultQuality])
 
   useEffect(() => {
     if (!running) return

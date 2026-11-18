@@ -18,31 +18,13 @@ logger = logging.getLogger(__name__)
 
 async def _get_jitter_settings(db) -> tuple[bool, int]:
     """Read scan jitter settings from the database."""
-    import json
-
     enabled = True
     max_seconds = 300
-
     try:
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "scan_jitter_enabled")
-        )
-        setting = result.scalar_one_or_none()
-        if setting:
-            enabled = bool(json.loads(setting.value))
+        enabled = await get_setting(db, "scan_jitter_enabled", True)
+        max_seconds = await get_setting(db, "scan_jitter_max_seconds", 300)
     except Exception:
         pass
-
-    try:
-        result = await db.execute(
-            select(AppSetting).where(AppSetting.key == "scan_jitter_max_seconds")
-        )
-        setting = result.scalar_one_or_none()
-        if setting:
-            max_seconds = int(json.loads(setting.value))
-    except Exception:
-        pass
-
     return enabled, max_seconds
 
 

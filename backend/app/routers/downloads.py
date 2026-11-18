@@ -202,7 +202,7 @@ async def retry_download(video_id: int, db: AsyncSession = Depends(get_db)):
     if video.status not in ("failed", "skipped"):
         raise HTTPException(status_code=400, detail=f"Cannot retry video with status '{video.status}'")
 
-    await enqueue_video(db, video)
+    await enqueue_video(db, video, reset_retries=True)
     await db.commit()
     return {"message": f"Video '{video.title}' queued for retry"}
 
@@ -219,7 +219,7 @@ async def download_anyway(video_id: int, db: AsyncSession = Depends(get_db)):
             detail="Only a video that failed the minimum-quality check can be downloaded anyway",
         )
 
-    await enqueue_video(db, video, skip_min_quality=True)
+    await enqueue_video(db, video, skip_min_quality=True, reset_retries=True)
     await db.commit()
     return {"message": f"Video '{video.title}' queued at the best available quality"}
 
@@ -229,7 +229,7 @@ async def retry_all_failed(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Video).where(Video.status == "failed"))
     videos = result.scalars().all()
 
-    count = await enqueue_videos(db, videos)
+    count = await enqueue_videos(db, videos, reset_retries=True)
 
     await db.commit()
     return {"message": f"Queued {count} failed videos for retry", "count": count}

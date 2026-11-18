@@ -43,23 +43,16 @@ async def resolve_naming_template(db, channel_template: str | None) -> str | Non
     if channel_template:
         return channel_template
 
-    import json
-
-    from sqlalchemy import select
-
-    from app.models import AppSetting
+    from app.services.settings_service import get_setting
 
     try:
-        result = await db.execute(select(AppSetting).where(AppSetting.key == "naming_template"))
-        setting = result.scalar_one_or_none()
-        if setting is not None:
-            value = json.loads(setting.value)
-            if isinstance(value, str) and value:
-                # A template saved by an older build was never validated. Falling back
-                # to the default beats letting it raise, which would fail every scan's
-                # rename pass and mark otherwise-healthy channels as unhealthy.
-                validate_template(value)
-                return value
+        value = await get_setting(db, "naming_template")
+        if isinstance(value, str) and value:
+            # A template saved by an older build was never validated. Falling back
+            # to the default beats letting it raise, which would fail every scan's
+            # rename pass and mark otherwise-healthy channels as unhealthy.
+            validate_template(value)
+            return value
     except Exception as e:
         logger.warning("Ignoring global naming template, using default layout: %s", e)
     return None
