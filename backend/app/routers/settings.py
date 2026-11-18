@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 from datetime import date
 from pathlib import Path
 
@@ -278,6 +279,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
     pre_existing_folders = await taken_folder_keys(db)
 
     # Add channels that don't exist yet
+    new_channels: list[Channel] = []
     for ch_data in data.get("channels", []):
         cid = ch_data.get("channel_id")
         if not cid:
@@ -312,7 +314,24 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             health_status="unknown",
         )
         db.add(channel)
+        new_channels.append(channel)
         imported_channels += 1
+
+    # Give imported channels scan times spread across the scan window, so they
+    # don't all scan back to back
+    if new_channels:
+        from app.services.settings_service import get_setting
+        from app.utils.scan_window import spread_into_window, usable_window
+
+        # A window that doesn't validate (hand-edited config) counts as none
+        start_h, end_h = usable_window(
+            await get_setting(db, "scan_window_start_hour", None),
+            await get_setting(db, "scan_window_end_hour", None),
+        )
+        times = spread_into_window(len(new_channels), start_hour=start_h, end_hour=end_h)
+        random.shuffle(times)
+        for ch, t in zip(new_channels, times):
+            ch.next_scan_at = t
 
     await db.commit()
     return {

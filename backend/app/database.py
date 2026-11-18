@@ -228,19 +228,32 @@ async def init_database():
             logger.info("Cleaned up %d orphan video records on startup", count)
 
         # Stagger next_scan_at for channels without one set
-        # Use deterministic per-channel offsets based on channel.id so restarts are idempotent
+        # Times are spread inside the scan window when one is set
         null_scan_result = await conn.execute(text(
             "SELECT id FROM channels WHERE next_scan_at IS NULL AND enabled = 1"
         ))
         null_ids = [row[0] for row in null_scan_result.fetchall()]
         if null_ids:
+            import json as _json
             import random as _rand
-            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
-            now_utc = _dt.now(_tz.utc).replace(tzinfo=None)
-            for cid in null_ids:
-                rng = _rand.Random(cid)
-                offset_seconds = rng.randint(60, 24 * 3600)  # 1 min to 24h out
-                scan_time = now_utc + _td(seconds=offset_seconds)
+            from app.utils.scan_window import spread_into_window, usable_window
+
+            async def _hour(key: str):
+                row = (await conn.execute(
+                    text("SELECT value FROM app_settings WHERE key = :k"), {"k": key}
+                )).fetchone()
+                try:
+                    return _json.loads(row[0]) if row else None
+                except (TypeError, ValueError):
+                    return None
+
+            # A stored window that doesn't validate (hand-edited config) counts as none
+            start_h, end_h = usable_window(
+                await _hour("scan_window_start_hour"), await _hour("scan_window_end_hour")
+            )
+            times = spread_into_window(len(null_ids), start_hour=start_h, end_hour=end_h)
+            _rand.shuffle(times)
+            for cid, scan_time in zip(null_ids, times):
                 await conn.execute(
                     text("UPDATE channels SET next_scan_at = :t WHERE id = :id"),
                     {"t": scan_time.strftime("%Y-%m-%d %H:%M:%S"), "id": cid},
