@@ -16,7 +16,7 @@ from app.schemas import BulkQueueRemove, PriorityUpdate, QueueAdd, QueueEntryRes
 from app.services.queue_order import queue_order_by
 from app.services.settings_service import get_setting
 from app.services.ytdlp_service import YtdlpService
-from app.utils.file_utils import escape_like, move_video_files, validate_download_path
+from app.utils.file_utils import escape_like, move_video_files, status_after_dequeue, validate_download_path
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -107,7 +107,7 @@ async def bulk_remove_from_queue(body: BulkQueueRemove, db: AsyncSession = Depen
     removed = 0
     for entry in entries:
         if entry.video and entry.video.status in ("queued", "downloading"):
-            entry.video.status = "pending"
+            entry.video.status = status_after_dequeue(entry.video)
         await db.delete(entry)
         removed += 1
     await db.commit()
@@ -125,7 +125,7 @@ async def remove_from_queue(queue_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Video).where(Video.id == entry.video_id))
     video = result.scalar_one_or_none()
     if video and video.status in ("queued", "downloading"):
-        video.status = "pending"
+        video.status = status_after_dequeue(video)
 
     await db.delete(entry)
     await db.commit()
@@ -295,7 +295,7 @@ async def clear_queue(db: AsyncSession = Depends(get_db)):
     count = 0
     for entry in entries:
         if entry.video and entry.video.status in ("queued",):
-            entry.video.status = "pending"
+            entry.video.status = status_after_dequeue(entry.video)
         await db.delete(entry)
         count += 1
     await db.commit()

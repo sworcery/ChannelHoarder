@@ -368,6 +368,21 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 ## Troubleshooting
 
 <details>
+<summary><b>Library repair (Settings > Diagnostics)</b></summary>
+
+Two tools fix problems older versions could leave behind. Both show what they found before changing anything, and neither overwrites a file.
+
+**Library check.** Before 1.9.50, a scan could move a downloaded file onto a newer video with a similar title (for example "Week 11" and "Week 12") and rename it. Run the check once if you have channels with numbered titles. It lists:
+- files that are certainly filed under the wrong video, from the file's embedded source address or the `.info.json` beside it. "Fix all certain" moves each to the video it really belongs to and queues the wrongly filed video to download again;
+- likely mismatches, found from the file's length. Fix these one at a time;
+- downloaded videos whose file is gone. Re-download or skip them;
+- files to check by hand.
+
+**Shared folders.** Before 1.9.50, two channels with the same name (for example one creator on YouTube and on Rumble) shared one folder. New channels get their own folder, such as "Creator (Rumble)". For existing ones, the dashboard shows a notice, and this tool moves the channel you pick into a folder of its own. Files the other channel uses, shared artwork and files neither channel knows about stay where they are.
+
+</details>
+
+<details>
 <summary><b>Common issues & fixes</b></summary>
 
 **Queue not downloading / stuck**

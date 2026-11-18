@@ -16,6 +16,7 @@ export default function LibraryCheckCard() {
   const qc = useQueryClient()
   const [error, setError] = useState<string | null>(null)
   const [confirmAll, setConfirmAll] = useState(false)
+  const [confirmLost, setConfirmLost] = useState(false)
   const [busy, setBusy] = useState(false)
   const [lostAction, setLostAction] = useState<Record<string, "redownload" | "skip">>({})
   const [messages, setMessages] = useState<Record<string, string>>({})
@@ -29,6 +30,16 @@ export default function LibraryCheckCard() {
   const running = data?.status === "running"
   const items = data?.items ?? []
   const certainOpen = items.filter((i) => i.kind === "wrong_file" && i.state === "open")
+  // Missing videos a pending move would restore are left out of the bulk re-download:
+  // re-downloading one first would block the fix that puts its real file back.
+  const restoredByFix = new Set(
+    items
+      .filter((i) => (i.kind === "wrong_file" || i.kind === "likely") && i.state === "open")
+      .map((i) => i.real_video_id),
+  )
+  const lostToRedownload = items.filter(
+    (i) => i.kind === "lost" && i.state === "open" && !restoredByFix.has(i.video_id),
+  )
 
   const start = async () => {
     setError(null)
@@ -110,15 +121,26 @@ export default function LibraryCheckCard() {
 
       {data?.status === "done" && items.length > 0 && (
         <div className="space-y-4">
-          {certainOpen.length > 0 && (
-            <button
-              onClick={() => setConfirmAll(true)}
-              disabled={busy}
-              className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground disabled:opacity-50"
-            >
-              Fix all certain ({certainOpen.length})
-            </button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {certainOpen.length > 0 && (
+              <button
+                onClick={() => setConfirmAll(true)}
+                disabled={busy}
+                className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+              >
+                Fix all certain ({certainOpen.length})
+              </button>
+            )}
+            {lostToRedownload.length > 0 && (
+              <button
+                onClick={() => setConfirmLost(true)}
+                disabled={busy}
+                className="px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
+              >
+                Re-download all missing ({lostToRedownload.length})
+              </button>
+            )}
+          </div>
           {GROUPS.map((g) => {
             const list = items.filter((i) => i.kind === g.kind)
             if (list.length === 0) return null
@@ -178,6 +200,20 @@ export default function LibraryCheckCard() {
           apply({ all_certain: true })
         }}
         onCancel={() => setConfirmAll(false)}
+      />
+      <ConfirmDialog
+        open={confirmLost}
+        title="Re-download all missing videos?"
+        message={`This queues ${lostToRedownload.length} downloaded video(s) whose file is gone to download again. Missing videos that a fix above would restore from a misplaced file are left out; fix those first.`}
+        confirmLabel="Re-download all"
+        onConfirm={() => {
+          setConfirmLost(false)
+          apply({
+            item_ids: lostToRedownload.map((i) => i.id),
+            actions: Object.fromEntries(lostToRedownload.map((i) => [i.id, "redownload" as const])),
+          })
+        }}
+        onCancel={() => setConfirmLost(false)}
       />
     </div>
   )

@@ -10,7 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.utils.file_utils import channel_folder_name, delete_video_files, escape_like, move_video_files
+from app.utils.file_utils import (
+    channel_folder_name, delete_video_files, escape_like, has_kept_file, move_video_files,
+)
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
@@ -672,7 +674,9 @@ async def bulk_skip_videos(
         queue_entry = queue_entries.get(video.id)
         if queue_entry:
             await db.delete(queue_entry)
-        video.status = "skipped"
+        # Skipping a queued re-download or upgrade cancels it; the video keeps its file
+        # and stays downloaded instead of being hidden as skipped.
+        video.status = "completed" if has_kept_file(video) else "skipped"
         skipped += 1
 
     await db.commit()

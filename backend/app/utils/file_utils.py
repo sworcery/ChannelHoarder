@@ -272,6 +272,21 @@ def file_keys(path: str) -> set[str]:
     return keys
 
 
+def has_kept_file(video) -> bool:
+    """True when the video's recorded file is still on disk with content: a queued
+    re-download or quality upgrade keeps its old file until the new one lands."""
+    try:
+        return bool(video.file_path) and os.path.getsize(video.file_path) > 0
+    except OSError:
+        return False
+
+
+def status_after_dequeue(video) -> str:
+    """Status for a video taken out of the queue without downloading: it stays
+    downloaded when it still has its file, else it goes back to pending."""
+    return "completed" if has_kept_file(video) else "pending"
+
+
 def stem_key(path: str) -> str:
     """Identity of a video's sidecar stem (path without extension)."""
     return os.path.realpath(os.path.splitext(path)[0]).casefold()

@@ -299,3 +299,45 @@ async def test_removed_upstream_upgrade_is_not_requeued(monkeypatch, tmp_path):
         from sqlalchemy import select
         rows = (await db.execute(select(DownloadQueue).where(DownloadQueue.video_id == vid_id))).scalars().all()
     assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_removing_a_queued_redownload_keeps_it_downloaded(monkeypatch, tmp_path):
+    # The re-download keeps its file while queued; taking it out of the queue (Remove,
+    # bulk remove, Clear Queue, bulk Skip) must leave it downloaded, not pending/skipped.
+    from sqlalchemy import select
+
+    from app.routers import downloads as downloads_router
+
+    for action in ("remove", "bulk_remove", "clear", "skip"):
+        (tmp_path / action).mkdir()
+        maker, (vid_id, ch_id, q_id), old = await _setup(monkeypatch, tmp_path / action)
+        async with maker() as db:
+            if action == "remove":
+                await downloads_router.remove_from_queue(q_id, db)
+            elif action == "bulk_remove":
+                from app.schemas import BulkQueueRemove
+                await downloads_router.bulk_remove_from_queue(BulkQueueRemove(queue_ids=[q_id]), db)
+            elif action == "clear":
+                await downloads_router.clear_queue(db)
+            else:
+                await channels_router.bulk_skip_videos(
+                    ch_id, channels_router.BulkVideoAction(video_ids=[vid_id]), db)
+        v = await _video(maker, vid_id)
+        assert v.status == "completed", action
+        assert v.file_path and old.read_bytes() == OLD_BYTES
+        async with maker() as db:
+            assert (await db.execute(select(DownloadQueue))).first() is None
+
+
+@pytest.mark.asyncio
+async def test_removing_an_ordinary_queued_video_makes_it_pending(monkeypatch, tmp_path):
+    from app.routers import downloads as downloads_router
+
+    maker, (vid_id, ch_id, q_id), old = await _setup(monkeypatch, tmp_path)
+    async with maker() as db:
+        v = await db.get(Video, vid_id)
+        v.file_path = None
+        await db.commit()
+        await downloads_router.remove_from_queue(q_id, db)
+    assert (await _video(maker, vid_id)).status == "pending"

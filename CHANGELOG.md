@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Safety:** nothing is overwritten, and a move that stops part-way can simply be run again. Downloads and scans of the channel pause while it moves.
 - **Library check** (Settings > Diagnostics). It finds and repairs damage from the scan bug fixed below. A file that ended up under the wrong video is moved back to the video it really belongs to, and the video it was wrongly filed under is queued to download again.
   - **What it reports:** "certain" mismatches, from the file's own embedded source address or the `.info.json` beside it; "likely" ones, from the file's length plus the leftover files of a video whose file went missing; downloaded videos whose file is gone; and files to check by hand.
-  - **How fixes apply:** nothing changes until you press a fix button. "Fix all certain" asks first and says how many downloads it will queue. "Likely" items are fixed one at a time. A file that changed since the check is left alone, and nothing is ever overwritten.
+  - **How fixes apply:** nothing changes until you press a fix button. "Fix all certain" and "Re-download all missing" ask first and say how many downloads they will queue. "Likely" items are fixed one at a time. A file that changed since the check is left alone, and nothing is ever overwritten.
   - **Who should run it:** run it once if you have channels with numbered titles ("Week 12", "Episode 311").
 
 ### Fixed
@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Videos removed by "Delete videos after":** these are now remembered properly, with existing ones carried over. Season "Monitor", Download All and Download Missing leave them alone, and queuing, monitoring or retrying one yourself brings it back.
 - **Deleting files now asks first, and Re-download keeps your copy until the new one lands.**
   - **Confirmation:** on a channel's page, Delete (for selected videos), Delete File and Re-download used to act on one click. Delete and Delete File removed files right away, and the select-all box also covers videos in collapsed seasons. Each now shows a confirmation with the number of videos and the space their files use.
-  - **Re-download:** it used to delete the existing file before downloading again, so a video taken down in the meantime was simply gone. Now the current file stays until the new download is complete. If the new download fails or comes back empty, the video keeps its file and stays downloaded.
+  - **Re-download:** it used to delete the existing file before downloading again, so a video taken down in the meantime was simply gone. Now the current file stays until the new download is complete. If the new download fails or comes back empty, the video keeps its file and stays downloaded, and taking it out of the queue (or skipping it) cancels the re-download the same way.
   - **Quality upgrades:** a failed upgrade behaves the same way. A video removed upstream isn't retried by the daily upgrade check anymore, and no "download failed" alert is sent when the old file was kept.
 
 ## [1.9.49] - 2026-11-17
