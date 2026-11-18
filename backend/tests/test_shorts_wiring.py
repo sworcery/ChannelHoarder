@@ -202,3 +202,40 @@ async def test_detect_clean_confirm_files_on_disk(tmp_path):
             assert not (await _get(db, "unsent_rule")).is_short  # matches the rule, not sent
     finally:
         await eng.dispose()
+
+
+@pytest.mark.parametrize("kind", ["shorts", "livestreams"])
+async def test_delete_shorts_and_livestreams_keep_a_shared_file(tmp_path, kind):
+    from app.routers.channels import _delete_channel_livestreams, _delete_channel_shorts
+
+    eng, maker = await _maker()
+    try:
+        async with maker() as db:
+            yt = await _channel(db, tmp_path, "youtube", "y")
+            other = await _channel(db, tmp_path, "youtube", "o")
+            other.download_dir = yt.download_dir
+            yt.folder_name = other.folder_name = "Shared"
+            d = tmp_path / "files"
+            d.mkdir()
+            own, shared = d / "own.mp4", d / "shared.mp4"
+            own.write_bytes(b"x")
+            shared.write_bytes(b"x")
+            flag = {"is_short": True} if kind == "shorts" else {}
+            mine = _video(yt, "mine", duration=900, **flag)
+            mine_shared = _video(yt, "mine_shared", duration=900, **flag)
+            if kind == "livestreams":
+                mine.is_livestream = mine_shared.is_livestream = True
+            mine.file_path, mine_shared.file_path = str(own), str(shared)
+            theirs = _video(other, "theirs", duration=900)
+            theirs.file_path = str(shared)
+            db.add_all([mine, mine_shared, theirs])
+            await db.commit()
+            fn = _delete_channel_shorts if kind == "shorts" else _delete_channel_livestreams
+            out = await fn(yt.id, db)
+            assert out["deleted"] == 1
+            assert not own.exists()
+            assert shared.exists()  # another channel's video records it
+            assert (await _get(db, "mine_shared")).status == "skipped"
+            assert (await _get(db, "theirs")).file_path == str(shared)
+    finally:
+        await eng.dispose()

@@ -1961,17 +1961,24 @@ async def _delete_channel_shorts(channel_id: int, db: AsyncSession):
     )
     videos = result.scalars().all()
 
+    deleted = await _delete_files_keep_shared(db, channel_id, videos)
+    await db.commit()
+    return {"message": f"Deleted {deleted} shorts", "deleted": deleted}
+
+
+async def _delete_files_keep_shared(db: AsyncSession, channel_id: int, videos) -> int:
+    """Delete these videos' files and mark them skipped. A file another channel's video
+    also records (an old shared folder) is kept on disk; only this row lets go of it."""
+    protected, _ = await other_recorded(db, channel_id)
     deleted = 0
     for video in videos:
-        if video.file_path:
+        if video.file_path and not (protected and file_keys(video.file_path) & protected):
             if await asyncio.to_thread(delete_video_files, video.file_path) > 0:
                 deleted += 1
         video.status = "skipped"
         video.file_path = None
         video.file_size = None
-
-    await db.commit()
-    return {"message": f"Deleted {deleted} shorts", "deleted": deleted}
+    return deleted
 
 
 @router.post("/{channel_id}/shorts/detect")
@@ -2238,15 +2245,7 @@ async def _delete_channel_livestreams(channel_id: int, db: AsyncSession):
     )
     videos = result.scalars().all()
 
-    deleted = 0
-    for video in videos:
-        if video.file_path:
-            if await asyncio.to_thread(delete_video_files, video.file_path) > 0:
-                deleted += 1
-        video.status = "skipped"
-        video.file_path = None
-        video.file_size = None
-
+    deleted = await _delete_files_keep_shared(db, channel_id, videos)
     await db.commit()
     return {"message": f"Deleted {deleted} livestreams", "deleted": deleted}
 
