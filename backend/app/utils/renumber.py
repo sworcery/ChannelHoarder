@@ -5,7 +5,7 @@ import os
 
 from app.services.metadata_service import write_episode_nfo
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import move_video_files
+from app.utils.file_utils import channel_folder_name, move_video_files
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +53,7 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
                         episode=episode,
                         naming_template=naming_template,
                         base_dir=channel.download_dir,
+                        folder_name=channel_folder_name(channel),
                     ) + (os.path.splitext(old_path)[1] or ".mp4")
 
                     if old_path != new_path:
@@ -87,6 +88,7 @@ def renumber_channel_episodes(videos: list, channel, naming_template: str | None
                     episode=new_episode,
                     naming_template=naming_template,
                     base_dir=channel.download_dir,
+                    folder_name=channel_folder_name(channel),
                 # Keep the file's real container. Imported files can be .mkv/.webm,
                 # and renaming one to .mp4 mislabels it - the move doesn't transcode.
                 ) + (os.path.splitext(old_path)[1] or ".mp4")

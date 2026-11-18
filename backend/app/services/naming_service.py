@@ -101,8 +101,13 @@ def build_output_path(
     episode: int,
     naming_template: str | None = None,
     base_dir: str | None = None,
+    folder_name: str | None = None,
 ) -> str:
-    """Build the full output path for a downloaded video (without extension)."""
+    """Build the full output path for a downloaded video (without extension).
+
+    folder_name replaces the channel name only in the template's directory part;
+    the file name part always carries the channel's display name.
+    """
     template = naming_template or DEFAULT_TEMPLATE
     validate_template(template)
     base = base_dir or settings.DOWNLOAD_DIR
@@ -111,14 +116,22 @@ def build_output_path(
     safe_title = sanitize_filename(video_title)
     upload_date_str = upload_date.strftime("%Y%m%d")
 
-    path = template.format(
-        channel_name=safe_channel,
+    fields = dict(
         season=season,
         episode=f"{episode:03d}",
         title=safe_title,
         upload_date=upload_date_str,
         video_id=video_id,
     )
+    directory, sep, filename = template.rpartition("/")
+    if folder_name and sep:
+        path = (
+            directory.format(channel_name=folder_name, **fields)
+            + "/"
+            + filename.format(channel_name=safe_channel, **fields)
+        )
+    else:
+        path = template.format(channel_name=safe_channel, **fields)
 
     return os.path.join(base, path)
 

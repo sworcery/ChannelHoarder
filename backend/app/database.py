@@ -122,6 +122,10 @@ async def init_database():
             await conn.execute(
                 text("ALTER TABLE channels ADD COLUMN preferred_codec VARCHAR(10)")
             )
+        if "folder_name" not in columns:
+            await conn.execute(
+                text("ALTER TABLE channels ADD COLUMN folder_name VARCHAR(255)")
+            )
 
         # Add new columns to videos table
         result2 = await conn.execute(text("PRAGMA table_info(videos)"))

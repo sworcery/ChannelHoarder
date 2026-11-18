@@ -42,6 +42,7 @@ class Channel(Base):
     title_filter_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="include", server_default="include")
     naming_template: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
     download_dir: Mapped[Optional[str]] = mapped_column(String(1024), nullable=True)
+    folder_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     include_shorts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     include_livestreams: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

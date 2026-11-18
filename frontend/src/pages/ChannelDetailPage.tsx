@@ -1847,8 +1847,11 @@ export default function ChannelDetailPage() {
                 disabled={deleteMutation.isPending}
                 className="w-full px-4 py-2 text-sm rounded-md bg-red-600 text-white hover:bg-red-700"
               >
-                Delete channel and all files
+                Delete channel and its downloaded videos
               </button>
+              <p className="text-xs text-muted-foreground">
+                Other files in the channel folder are kept.
+              </p>
               <button
                 onClick={() => setDeleteDialogOpen(false)}
                 className="w-full px-4 py-2 text-sm text-muted-foreground hover:text-foreground"

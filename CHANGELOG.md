@@ -28,6 +28,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   
   A folder reached by two paths (another Docker mount of the same folder, or a different upper/lower case on drives that ignore case) is recognised as the same folder rather than treated as a destination to clear. Running the move again picks up where a failed one stopped, and a second move of the same channel can't start while one is running.
 
+- **Channels with the same name no longer share a folder.** A channel's folder was simply its name, so the same creator added from YouTube and from Rumble landed in one folder. Deleting one of them with its files deleted both channels' files, and moves and imports reached across the two.
+  - **New channels:** a channel whose folder name is already in use gets the site added, for example "Creator (Rumble)". The same check runs when a channel's download folder changes, when channels are moved, and when a backup is restored into an install that already has a channel in that folder.
+  - **Existing channels:** they keep their folders.
+  - **Backups:** these now save each channel's folder, so a restore finds its files. Restoring an older backup uses the folder the channel had before.
+  - **Delete with files:** it now removes only that channel's own downloaded videos and their extra files, and keeps shared artwork and anything else in the folder. A tool for separating channels that already share a folder is coming in this release.
 - **Force Rescan can no longer wipe a channel or bring back videos you removed.** It used to delete every video record of the channel before re-scanning, even when the channel's video list then failed to load or came back incomplete. The channel could end up empty, and the next scan queued the entire back catalogue again, including videos removed by "Delete videos after".
   - **What it rebuilds now:** only stuck records (videos that are pending, failed or queued with no file). Downloaded videos, videos you skipped or unmonitored, and videos removed by "Delete videos after" are kept as they are.
   - **Safety checks:** it refuses to run while the channel is being scanned, and changes nothing if the video list can't be read or is empty.

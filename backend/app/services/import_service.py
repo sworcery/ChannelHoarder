@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Channel, DownloadQueue, Video
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
-from app.utils.file_utils import move_sidecar_files, sanitize_filename, validate_download_path
+from app.utils.file_utils import channel_folder_name, move_sidecar_files, validate_download_path
 
 logger = logging.getLogger(__name__)
 
@@ -198,6 +198,7 @@ async def scan_folder_for_imports(
             episode=video.episode,
             naming_template=effective_template,
             base_dir=channel.download_dir,
+            folder_name=channel_folder_name(channel),
         )
         entry = min(
             (e for e, _ in candidates),
@@ -310,6 +311,7 @@ async def import_matched_files(
                 episode=video.episode,
                 naming_template=effective_template,
                 base_dir=channel.download_dir,
+                folder_name=channel_folder_name(channel),
             )
             target_path = target_base + ext
 
@@ -364,7 +366,7 @@ async def import_matched_files(
             )
 
             # Write tvshow.nfo if it doesn't exist yet
-            safe_name = sanitize_filename(channel.channel_name)
+            safe_name = channel_folder_name(channel)
             from app.config import settings
             base_dir = channel.download_dir or settings.DOWNLOAD_DIR
             tvshow_nfo = os.path.join(base_dir, safe_name, "tvshow.nfo")
@@ -377,6 +379,7 @@ async def import_matched_files(
                     description=channel.description,
                     thumbnail_url=channel.thumbnail_url,
                     base_dir=channel.download_dir,
+                    folder_name=channel_folder_name(channel),
                 )
 
             # Update video record. quality_downloaded must be set or the daily

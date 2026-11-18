@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.deps import get_db
 from app.models import AppSetting, Channel
 from app.schemas import SettingsUpdate, NamingPreviewRequest, NamingPreviewResponse
+from app.services.channel_service import pick_channel_folder
+from app.utils.file_utils import channel_folder_name, sanitize_filename
 from app.services.naming_service import preview_naming, DEFAULT_TEMPLATE
 
 logger = logging.getLogger(__name__)
@@ -133,6 +135,34 @@ async def test_webhook(provider: str = "telegram"):
     return await send_test_notification(provider)
 
 
+async def _import_folder_name(db, ch_data: dict, taken: set[str] | None = None) -> str:
+    """Folder for an imported channel: the one it was exported with, else the plain
+    name-based folder old backups always used, so a restore finds its files.
+
+    taken: folders of channels that existed before the import; if the folder is one
+    of those (a different channel already lives there), a free one is picked.
+    """
+    from app.services.channel_service import _folder_key, pick_free_folder, taken_folder_keys
+
+    if taken is None:
+        taken = await taken_folder_keys(db)
+    saved = ch_data.get("folder_name")
+    name = ch_data.get("channel_name")
+    if isinstance(saved, str) and saved.strip():
+        folder = sanitize_filename(saved)
+    elif isinstance(name, str) and name.strip():
+        folder = sanitize_filename(name)
+    else:
+        return await pick_channel_folder(
+            db, "Imported", ch_data.get("platform", "youtube"), ch_data.get("download_dir"))
+    # Importing into an install that already has a different channel in that folder
+    # would mix the two; pick a free one instead.
+    if _folder_key(ch_data.get("download_dir"), folder) in taken:
+        folder = pick_free_folder(taken, name or folder, ch_data.get("platform", "youtube"),
+                                  ch_data.get("download_dir"))
+    return folder
+
+
 def _import_from_date(ch_data: dict):
     """Parse download_from_date (ISO string); fall back to legacy download_from_year (Jan 1)."""
     raw = ch_data.get("download_from_date")
@@ -195,6 +225,7 @@ async def export_config(db: AsyncSession = Depends(get_db)):
             "retention_days": ch.retention_days,
             "naming_template": ch.naming_template,
             "download_dir": ch.download_dir,
+            "folder_name": channel_folder_name(ch),
             "enabled": ch.enabled,
             "include_shorts": ch.include_shorts,
             "include_livestreams": ch.include_livestreams,
@@ -240,6 +271,11 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             db.add(AppSetting(key=key, value=json.dumps(value)))
         imported_settings += 1
 
+    # Folders of channels that were here before this import. Channels restored from
+    # the same backup may share a folder (old backups did), so they don't count.
+    from app.services.channel_service import taken_folder_keys
+    pre_existing_folders = await taken_folder_keys(db)
+
     # Add channels that don't exist yet
     for ch_data in data.get("channels", []):
         cid = ch_data.get("channel_id")
@@ -261,6 +297,7 @@ async def import_config(db: AsyncSession = Depends(get_db), file: UploadFile = F
             retention_days=_import_retention_days(ch_data.get("retention_days")),
             naming_template=ch_data.get("naming_template"),
             download_dir=ch_data.get("download_dir"),
+            folder_name=await _import_folder_name(db, ch_data, pre_existing_folders),
             enabled=ch_data.get("enabled", True),
             include_shorts=ch_data.get("include_shorts", False),
             include_livestreams=ch_data.get("include_livestreams", False),

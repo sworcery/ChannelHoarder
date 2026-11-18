@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import re
-import shutil
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -22,7 +21,7 @@ from app.services.naming_service import build_output_path
 from app.services.notification_service import NotificationService
 from app.services.youtube_api_service import YouTubeAPIService
 from app.services.ytdlp_service import YtdlpService, channel_avatar_url
-from app.utils.file_utils import sanitize_filename
+from app.utils.file_utils import channel_folder_name, sanitize_filename
 from app.utils.error_codes import ErrorCode, classify_error
 
 logger = logging.getLogger(__name__)
@@ -93,6 +92,75 @@ def _is_unavailable_entry(entry: dict) -> bool:
         return True
     availability = (entry.get("availability") or "").strip().lower()
     return availability in _UNAVAILABLE_AVAILABILITY
+
+
+_ADD_CHANNEL_LOCK = asyncio.Lock()
+_MAX_FOLDER_ATTEMPTS = 1000
+
+
+def _folder_key(base_dir: str | None, folder: str) -> str:
+    return os.path.realpath(os.path.join(base_dir or settings.DOWNLOAD_DIR, folder)).casefold()
+
+
+async def pick_channel_folder(
+    db: AsyncSession, channel_name: str, platform: str, download_dir: str | None,
+) -> str | None:
+    """Choose the folder name for a channel being added.
+
+    Returns None-equivalent behaviour (plain sanitized name) unless another channel
+    already resolves to that same folder under the same root; then the platform is
+    added: "Name (YouTube)", then "Name (YouTube 2)" and so on.
+    """
+    taken = await taken_folder_keys(db)
+    return pick_free_folder(taken, channel_name, platform, download_dir)
+
+
+def pick_free_folder(
+    taken: set[str], channel_name: str, platform: str, download_dir: str | None,
+) -> str:
+    """First of "Name", "Name (Platform)", "Name (Platform 2)"... not in taken."""
+    from app.utils.platform_utils import get_platform_label
+
+    plain = sanitize_filename(channel_name)
+    if _folder_key(download_dir, plain) not in taken:
+        return plain
+    label = get_platform_label(platform)
+    for n in range(1, _MAX_FOLDER_ATTEMPTS + 1):
+        suffix = f" ({label})" if n == 1 else f" ({label} {n})"
+        # Trim the name, not the suffix, so every candidate stays distinct
+        candidate = sanitize_filename(plain[: 200 - len(suffix)].rstrip(". ") + suffix)
+        if _folder_key(download_dir, candidate) not in taken:
+            return candidate
+    raise ValueError(f"Could not find a free folder name for '{channel_name}'")
+
+
+async def taken_folder_keys(db: AsyncSession, exclude_id: int | None = None) -> set[str]:
+    """Folders other channels use: the ones on record, plus any folder holding a file
+    another channel's video points to (e.g. after a move that failed part-way, before
+    that channel's folder setting caught up)."""
+    result = await db.execute(select(Channel))
+    keys = {
+        _folder_key(c.download_dir, channel_folder_name(c))
+        for c in result.scalars().all() if c.id != exclude_id
+    }
+    q = select(Video.file_path).where(Video.file_path.is_not(None), Video.file_path != "")
+    if exclude_id is not None:
+        q = q.where(Video.channel_id != exclude_id)
+    paths = (await db.execute(q)).scalars().all()
+
+    def _ancestor_keys() -> set[str]:
+        out: set[str] = set()
+        for p in paths:
+            d = os.path.dirname(p)
+            for _ in range(3):  # season folder, channel folder, one more for nested templates
+                parent = os.path.dirname(d)
+                if not d or parent == d:
+                    break
+                out.add(os.path.realpath(d).casefold())
+                d = parent
+        return out
+
+    return keys | await asyncio.to_thread(_ancestor_keys)
 
 
 class ChannelService:
@@ -203,8 +271,13 @@ class ChannelService:
             next_scan_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
 
-        self.db.add(channel)
-        await self.db.commit()
+        # Picking the folder and inserting must be one step, or two adds at the
+        # same moment can both take the plain folder.
+        async with _ADD_CHANNEL_LOCK:
+            channel.folder_name = await pick_channel_folder(
+                self.db, channel_name, platform, data.download_dir)
+            self.db.add(channel)
+            await self.db.commit()
         await self.db.refresh(channel)
 
         # Generate Plex metadata (tvshow.nfo + poster.jpg)
@@ -217,6 +290,7 @@ class ChannelService:
             thumbnail_url=thumbnail_url,
             base_dir=data.download_dir,
             platform=platform,
+            folder_name=channel.folder_name,
         )
 
         logger.info("Added channel: %s (%s)", channel_name, channel_id)
@@ -278,13 +352,14 @@ class ChannelService:
             thumbnail_url=channel.thumbnail_url,
             base_dir=channel.download_dir,
             platform=channel.platform,
+            folder_name=channel_folder_name(channel),
         )
 
     async def _backfill_channel_art(self, channel: Channel) -> None:
         """Fill in a missing avatar or poster.jpg. Retried every scan until both exist."""
         poster = os.path.join(
             channel.download_dir or settings.DOWNLOAD_DIR,
-            sanitize_filename(channel.channel_name), "poster.jpg",
+            channel_folder_name(channel), "poster.jpg",
         )
         if channel.thumbnail_url and os.path.exists(poster):
             return
@@ -1265,6 +1340,7 @@ class ChannelService:
                 episode=video.episode,
                 naming_template=effective_template,
                 base_dir=channel.download_dir,
+                folder_name=channel_folder_name(channel),
             )
             expected_path = Path(expected_base + old_path.suffix)
 
@@ -1308,7 +1384,7 @@ class ChannelService:
     async def _auto_import_existing(self, channel: Channel) -> int:
         """Check the channel's download directory for files that match un-downloaded videos."""
         base_dir = channel.download_dir or settings.DOWNLOAD_DIR
-        channel_dir = Path(base_dir) / sanitize_filename(channel.channel_name)
+        channel_dir = Path(base_dir) / channel_folder_name(channel)
 
         if not channel_dir.is_dir():
             return 0
@@ -1340,12 +1416,60 @@ class ChannelService:
         return total_imported
 
     async def delete_channel_files(self, channel: Channel):
-        """Delete all downloaded files for a channel."""
+        """Delete this channel's tracked video files and their sidecars.
+
+        Folders are only removed once empty, and the channel's tvshow.nfo and
+        artwork only when no other channel uses the same folder. Another
+        channel's files (or anything untracked) are never touched.
+        """
+        from app.utils.file_utils import (
+            delete_video_files, remove_channel_metadata, remove_empty_dirs,
+        )
+
         base = channel.download_dir or settings.DOWNLOAD_DIR
-        channel_dir = Path(base) / sanitize_filename(channel.channel_name)
-        if channel_dir.exists():
-            await asyncio.to_thread(shutil.rmtree, str(channel_dir))
-            logger.info("Deleted files for channel: %s at %s", channel.channel_name, channel_dir)
+        channel_dir = Path(base) / channel_folder_name(channel)
+
+        result = await self.db.execute(
+            select(Video.file_path).where(
+                Video.channel_id == channel.id, Video.file_path.isnot(None)
+            )
+        )
+        paths = [p for (p,) in result.all() if p]
+        # A file another channel's video also records is not ours to delete
+        if paths:
+            used = await self.db.execute(
+                select(Video.file_path).where(
+                    Video.channel_id != channel.id, Video.file_path.in_(paths)
+                )
+            )
+            claimed = {os.path.normpath(p) for (p,) in used.all()}
+            paths = [p for p in paths if os.path.normpath(p) not in claimed]
+
+        key = _folder_key(channel.download_dir, channel_folder_name(channel))
+        others = await self.db.execute(select(Channel).where(Channel.id != channel.id))
+        shared = any(
+            _folder_key(o.download_dir, channel_folder_name(o)) == key
+            for o in others.scalars().all()
+        )
+
+        def _work() -> None:
+            for p in paths:
+                delete_video_files(p)
+            if not shared:
+                remove_channel_metadata(str(channel_dir))
+            # Folders that held the deleted files, deepest first, then the channel folder
+            dirs = {os.path.dirname(p) for p in paths}
+            for d in sorted(dirs, key=len, reverse=True):
+                try:
+                    if Path(d).resolve().is_relative_to(channel_dir.resolve()):
+                        remove_empty_dirs(d)
+                except OSError:
+                    pass
+            if not shared:
+                remove_empty_dirs(str(channel_dir))
+
+        await asyncio.to_thread(_work)
+        logger.info("Deleted files for channel: %s at %s", channel.channel_name, channel_dir)
 
     @staticmethod
     def _parse_upload_date(date_str: str | None):

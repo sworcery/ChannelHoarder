@@ -16,6 +16,7 @@ from app.models import AppSetting, Channel, Video, DownloadQueue, DownloadLog
 from app.services.diagnostics_service import DiagnosticsService
 from app.services.metadata_service import write_episode_nfo, write_tvshow_nfo
 from app.services.naming_service import build_output_path
+from app.utils.file_utils import channel_folder_name
 from app.services.notification_service import NotificationService
 from app.services.ytdlp_service import YtdlpService
 from app.utils.error_codes import ErrorCode, ERROR_CATALOG, classify_error
@@ -201,6 +202,7 @@ class DownloadService:
                 preferred_codec=channel.preferred_codec,
                 naming_template=channel.naming_template,
                 download_dir=channel.download_dir,
+                folder_name=channel_folder_name(channel),
             )
 
             # Read download feature settings and global fallbacks while we have a DB session
@@ -242,6 +244,7 @@ class DownloadService:
                 episode=vdata.episode,
                 naming_template=effective_template,
                 base_dir=cdata.download_dir,
+                folder_name=cdata.folder_name,
             )
         # ← session released
 
@@ -438,6 +441,7 @@ class DownloadService:
                 thumbnail_url=cdata.thumbnail_url,
                 base_dir=cdata.download_dir,
                 platform=cdata.platform,
+                folder_name=cdata.folder_name,
             )
             write_episode_nfo(
                 channel_name=cdata.channel_name,
@@ -469,6 +473,7 @@ class DownloadService:
                     season=vdata.season,
                     thumbnail_url=cdata.thumbnail_url,
                     base_dir=cdata.download_dir,
+                    folder_name=cdata.folder_name,
                 )
 
         except Exception as e:
@@ -784,7 +789,7 @@ class _ChannelData:
     __slots__ = (
         "pk", "channel_id", "channel_name", "channel_url", "platform",
         "description", "thumbnail_url", "quality", "min_quality",
-        "preferred_codec", "naming_template", "download_dir",
+        "preferred_codec", "naming_template", "download_dir", "folder_name",
     )
 
     def __init__(self, **kw):

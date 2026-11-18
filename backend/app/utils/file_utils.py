@@ -79,6 +79,19 @@ def sanitize_filename(name: str, max_length: int = 200) -> str:
     return name or "Untitled"
 
 
+def channel_folder_name(channel) -> str:
+    """Folder segment for a channel under its download root.
+
+    Channels added after per-channel folders existed carry an explicit
+    folder_name; older rows (NULL/empty) keep the name-based folder they
+    always had, so nothing moves.
+    """
+    explicit = getattr(channel, "folder_name", None)
+    if explicit:
+        return explicit
+    return sanitize_filename(channel.channel_name)
+
+
 def move_video_files(old_path: str, new_path: str, overwrite: bool = False, sidecars: bool = True) -> int:
     """Move a video file and (unless sidecars is False) all associated sidecar files.
 
@@ -168,6 +181,38 @@ def _is_channel_metadata_name(name: str) -> bool:
         return True
     # Kodi/Plex season artwork in the show root, e.g. season01-poster.jpg
     return stem.startswith("season") and stem.rsplit("-", 1)[-1] in _CHANNEL_IMAGE_STEMS
+
+
+def remove_channel_metadata(channel_dir: str) -> int:
+    """Delete a channel folder's own metadata files (tvshow.nfo, channel and season artwork).
+
+    Never touches other files. Returns the number of files removed.
+    """
+    removed = 0
+    if not os.path.isdir(channel_dir) or os.path.islink(channel_dir):
+        return removed
+    dirs = [channel_dir]
+    try:
+        dirs += [
+            os.path.join(channel_dir, d) for d in os.listdir(channel_dir)
+            if d.lower().startswith("season") and os.path.isdir(os.path.join(channel_dir, d))
+        ]
+    except OSError:
+        pass
+    for d in dirs:
+        try:
+            names = os.listdir(d)
+        except OSError:
+            continue
+        for name in names:
+            path = os.path.join(d, name)
+            if os.path.isfile(path) and _is_channel_metadata_name(name):
+                try:
+                    os.remove(path)
+                    removed += 1
+                except OSError as e:
+                    logger.warning("Failed to delete %s: %s", path, e)
+    return removed
 
 
 def move_channel_metadata(old_channel_dir: str, new_channel_dir: str) -> tuple[int, list[str]]:

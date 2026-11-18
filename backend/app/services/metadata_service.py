@@ -34,6 +34,7 @@ def write_tvshow_nfo(
     thumbnail_url: str | None = None,
     base_dir: str | None = None,
     platform: str = "youtube",
+    folder_name: str | None = None,
 ) -> str | None:
     """Write tvshow.nfo in the channel's root download folder.
 
@@ -42,7 +43,7 @@ def write_tvshow_nfo(
     from app.utils.platform_utils import get_platform_label
     platform_label = get_platform_label(platform)
 
-    safe_name = sanitize_filename(channel_name)
+    safe_name = folder_name or sanitize_filename(channel_name)
     series_dir = os.path.join(base_dir or settings.DOWNLOAD_DIR, safe_name)
     os.makedirs(series_dir, exist_ok=True)
 
@@ -94,6 +95,7 @@ def write_episode_nfo(
     thumbnail_url: str | None = None,
     video_file_path: str | None = None,
     platform: str = "youtube",
+    folder_name: str | None = None,
 ) -> str | None:
     """Write an episode .nfo file alongside the video file.
 
@@ -117,6 +119,7 @@ def write_episode_nfo(
             upload_date=upload_date,
             season=season,
             episode=episode,
+            folder_name=folder_name,
         )
         nfo_path = base_path + ".nfo"
 
@@ -177,6 +180,7 @@ def write_season_poster(
     season: int,
     thumbnail_url: str | None,
     base_dir: str | None = None,
+    folder_name: str | None = None,
 ) -> bool:
     """Create a season poster by downloading the channel thumbnail into the season folder."""
     if not thumbnail_url:
@@ -186,7 +190,7 @@ def write_season_poster(
     from app.utils.file_utils import sanitize_filename
 
     base = base_dir or settings.DOWNLOAD_DIR
-    safe_name = sanitize_filename(channel_name)
+    safe_name = folder_name or sanitize_filename(channel_name)
     season_dir = os.path.join(base, safe_name, f"Season {season}")
     poster_path = os.path.join(season_dir, "poster.jpg")
 

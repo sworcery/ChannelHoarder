@@ -33,7 +33,7 @@ from app.services.import_service import VIDEO_EXTENSIONS
 from app.services.metadata_service import write_episode_nfo
 from app.services.naming_service import build_output_path, resolve_naming_template
 from app.services.notification_service import NotificationService
-from app.utils.file_utils import ASSOCIATED_EXTENSIONS, move_video_files
+from app.utils.file_utils import ASSOCIATED_EXTENSIONS, channel_folder_name, move_video_files
 from app.utils.platform_utils import detect_platform
 
 logger = logging.getLogger(__name__)
@@ -510,6 +510,7 @@ async def _fix_misplaced(db, item) -> tuple[str, str]:
         channel_name=channel.channel_name, video_title=real.title, video_id=real.video_id,
         upload_date=real.upload_date, season=real.season, episode=real.episode,
         naming_template=template, base_dir=channel.download_dir,
+        folder_name=channel_folder_name(channel),
     ) + os.path.splitext(src)[1]
 
     reason = await asyncio.to_thread(_precheck_move, src, item.get("fingerprint"), real.file_path, target)

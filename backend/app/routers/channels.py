@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_db
-from app.utils.file_utils import delete_video_files, escape_like, move_video_files, sanitize_filename
+from app.utils.file_utils import channel_folder_name, delete_video_files, escape_like, move_video_files
 from app.models import Channel, DownloadLog, Video, DownloadQueue
 from pydantic import BaseModel, Field
 
@@ -176,8 +176,19 @@ async def update_channel(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
+    old_dir = channel.download_dir
     for field, value in update_data.items():
         setattr(channel, field, value)
+
+    # A new download root (without moving files) can hold a same-named channel's
+    # folder; give this channel its own there so future downloads don't mix.
+    if "download_dir" in update_data and channel.download_dir != old_dir:
+        from app.services.channel_service import _folder_key, pick_free_folder, taken_folder_keys
+        from app.utils.file_utils import channel_folder_name
+        taken = await taken_folder_keys(db, exclude_id=channel.id)
+        if _folder_key(channel.download_dir, channel_folder_name(channel)) in taken:
+            channel.folder_name = pick_free_folder(
+                taken, channel.channel_name, channel.platform, channel.download_dir)
 
     await db.commit()
     await db.refresh(channel)
@@ -321,6 +332,7 @@ async def renumber_preview(channel_id: int, db: AsyncSession = Depends(get_db)):
                     episode=new_episode,
                     naming_template=effective_template,
                     base_dir=channel.download_dir,
+                    folder_name=channel_folder_name(channel),
                 # Match what the renumber itself will do, so the preview is accurate
                 ) + (os.path.splitext(video.file_path)[1] or ".mp4")
 
@@ -860,6 +872,7 @@ async def rename_video_file(
         episode=video.episode,
         naming_template=await resolve_naming_template(db, channel.naming_template),
         base_dir=channel.download_dir,
+        folder_name=channel_folder_name(channel),
     # Preserve the real container - imported files aren't always .mp4
     ) + (os.path.splitext(video.file_path)[1] or ".mp4")
 
@@ -1068,6 +1081,7 @@ async def bulk_rename_videos(
             episode=video.episode,
             naming_template=effective_template,
             base_dir=channel.download_dir,
+            folder_name=channel_folder_name(channel),
         # Preserve the real container - imported files aren't always .mp4
         ) + (os.path.splitext(video.file_path)[1] or ".mp4")
         if new_path == video.file_path:
@@ -1334,14 +1348,13 @@ class MoveFilesRequest(BaseModel):
 
 async def _get_move_preview(db: AsyncSession, channel_id: int, new_dir: str) -> dict:
     """Compute move preview for a single channel."""
-    from app.utils.file_utils import sanitize_filename
 
     channel = await db.get(Channel, channel_id)
     if not channel:
         return {"error": "Channel not found"}
 
     old_dir = channel.download_dir or settings.DOWNLOAD_DIR
-    safe_name = sanitize_filename(channel.channel_name)
+    safe_name = channel_folder_name(channel)
     old_channel_dir = os.path.join(old_dir, safe_name)
     new_channel_dir = os.path.join(new_dir, safe_name)
     same_path = os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir)
@@ -1420,9 +1433,8 @@ async def move_all_preview(
     }
 
 
-def _same_channel_folder(channel_name: str, old_dir: str, new_dir: str) -> bool:
-    safe_name = sanitize_filename(channel_name)
-    return _same_location(os.path.join(old_dir, safe_name), os.path.join(new_dir, safe_name))
+def _same_channel_folder(folder: str, old_dir: str, new_dir: str) -> bool:
+    return _same_location(os.path.join(old_dir, folder), os.path.join(new_dir, folder))
 
 
 def _same_location(a: str, b: str) -> bool:
@@ -1464,11 +1476,20 @@ async def _move_channel_contents(
         count_files, move_channel_metadata, move_sidecar_files, remove_empty_dirs,
     )
 
-    safe_name = sanitize_filename(channel.channel_name)
+    from app.services.channel_service import pick_free_folder, taken_folder_keys, _folder_key
+
+    safe_name = channel_folder_name(channel)
+    # Another channel already using this folder in the target root must not be
+    # merged with: this channel moves into a free "Name (Platform)" folder instead.
+    new_folder = safe_name
+    taken = await taken_folder_keys(db, exclude_id=channel.id)
+    if _folder_key(new_dir, safe_name) in taken:
+        new_folder = pick_free_folder(taken, channel.channel_name, channel.platform, new_dir)
     old_channel_dir = os.path.join(old_dir, safe_name)
-    new_channel_dir = os.path.join(new_dir, safe_name)
+    new_channel_dir = os.path.join(new_dir, new_folder)
     moved = 0
     errors: list[str] = []
+    channel_pk = channel.id
 
     # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
     result = await db.execute(
@@ -1479,7 +1500,12 @@ async def _move_channel_contents(
     for video_pk, old_path in result.all():
         if not old_path:
             continue
-        new_path = _remap_path(old_path, old_dir, new_dir)
+        if new_folder != safe_name:
+            new_path = _remap_path(old_path, old_channel_dir, new_channel_dir)
+        else:
+            new_path = None
+        if new_path is None:
+            new_path = _remap_path(old_path, old_dir, new_dir)
         if new_path is None or _same_location(new_path, old_path):
             continue
         try:
@@ -1505,11 +1531,27 @@ async def _move_channel_contents(
         moved += 1
 
     if not errors:
-        _, meta_errors = await asyncio.to_thread(
-            move_channel_metadata, old_channel_dir, new_channel_dir
+        # Leave shared artwork and tvshow.nfo with an old channel that still uses
+        # this folder; the moved channel gets its own written on its next download.
+        others = await db.execute(select(Channel).where(Channel.id != channel_pk))
+        old_key = os.path.realpath(old_channel_dir).casefold()
+        shared = any(
+            os.path.realpath(os.path.join(c.download_dir or settings.DOWNLOAD_DIR,
+                                          channel_folder_name(c))).casefold() == old_key
+            for c in others.scalars().all()
         )
+        meta_errors = []
+        if not shared:
+            _, meta_errors = await asyncio.to_thread(
+                move_channel_metadata, old_channel_dir, new_channel_dir
+            )
         for err in meta_errors:
             logger.warning("Channel metadata not moved: %s", err)
+        if new_folder != safe_name:
+            row = await db.get(Channel, channel_pk)
+            row.folder_name = new_folder
+            await db.commit()
+            channel.folder_name = new_folder
 
     await asyncio.to_thread(remove_empty_dirs, old_channel_dir)
     left = await asyncio.to_thread(count_files, old_channel_dir) if os.path.isdir(old_channel_dir) else 0
@@ -1543,7 +1585,7 @@ async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
         if not channel:
             return
 
-        if _same_channel_folder(channel.channel_name, old_dir, new_dir):
+        if _same_channel_folder(channel_folder_name(channel), old_dir, new_dir):
             # Another name for the same folder (second mount, different case).
             await NotificationService.broadcast("move_complete", {
                 "channel_name": channel.channel_name,
@@ -1554,6 +1596,7 @@ async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
         logger.info("Moving channel '%s' files to %s", channel.channel_name, new_dir)
         name = channel.channel_name
         moved_files = 0
+        folder_before = channel_folder_name(channel)
         try:
             moved_files, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
             if not errors:
@@ -1576,6 +1619,10 @@ async def _move_channel_task_inner(channel_id: int, new_dir: str, old_dir: str):
             return
 
         extra = f", {left} other files left in the old folder" if left else ""
+        folder_after = channel_folder_name(channel)
+        if folder_after != folder_before:
+            extra += (f"; the folder '{folder_before}' was already in use there, "
+                      f"so it went to '{folder_after}'")
         await NotificationService.broadcast("move_complete", {
             "channel_name": channel.channel_name,
             "message": f"Moved '{channel.channel_name}' to {new_dir} ({moved_files} files{extra})",
@@ -1605,8 +1652,7 @@ async def move_channel_files(
     old_dir = channel.download_dir or settings.DOWNLOAD_DIR
 
     # Check for same-path move
-    from app.utils.file_utils import sanitize_filename
-    safe_name = sanitize_filename(channel.channel_name)
+    safe_name = channel_folder_name(channel)
     old_channel_dir = os.path.join(old_dir, safe_name)
     new_channel_dir = os.path.join(body.new_download_dir, safe_name)
     if os.path.realpath(old_channel_dir) == os.path.realpath(new_channel_dir):
@@ -1649,19 +1695,22 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
         total_left = 0
         channels_moved = 0
         channels_failed = 0
+        renamed: list[str] = []
 
         # Plain values: a rollback expires ORM objects, and async sessions can't lazy-load them.
-        infos = [(c.id, c.channel_name, c.download_dir) for c in channels]
+        infos = [(c.id, c.channel_name, c.download_dir, channel_folder_name(c)) for c in channels]
 
-        for cid, cname, cdir in infos:
+        for cid, cname, cdir, cfolder in infos:
             old_dir = old_dirs.get(cid, cdir or settings.DOWNLOAD_DIR)
-            if _same_channel_folder(cname, old_dir, new_dir):
+            if _same_channel_folder(cfolder, old_dir, new_dir):
                 continue
 
             try:
                 channel = await db.get(Channel, cid)
                 channel_moved, errors, left = await _move_channel_contents(db, channel, old_dir, new_dir)
                 if not errors:
+                    if channel_folder_name(channel) != cfolder:
+                        renamed.append(f"'{cfolder}' -> '{channel_folder_name(channel)}'")
                     channel = await db.get(Channel, cid)
                     channel.download_dir = None if _is_default_dir(new_dir) else new_dir
                     await db.commit()
@@ -1689,6 +1738,8 @@ async def _move_all_task_inner(new_dir: str, old_dirs: dict[int, str]):
                        f"{total_moved} files): " + _failure_message(all_errors))
             logger.error(message)
         else:
+            if renamed:
+                extra += ("; folders already in use there were renamed: " + ", ".join(renamed))
             message = f"Moved {channels_moved} channels to {new_dir} ({total_moved} files{extra})"
             logger.info("Move all complete: %d channels, %d files moved", channels_moved, total_moved)
         await NotificationService.broadcast(
@@ -2193,7 +2244,7 @@ async def _force_rescan_locked(channel: Channel, db: AsyncSession):
 
     matched_count = 0
     download_dir = Path(channel.download_dir or settings.DOWNLOAD_DIR)
-    channel_dir = download_dir / sanitize_filename(channel.channel_name)
+    channel_dir = download_dir / channel_folder_name(channel)
     search_dir = channel_dir if channel_dir.is_dir() else download_dir
     if search_dir.is_dir():
         file_map: dict[str, Path] = {}
