@@ -3,6 +3,8 @@ import { createPortal } from "react-dom"
 
 interface DropdownMenuProps {
   trigger: ReactNode
+  /** Accessible name for the trigger button (needed when the trigger is just an icon). */
+  label?: string
   children: ReactNode
 }
 
@@ -13,7 +15,7 @@ interface DropdownItemProps {
   disabled?: boolean
 }
 
-export function DropdownMenu({ trigger, children }: DropdownMenuProps) {
+export function DropdownMenu({ trigger, label, children }: DropdownMenuProps) {
   const [open, setOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -55,6 +57,9 @@ export function DropdownMenu({ trigger, children }: DropdownMenuProps) {
       <button
         ref={triggerRef}
         onClick={() => setOpen(!open)}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className="p-1 hover:bg-accent rounded"
       >
         {trigger}

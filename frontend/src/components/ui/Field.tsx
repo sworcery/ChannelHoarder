@@ -10,12 +10,15 @@ interface FieldProps {
   /** Error text under the control; also sets aria-invalid on the control. */
   error?: ReactNode
   className?: string
+  /** Use a plain caption (aria-labelledby) instead of a <label>, so clicking it doesn't activate the control (toggle buttons). */
+  caption?: boolean
   /** A single control element (input/select/textarea); it receives id, aria-describedby and aria-invalid. */
   children: ReactElement<Record<string, unknown>> | ReactNode
 }
 
-export function Field({ label, help, hint, error, className, children }: FieldProps) {
+export function Field({ label, help, hint, error, className, caption, children }: FieldProps) {
   const id = useId()
+  const captionId = `${id}-caption`
   const hintId = `${id}-hint`
   const errorId = `${id}-error`
   const describedBy = [error ? errorId : null, hint ? hintId : null].filter(Boolean).join(" ") || undefined
@@ -25,6 +28,7 @@ export function Field({ label, help, hint, error, className, children }: FieldPr
         id: (children.props.id as string | undefined) ?? id,
         "aria-describedby": describedBy,
         "aria-invalid": error ? true : undefined,
+        ...(caption ? { "aria-labelledby": captionId } : {}),
       })
     : children
   const controlId = isValidElement<Record<string, unknown>>(children) ? ((children.props.id as string | undefined) ?? id) : id
@@ -32,7 +36,7 @@ export function Field({ label, help, hint, error, className, children }: FieldPr
   return (
     <div className={className}>
       <div className="mb-1 flex items-center gap-1 text-sm font-medium">
-        <label htmlFor={controlId}>{label}</label>
+        {caption ? <span id={captionId}>{label}</span> : <label htmlFor={controlId}>{label}</label>}
         {help}
       </div>
       {control}

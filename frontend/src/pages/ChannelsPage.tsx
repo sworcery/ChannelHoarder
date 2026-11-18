@@ -2,12 +2,19 @@ import { useState, useMemo, useEffect, useRef } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
 import { api } from "@/lib/api"
-import { formatDateTime, formatBytes } from "@/lib/utils"
+import { formatBytes } from "@/lib/utils"
 import { HEALTH_COLORS } from "@/lib/types"
 import type { Channel } from "@/lib/types"
 import { useToast } from "@/components/ui/toaster"
 import BulkImportDialog from "@/components/channels/BulkImportDialog"
 import { HelpIcon } from "@/components/ui/HelpIcon"
+import { Button, buttonClasses } from "@/components/ui/Button"
+import { Dialog } from "@/components/ui/Dialog"
+import { Field } from "@/components/ui/Field"
+import { PageHeader } from "@/components/ui/PageHeader"
+import { Badge } from "@/components/ui/Badge"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { DateTime } from "@/components/ui/DateTime"
 import { useDebounce } from "@/hooks/useDebounce"
 import {
   Plus,
@@ -110,16 +117,34 @@ export default function ChannelsPage() {
     staleTime: 15000,
   })
 
+  // After a successful add: clear the form. Auto-download and scan-after-add stay as the
+  // user left them (re-ticking auto-download can queue a whole back catalogue).
+  const resetAdd = () => {
+    setShowAdd(false)
+    setAddUrl("")
+    setAddQuality(defaultQuality)
+    setAddDownloadDir("")
+    setAddTitleFilter("")
+    setAddTitleFilterIsRegex(false)
+    setAddTitleFilterMode("include")
+    setAddFromDate("")
+  }
+
+  // Cancel / close: clear URL, from-date and title filter; keep the folder and quality
+  const closeAdd = () => {
+    setShowAdd(false)
+    setAddUrl("")
+    setAddFromDate("")
+    setAddTitleFilter("")
+    setAddTitleFilterIsRegex(false)
+    setAddTitleFilterMode("include")
+  }
+
   const addMutation = useMutation({
     mutationFn: (data: { url: string; quality: string; download_dir?: string; auto_download?: boolean; download_from_date?: string; title_filter?: string; title_filter_is_regex?: boolean; title_filter_mode?: string }) => api.addChannel(data),
     onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
-      setShowAdd(false)
-      setAddUrl("")
-      setAddDownloadDir("")
-      setAddTitleFilter("")
-      setAddTitleFilterIsRegex(false)
-      setAddFromDate("")
+      resetAdd()
       toast(`Added channel: ${data.channel_name}`)
       if (scanAfterAdd && data.id) {
         toast("Starting initial scan...")
@@ -128,6 +153,16 @@ export default function ChannelsPage() {
     },
     onError: (e: Error) => toast(e.message, "error"),
   })
+
+  const submitAdd = () => {
+    if (addTitleFilterIsRegex && addTitleFilter) {
+      try { new RegExp(addTitleFilter, "i") } catch {
+        toast("Invalid regular expression", "error")
+        return
+      }
+    }
+    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addFromDate ? { download_from_date: addFromDate } : {}), ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex, title_filter_mode: addTitleFilterMode } : {}) })
+  }
 
   const scanMutation = useMutation({
     mutationFn: (id: number) => api.scanChannel(id),
@@ -164,6 +199,34 @@ export default function ChannelsPage() {
 
   const sortedChannels = useMemo(() => channels ? sortChannels(channels, sortBy) : [], [channels, sortBy])
 
+  const closeMoveAll = () => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }
+
+  const previewMoveAll = async () => {
+    if (!moveAllDir) return
+    setMoveAllPreviewLoading(true)
+    try {
+      const preview = await api.moveAllPreview(moveAllDir)
+      if (preview.channels_to_move === 0) {
+        toast("All channels are already in that directory")
+        return
+      }
+      setMoveAllPreview(preview)
+    } catch (e: any) {
+      toast(e.message, "error")
+    } finally {
+      setMoveAllPreviewLoading(false)
+    }
+  }
+
+  const runMoveAll = () => {
+    setMovingAll(true)
+    api.moveAllChannels(moveAllDir).then((r) => {
+      queryClient.invalidateQueries({ queryKey: ["channels"] })
+      closeMoveAll()
+      toast(r.message)
+    }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingAll(false))
+  }
+
   // Thumbnail sizes per card size
   const thumbSize = { small: "h-10 w-10", medium: "h-16 w-16", large: "h-20 w-20" }
   const thumbIconSize = { small: "h-5 w-5", medium: "h-8 w-8", large: "h-10 w-10" }
@@ -175,45 +238,36 @@ export default function ChannelsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Channels</h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => downloadAllMissingMutation.mutate()}
-            disabled={downloadAllMissingMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors disabled:opacity-50"
-          >
-            {downloadAllMissingMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-            Download All Missing
-          </button>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="h-4 w-4" /> Add Channel
-          </button>
-          <button
-            onClick={() => setShowBulk(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors"
-            title="Add many channels from a list or CSV file"
-          >
-            <Upload className="h-4 w-4" /> Bulk Import
-          </button>
-          <button
-            onClick={() => setShowMoveAll(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-md border hover:bg-accent transition-colors"
-            title="Move all channel files to a new directory"
-          >
-            Move All
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Channels"
+        actions={
+          <>
+            <Button
+              onClick={() => downloadAllMissingMutation.mutate()}
+              loading={downloadAllMissingMutation.isPending}
+            >
+              {!downloadAllMissingMutation.isPending && <Download className="h-4 w-4" />}
+              Download All Missing
+            </Button>
+            <Button variant="primary" onClick={() => setShowAdd(true)}>
+              <Plus className="h-4 w-4" /> Add Channel
+            </Button>
+            <Button onClick={() => setShowBulk(true)} title="Add many channels from a list or CSV file">
+              <Upload className="h-4 w-4" /> Bulk Import
+            </Button>
+            <Button onClick={() => setShowMoveAll(true)} title="Move all channel files to a new directory">
+              Move All
+            </Button>
+          </>
+        }
+      />
 
       {/* Search + Display Controls */}
       <div className="flex items-center gap-2 flex-wrap">
         <input
           type="text"
           placeholder="Search channels..."
+          aria-label="Search channels"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 min-w-[200px] max-w-sm px-3 py-2 rounded-md border bg-background text-sm"
@@ -224,6 +278,7 @@ export default function ChannelsPage() {
           <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
           <select
             value={sortBy}
+            aria-label="Sort channels"
             onChange={(e) => setSort(e.target.value as SortBy)}
             className="px-2 py-2 rounded-md border bg-background text-sm"
           >
@@ -241,6 +296,7 @@ export default function ChannelsPage() {
         {viewMode === "grid" && (
           <select
             value={cardSize}
+            aria-label="Card size"
             onChange={(e) => setSize(e.target.value as CardSize)}
             className="px-2 py-2 rounded-md border bg-background text-sm"
           >
@@ -252,162 +308,170 @@ export default function ChannelsPage() {
 
         {/* View mode toggle */}
         <div className="flex items-center border rounded-md overflow-hidden">
-          <button
+          <Button
+            variant={viewMode === "grid" ? "primary" : "ghost"}
+            size="icon"
+            className="rounded-none"
             onClick={() => setView("grid")}
-            className={`p-2 ${viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
             title="Grid view"
+            aria-label="Grid view"
+            aria-pressed={viewMode === "grid"}
           >
             <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant={viewMode === "list" ? "primary" : "ghost"}
+            size="icon"
+            className="rounded-none"
             onClick={() => setView("list")}
-            className={`p-2 ${viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-accent"}`}
             title="List view"
+            aria-label="List view"
+            aria-pressed={viewMode === "list"}
           >
             <List className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Add Channel Dialog */}
-      {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card rounded-lg p-6 w-full max-w-md mx-4 border shadow-lg">
-            <div className="flex items-center gap-2 mb-4">
-              <h2 className="text-lg font-semibold">Add Channel</h2>
-              <HelpIcon text="Add by URL, @handle, or playlist link." anchor="adding-channels" />
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Channel URL or @handle</label>
-                <input
-                  type="text"
-                  placeholder="https://youtube.com/@channel or @channel"
-                  value={addUrl}
-                  onChange={(e) => setAddUrl(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Quality</label>
-                <select
-                  value={addQuality}
-                  onChange={(e) => setAddQuality(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                >
-                  <option value="best">Best Available</option>
-                  <option value="2160p">4K (2160p)</option>
-                  <option value="1080p">1080p</option>
-                  <option value="720p">720p</option>
-                  <option value="480p">480p</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Download Directory</label>
-                <input
-                  type="text"
-                  placeholder="Leave blank for default (/downloads)"
-                  value={addDownloadDir}
-                  onChange={(e) => setAddDownloadDir(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Custom path inside the container, e.g. /media/youtube</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Title Filter (optional)</label>
-                <input
-                  type="text"
-                  placeholder={addTitleFilterIsRegex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
-                  value={addTitleFilter}
-                  onChange={(e) => setAddTitleFilter(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                />
-                <div className="flex items-center gap-3 mt-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAddTitleFilterMode(addTitleFilterMode === "include" ? "exclude" : "include")}
-                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterMode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
-                    >
-                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterMode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
-                    </button>
-                    <span className="text-xs text-muted-foreground">{addTitleFilterMode === "exclude" ? "Exclude" : "Include"}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setAddTitleFilterIsRegex(!addTitleFilterIsRegex)}
-                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterIsRegex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
-                    >
-                      <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterIsRegex ? "translate-x-4" : "translate-x-0.5"}`} />
-                    </button>
-                    <span className="text-xs text-muted-foreground">Regex</span>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{addTitleFilterMode === "exclude" ? "Skip" : "Only download"} videos {addTitleFilterMode === "exclude" ? "containing" : "matching"} these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={scanAfterAdd}
-                  onChange={(e) => setScanAfterAdd(e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-sm">Scan for videos after adding</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoDownload}
-                  onChange={(e) => setAutoDownload(e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-sm">Auto-download videos</span>
-              </label>
-              <p className="text-xs text-muted-foreground -mt-2">
-                Downloads every video the channel has published unless you set a date. Uncheck to list videos and pick what to download.
-              </p>
-              <div>
-                <label className="block text-sm font-medium mb-1">Download from date (optional)</label>
-                <input
-                  type="date"
-                  value={addFromDate}
-                  onChange={(e) => setAddFromDate(e.target.value)}
-                  className="w-full px-3 py-2 rounded-md border bg-background"
-                />
-                <p className="text-xs text-muted-foreground mt-1">Leave empty to include everything.</p>
-              </div>
-              {addMutation.error && (
-                <p className="text-sm text-red-500">{(addMutation.error as Error).message}</p>
-              )}
-              <div className="flex justify-end gap-2">
+      <Dialog
+        open={showAdd}
+        onClose={closeAdd}
+        closeOnBackdrop={false}
+        size="sm"
+        title={
+          <span className="flex items-center gap-2">
+            Add Channel
+            <HelpIcon text="Add by URL, @handle, or playlist link." anchor="adding-channels" />
+          </span>
+        }
+        footer={
+          <>
+            <Button onClick={closeAdd}>Cancel</Button>
+            <Button
+              type="submit"
+              form="add-channel-form"
+              variant="primary"
+              disabled={!addUrl}
+              loading={addMutation.isPending}
+            >
+              Add
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="add-channel-form"
+          className="space-y-4"
+          onSubmit={(e) => { e.preventDefault(); if (addUrl && !addMutation.isPending) submitAdd() }}
+        >
+          <Field label="Channel URL or @handle">
+            <input
+              type="text"
+              autoFocus
+              placeholder="https://youtube.com/@channel or @channel"
+              value={addUrl}
+              onChange={(e) => setAddUrl(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            />
+          </Field>
+          <Field label="Quality">
+            <select
+              value={addQuality}
+              onChange={(e) => setAddQuality(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            >
+              <option value="best">Best Available</option>
+              <option value="2160p">4K (2160p)</option>
+              <option value="1080p">1080p</option>
+              <option value="720p">720p</option>
+              <option value="480p">480p</option>
+            </select>
+          </Field>
+          <Field label="Download Directory" hint="Custom path inside the container, e.g. /media/youtube">
+            <input
+              type="text"
+              placeholder="Leave blank for default (/downloads)"
+              value={addDownloadDir}
+              onChange={(e) => setAddDownloadDir(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            />
+          </Field>
+          <div>
+            <Field label="Title Filter (optional)">
+              <input
+                type="text"
+                placeholder={addTitleFilterIsRegex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
+                value={addTitleFilter}
+                onChange={(e) => setAddTitleFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border bg-background"
+              />
+            </Field>
+            <div className="flex items-center gap-3 mt-1.5">
+              <div className="flex items-center gap-1.5">
+                {/* Switch control, not a labelled action button, so it keeps its own track styling */}
                 <button
-                  onClick={() => { setShowAdd(false); setAddUrl(""); setAddFromDate(""); setAddTitleFilter(""); setAddTitleFilterIsRegex(false); setAddTitleFilterMode("include") }}
-                  className="px-4 py-2 rounded-md border hover:bg-accent"
+                  type="button"
+                  role="switch"
+                  aria-checked={addTitleFilterMode === "exclude"}
+                  aria-label="Exclude matching titles"
+                  onClick={() => setAddTitleFilterMode(addTitleFilterMode === "include" ? "exclude" : "include")}
+                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterMode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
                 >
-                  Cancel
+                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterMode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
                 </button>
+                <span className="text-xs text-muted-foreground">{addTitleFilterMode === "exclude" ? "Exclude" : "Include"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
                 <button
-                  onClick={() => {
-                    if (addTitleFilterIsRegex && addTitleFilter) {
-                      try { new RegExp(addTitleFilter, "i") } catch {
-                        toast("Invalid regular expression", "error")
-                        return
-                      }
-                    }
-                    addMutation.mutate({ url: addUrl, quality: addQuality, auto_download: autoDownload, ...(addFromDate ? { download_from_date: addFromDate } : {}), ...(addDownloadDir ? { download_dir: addDownloadDir } : {}), ...(addTitleFilter ? { title_filter: addTitleFilter, title_filter_is_regex: addTitleFilterIsRegex, title_filter_mode: addTitleFilterMode } : {}) })
-                  }}
-                  disabled={!addUrl || addMutation.isPending}
-                  className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
+                  type="button"
+                  role="switch"
+                  aria-checked={addTitleFilterIsRegex}
+                  aria-label="Treat the filter as a regular expression"
+                  onClick={() => setAddTitleFilterIsRegex(!addTitleFilterIsRegex)}
+                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterIsRegex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
                 >
-                  {addMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Add
+                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterIsRegex ? "translate-x-4" : "translate-x-0.5"}`} />
                 </button>
+                <span className="text-xs text-muted-foreground">Regex</span>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground mt-1">{addTitleFilterMode === "exclude" ? "Skip" : "Only download"} videos {addTitleFilterMode === "exclude" ? "containing" : "matching"} these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
           </div>
-        </div>
-      )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={scanAfterAdd}
+              onChange={(e) => setScanAfterAdd(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm">Scan for videos after adding</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoDownload}
+              onChange={(e) => setAutoDownload(e.target.checked)}
+              className="rounded"
+            />
+            <span className="text-sm">Auto-download videos</span>
+          </label>
+          <p className="text-xs text-muted-foreground -mt-2">
+            Downloads every video the channel has published unless you set a date. Uncheck to list videos and pick what to download.
+          </p>
+          <Field label="Download from date (optional)" hint="Leave empty to include everything.">
+            <input
+              type="date"
+              value={addFromDate}
+              onChange={(e) => setAddFromDate(e.target.value)}
+              className="w-full px-3 py-2 rounded-md border bg-background"
+            />
+          </Field>
+          {addMutation.error && (
+            <p className="text-sm text-red-500">{(addMutation.error as Error).message}</p>
+          )}
+        </form>
+      </Dialog>
 
       {/* Channel Display */}
       {isLoading ? (
@@ -449,9 +513,9 @@ export default function ChannelsPage() {
                             <div className="flex items-center gap-2">
                               <span className="font-medium truncate">{channel.channel_name}</span>
                               {channel.platform !== "youtube" && (
-                                <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 capitalize">
+                                <Badge tone="info" className="text-[10px] px-1.5 capitalize">
                                   {channel.platform}
-                                </span>
+                                </Badge>
                               )}
                             </div>
                             {channel.description && (
@@ -465,7 +529,7 @@ export default function ChannelsPage() {
                         <span className="text-xs ml-1">({progress}%)</span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border">{channel.quality}</span>
+                        <Badge className="text-[10px]">{channel.quality}</Badge>
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -475,22 +539,25 @@ export default function ChannelsPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{formatDateTime(channel.last_scanned_at)}</td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground"><DateTime value={channel.last_scanned_at} /></td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1">
-                          <button
+                          <Button
+                            variant="ghost" size="icon"
                             onClick={() => downloadChannelMutation.mutate(channel.id)}
-                            className="p-1 hover:bg-accent rounded" title="Download all missing"
+                            title="Download all missing" aria-label="Download all missing"
                           >
                             <Download className="h-3.5 w-3.5" />
-                          </button>
-                          <button
+                          </Button>
+                          <Button
+                            variant="ghost" size="icon"
                             onClick={() => scanMutation.mutate(channel.id)}
-                            className="p-1 hover:bg-accent rounded" title="Scan now"
+                            title="Scan now" aria-label="Scan now"
                           >
                             <RefreshCw className="h-3.5 w-3.5" />
-                          </button>
-                          <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="p-1 hover:bg-accent rounded" title="Open channel">
+                          </Button>
+                          {/* Link, not a button: it opens another site */}
+                          <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className={buttonClasses("ghost", "icon")} title="Open channel" aria-label="Open channel">
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
                         </div>
@@ -542,9 +609,9 @@ export default function ChannelsPage() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold truncate">{channel.channel_name}</h3>
                           {channel.platform && channel.platform !== "youtube" && (
-                            <span className="inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300 capitalize">
+                            <Badge tone="info" className="text-[10px] px-1.5 capitalize">
                               {channel.platform}
-                            </span>
+                            </Badge>
                           )}
                           <Circle
                             className={`h-2.5 w-2.5 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`}
@@ -573,39 +640,35 @@ export default function ChannelsPage() {
                     {/* Metadata badges + actions */}
                     <div className="mt-3 flex items-center justify-between">
                       <div className="flex items-center gap-1.5">
-                        <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border">
-                          {channel.quality}
-                        </span>
-                        <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                          channel.enabled
-                            ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                            : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                        }`}>
+                        <Badge className="text-[10px]">{channel.quality}</Badge>
+                        <Badge tone={channel.enabled ? "success" : "neutral"} className="text-[10px]">
                           {channel.enabled ? "Active" : "Paused"}
-                        </span>
+                        </Badge>
                       </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                        <Button
+                          variant="ghost" size="icon"
                           onClick={(e) => { e.preventDefault(); downloadChannelMutation.mutate(channel.id) }}
-                          className="p-1 hover:bg-accent rounded"
-                          title="Download all missing"
+                          title="Download all missing" aria-label="Download all missing"
                         >
                           <Download className="h-3.5 w-3.5" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="ghost" size="icon"
                           onClick={(e) => { e.preventDefault(); scanMutation.mutate(channel.id) }}
-                          className="p-1 hover:bg-accent rounded"
-                          title="Scan now"
+                          title="Scan now" aria-label="Scan now"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
-                        </button>
+                        </Button>
+                        {/* Link, not a button: it opens another site */}
                         <a
                           href={channel.channel_url}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="p-1 hover:bg-accent rounded"
+                          className={buttonClasses("ghost", "icon")}
                           title="Open channel"
+                          aria-label="Open channel"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
                         </a>
@@ -614,7 +677,7 @@ export default function ChannelsPage() {
 
                     {cardSize !== "small" && (
                       <div className="mt-2 text-xs text-muted-foreground">
-                        Last scan: {formatDateTime(channel.last_scanned_at)}
+                        Last scan: <DateTime value={channel.last_scanned_at} />
                       </div>
                     )}
                   </div>
@@ -624,121 +687,88 @@ export default function ChannelsPage() {
           </div>
         )
       ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          <Tv className="h-12 w-12 mx-auto mb-3 opacity-50" />
-          <p>No channels yet. Add one to get started.</p>
-        </div>
+        <EmptyState
+          icon={<Tv />}
+          title="No channels yet"
+          text="Add one to get started."
+        />
       )}
       <BulkImportDialog open={showBulk} onClose={() => setShowBulk(false)} />
+
       {/* Move All Dialog */}
-      {showMoveAll && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-card rounded-lg p-6 w-full max-w-lg mx-4 border shadow-lg">
-            <h2 className="text-lg font-semibold mb-4">Move All Channels</h2>
-            {!moveAllPreview ? (
-              <>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Move all channel files to a new root directory. File paths in the database will be updated automatically.
-                </p>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">New Download Directory</label>
-                    <input
-                      type="text"
-                      placeholder="/downloads/youtube"
-                      value={moveAllDir}
-                      onChange={(e) => setMoveAllDir(e.target.value)}
-                      className="w-full px-3 py-2 rounded-md border bg-background"
-                    />
+      <Dialog
+        open={showMoveAll}
+        onClose={() => { if (!movingAll) closeMoveAll() }}
+        title="Move All Channels"
+        closeOnEsc={!movingAll}
+        closeOnBackdrop={false}
+        showClose={!movingAll}
+        footer={
+          !moveAllPreview ? (
+            <>
+              <Button onClick={closeMoveAll}>Cancel</Button>
+              <Button
+                variant="primary"
+                onClick={previewMoveAll}
+                disabled={!moveAllDir}
+                loading={moveAllPreviewLoading}
+              >
+                {moveAllPreviewLoading ? "Loading..." : "Preview"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={closeMoveAll} disabled={movingAll}>Cancel</Button>
+              <Button variant="primary" onClick={runMoveAll} loading={movingAll}>
+                {movingAll ? "Moving..." : `Move ${moveAllPreview.total_files} Files`}
+              </Button>
+            </>
+          )
+        }
+      >
+        {!moveAllPreview ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Move all channel files to a new root directory. File paths in the database will be updated automatically.
+            </p>
+            <Field label="New Download Directory">
+              <input
+                type="text"
+                autoFocus
+                placeholder="/downloads/youtube"
+                value={moveAllDir}
+                onChange={(e) => setMoveAllDir(e.target.value)}
+                className="w-full px-3 py-2 rounded-md border bg-background"
+              />
+            </Field>
+          </div>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Channels to move:</span>
+              <span className="font-semibold">{moveAllPreview.channels_to_move}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total files:</span>
+              <span className="font-semibold">{moveAllPreview.total_files}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Total size:</span>
+              <span>{formatBytes(moveAllPreview.total_size)}</span>
+            </div>
+            {moveAllPreview.channels.length > 0 && (
+              <div className="mt-2 max-h-48 overflow-y-auto text-xs border rounded p-2">
+                {moveAllPreview.channels.map((ch: any) => (
+                  <div key={ch.channel_id} className="flex justify-between py-0.5">
+                    <span className="truncate mr-2">{ch.channel_name}</span>
+                    <span className="text-muted-foreground whitespace-nowrap">{ch.file_count} files</span>
                   </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }}
-                      className="px-4 py-2 rounded-md border hover:bg-accent"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (moveAllDir) {
-                          setMoveAllPreviewLoading(true)
-                          try {
-                            const preview = await api.moveAllPreview(moveAllDir)
-                            if (preview.channels_to_move === 0) {
-                              toast("All channels are already in that directory")
-                              return
-                            }
-                            setMoveAllPreview(preview)
-                          } catch (e: any) {
-                            toast(e.message, "error")
-                          } finally {
-                            setMoveAllPreviewLoading(false)
-                          }
-                        }
-                      }}
-                      disabled={!moveAllDir || moveAllPreviewLoading}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-                    >
-                      {moveAllPreviewLoading ? <><Loader2 className="h-4 w-4 animate-spin" /> Loading...</> : "Preview"}
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Channels to move:</span>
-                    <span className="font-semibold">{moveAllPreview.channels_to_move}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total files:</span>
-                    <span className="font-semibold">{moveAllPreview.total_files}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Total size:</span>
-                    <span>{formatBytes(moveAllPreview.total_size)}</span>
-                  </div>
-                  {moveAllPreview.channels.length > 0 && (
-                    <div className="mt-2 max-h-48 overflow-y-auto text-xs border rounded p-2">
-                      {moveAllPreview.channels.map((ch: any) => (
-                        <div key={ch.channel_id} className="flex justify-between py-0.5">
-                          <span className="truncate mr-2">{ch.channel_name}</span>
-                          <span className="text-muted-foreground whitespace-nowrap">{ch.file_count} files</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => { setShowMoveAll(false); setMoveAllDir(""); setMoveAllPreview(null) }}
-                    className="px-4 py-2 rounded-md border hover:bg-accent"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      setMovingAll(true)
-                      api.moveAllChannels(moveAllDir).then((r) => {
-                        queryClient.invalidateQueries({ queryKey: ["channels"] })
-                        setShowMoveAll(false)
-                        setMoveAllDir("")
-                        setMoveAllPreview(null)
-                        toast(r.message)
-                      }).catch((e: any) => toast(e.message, "error")).finally(() => setMovingAll(false))
-                    }}
-                    disabled={movingAll}
-                    className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
-                  >
-                    {movingAll ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving...</> : `Move ${moveAllPreview.total_files} Files`}
-                  </button>
-                </div>
-              </>
+                ))}
+              </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   )
 }

@@ -1,8 +1,11 @@
 import { ReactNode, useState, useEffect } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "react-router-dom"
-import { AlertTriangle, X } from "lucide-react"
+import { X } from "lucide-react"
 import { api } from "@/lib/api"
+import { Banner } from "@/components/ui/Banner"
+import { Button } from "@/components/ui/Button"
+import { Dialog } from "@/components/ui/Dialog"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useToast } from "@/components/ui/toaster"
 import Sidebar from "./Sidebar"
@@ -33,23 +36,21 @@ function CookieBanner() {
   if (!expired || dismissed) return null
 
   return (
-    <div className="flex items-center gap-3 border-b border-red-300 bg-red-50 px-4 py-3 text-red-900 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
-      <AlertTriangle className="h-5 w-5 shrink-0 text-red-600 dark:text-red-400" />
-      <p className="flex-1 text-sm">
-        <strong>YouTube cookies have expired.</strong>{" "}
-        Downloads will fail until you re-export cookies from your browser and upload them in{" "}
-        <Link to="/settings" className="underline font-medium hover:text-red-700 dark:hover:text-red-100">
-          Settings &rarr; Authentication
-        </Link>.
-      </p>
-      <button
-        onClick={() => setDismissed(true)}
-        className="shrink-0 rounded p-1 hover:bg-red-200 dark:hover:bg-red-900"
-        title="Dismiss"
-      >
-        <X className="h-4 w-4" />
-      </button>
-    </div>
+    <Banner
+      tone="danger"
+      className="rounded-none border-x-0 border-t-0 px-4 py-3"
+      action={
+        <Button variant="ghost" size="icon" onClick={() => setDismissed(true)} title="Dismiss" aria-label="Dismiss">
+          <X className="h-4 w-4" />
+        </Button>
+      }
+    >
+      <strong>YouTube cookies have expired.</strong>{" "}
+      Downloads will fail until you re-export cookies from your browser and upload them in{" "}
+      <Link to="/settings" className="underline font-medium">
+        Settings &rarr; Authentication
+      </Link>.
+    </Banner>
   )
 }
 
@@ -75,23 +76,30 @@ function GlobalNotifications() {
 export default function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  // Close the drawer when the window widens to lg, so its overlay can't keep dimming the page
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)")
+    const onChange = (e: MediaQueryListEvent) => { if (e.matches) setSidebarOpen(false) }
+    mq.addEventListener("change", onChange)
+    return () => mq.removeEventListener("change", onChange)
+  }, [])
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <GlobalNotifications />
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform transition-transform lg:relative lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+      {/* Mobile menu: the sidebar as a left drawer Dialog */}
+      <Dialog
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        title="Menu"
+        side="left"
+        className="lg:hidden"
       >
+        <Sidebar onClose={() => setSidebarOpen(false)} />
+      </Dialog>
+
+      {/* Sidebar (desktop) */}
+      <div className="hidden w-64 lg:block">
         <Sidebar onClose={() => setSidebarOpen(false)} />
       </div>
 

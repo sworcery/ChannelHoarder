@@ -41,21 +41,14 @@ export function formatDuration(seconds: number): string {
 
 export function formatDate(date: string | null): string {
   if (!date) return "-"
-  return new Date(date).toLocaleDateString(undefined, {
+  // A date-only value ("2025-01-01", e.g. an upload date) is a calendar day, not a
+  // moment: parse it as local midnight, or west of UTC it shows as the day before.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const value = ymd ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3])) : new Date(date)
+  return value.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
-  })
-}
-
-export function formatDateTime(date: string | null): string {
-  if (!date) return "-"
-  return new Date(date).toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   })
 }
 

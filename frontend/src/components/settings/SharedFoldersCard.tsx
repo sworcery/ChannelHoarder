@@ -4,6 +4,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import type { SharedFolderGroup, SharedFolderPreview } from "@/lib/types"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { EmptyState } from "@/components/ui/EmptyState"
 import { useToast } from "@/components/ui/toaster"
 import { Loader2, Folders } from "lucide-react"
 
@@ -62,17 +65,14 @@ export default function SharedFoldersCard() {
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4">
-      <h3 className="font-semibold flex items-center gap-2">
-        <Folders className="h-4 w-4" /> Shared folders
-      </h3>
+    <Card icon={<Folders />} title="Shared folders">
       <p className="text-sm text-muted-foreground">
         Channels added before 1.9.50 with the same name share one folder. Pick the channel to move into its own
         "Name (Platform)" folder. Only that channel's own videos and their sidecar files move; a file another
         channel's video records stays put. Shared artwork stays with the channel that keeps the folder.
       </p>
 
-      {groups.length === 0 && <p className="text-sm text-muted-foreground">No channels share a folder.</p>}
+      {groups.length === 0 && <EmptyState title="No channels share a folder." />}
 
       {groups.map((g) => (
         <div key={g.path} className="rounded border p-3 space-y-2 text-sm">
@@ -91,13 +91,13 @@ export default function SharedFoldersCard() {
                 </option>
               ))}
             </select>
-            <button
+            <Button
+              size="sm"
               onClick={() => showPreview(g)}
               disabled={loadingKey === g.path || moving.includes(chosen(g))}
-              className="px-2 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
             >
               {loadingKey === g.path ? "Loading..." : "Preview"}
-            </button>
+            </Button>
             {moving.includes(chosen(g)) && (
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Loader2 className="h-3 w-3 animate-spin" /> Moving...
@@ -154,12 +154,9 @@ export default function SharedFoldersCard() {
                   ))}
                 </div>
               )}
-              <button
-                onClick={() => setConfirming(true)}
-                className="px-3 py-1 text-xs rounded-md bg-primary text-primary-foreground"
-              >
+              <Button variant="primary" size="sm" onClick={() => setConfirming(true)}>
                 Move
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -175,6 +172,6 @@ export default function SharedFoldersCard() {
         onConfirm={doMove}
         onCancel={() => setConfirming(false)}
       />
-    </div>
+    </Card>
   )
 }

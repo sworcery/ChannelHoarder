@@ -1,7 +1,11 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { formatDateTime } from "@/lib/utils"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { DateTime } from "@/components/ui/DateTime"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
 import LibraryCheckCard from "./LibraryCheckCard"
 import SharedFoldersCard from "./SharedFoldersCard"
 import {
@@ -18,11 +22,17 @@ import {
 
 type SubTab = "overview" | "logs" | "system-logs"
 
+const SUB_TABS: readonly TabItem<SubTab>[] = [
+  { key: "overview", label: "System Overview" },
+  { key: "logs", label: "Error Logs" },
+  { key: "system-logs", label: "System Logs" },
+]
+const SUB_TAB_KEYS = SUB_TABS.map((t) => t.key)
+
 export default function DiagnosticsTab() {
-  const [subTab, setSubTab] = useState<SubTab>(() => {
-    const saved = localStorage.getItem("diagnostics_tab")
-    return (saved as SubTab) || "overview"
-  })
+  const [subTab, setSubTab] = useState<SubTab>(() =>
+    readSavedTab("diagnostics_tab", SUB_TAB_KEYS, "overview"),
+  )
   const [logSearch, setLogSearch] = useState("")
   const [logPage, setLogPage] = useState(0)
   const [expandedLog, setExpandedLog] = useState<number | null>(null)
@@ -91,52 +101,33 @@ export default function DiagnosticsTab() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const selectSub = (t: SubTab) => {
-    setSubTab(t)
-    localStorage.setItem("diagnostics_tab", t)
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex gap-1 border-b flex-1">
-          <button
-            onClick={() => selectSub("overview")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "overview" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-          >
-            System Overview
-          </button>
-          <button
-            onClick={() => selectSub("logs")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-          >
-            Error Logs
-          </button>
-          <button
-            onClick={() => selectSub("system-logs")}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${subTab === "system-logs" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
-          >
-            System Logs
-          </button>
-        </div>
+        <Tabs
+          tabs={SUB_TABS}
+          value={subTab}
+          onChange={setSubTab}
+          storageKey="diagnostics_tab"
+          label="Diagnostics sections"
+          idPrefix="diag"
+          className="flex-1"
+        />
         {subTab === "overview" && diagnostics && (
-          <button
-            onClick={copyReport}
-            className="ml-4 flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent whitespace-nowrap"
-          >
+          <Button onClick={copyReport} className="ml-4 whitespace-nowrap">
             <ClipboardCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Diagnostic Report"}
-          </button>
+          </Button>
         )}
       </div>
 
       {subTab === "overview" && (
         isLoading ? (
-          <div className="flex justify-center py-12">
+          <div role="tabpanel" id={panelId("diag", "overview")} aria-labelledby={tabId("diag", "overview")} className="flex justify-center py-12">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : diagnostics ? (
-          <div className="space-y-6">
+          <div role="tabpanel" id={panelId("diag", "overview")} aria-labelledby={tabId("diag", "overview")} className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <StatusCard label="PO Tokens" status={diagnostics.pot_status === "healthy" ? "ok" : "error"} value={diagnostics.pot_status} />
               <StatusCard label="Cookies" status={diagnostics.cookies_status === "present" ? "ok" : "info"} value={diagnostics.cookies_status} />
@@ -148,8 +139,7 @@ export default function DiagnosticsTab() {
               />
             </div>
 
-            <div className="rounded-lg border bg-card p-4">
-              <h3 className="font-semibold mb-3">Statistics</h3>
+            <Card title="Statistics" className="space-y-3">
               <div className="grid gap-2 text-sm sm:grid-cols-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Channels</span>
@@ -166,15 +156,14 @@ export default function DiagnosticsTab() {
                   </span>
                 </div>
               </div>
-            </div>
+            </Card>
 
             <LibraryCheckCard />
 
             <SharedFoldersCard />
 
             {diagnostics.recent_errors.length > 0 && (
-              <div className="rounded-lg border bg-card p-4">
-                <h3 className="font-semibold mb-3">Recent Errors</h3>
+              <Card title="Recent Errors" className="space-y-3">
                 <div className="space-y-2">
                   {diagnostics.recent_errors.map((error: any) => (
                     <div key={error.id} className="flex items-start gap-2 text-sm">
@@ -183,21 +172,19 @@ export default function DiagnosticsTab() {
                         <span className="font-mono text-xs text-red-500">{error.error_code}</span>
                         <span className="mx-1">-</span>
                         <span>{error.message}</span>
-                        <span className="text-xs text-muted-foreground ml-2">
-                          {formatDateTime(error.created_at)}
-                        </span>
+                        <DateTime value={error.created_at} className="text-xs text-muted-foreground ml-2" />
                       </div>
                     </div>
                   ))}
                 </div>
-              </div>
+              </Card>
             )}
           </div>
         ) : null
       )}
 
       {subTab === "logs" && (
-        <div className="space-y-4">
+        <div role="tabpanel" id={panelId("diag", "logs")} aria-labelledby={tabId("diag", "logs")} className="space-y-4">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
@@ -213,7 +200,8 @@ export default function DiagnosticsTab() {
             <>
               <div className="space-y-2">
                 {logs.items.map((log: any) => (
-                  <div key={log.id} className="rounded-lg border bg-card p-3">
+                  <Card key={log.id} className="p-3 space-y-0">
+                    {/* Whole row is an unstyled click target that expands the entry */}
                     <div
                       className="flex items-center justify-between cursor-pointer"
                       onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
@@ -232,7 +220,7 @@ export default function DiagnosticsTab() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
-                        <span className="text-xs text-muted-foreground">{formatDateTime(log.created_at)}</span>
+                        <DateTime value={log.created_at} className="text-xs text-muted-foreground" />
                         {expandedLog === log.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </div>
                     </div>
@@ -253,7 +241,7 @@ export default function DiagnosticsTab() {
                         )}
                       </div>
                     )}
-                  </div>
+                  </Card>
                 ))}
               </div>
 
@@ -262,31 +250,31 @@ export default function DiagnosticsTab() {
                   Showing {logPage * 50 + 1}-{Math.min((logPage + 1) * 50, logs.total)} of {logs.total}
                 </p>
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    size="sm"
                     onClick={() => setLogPage(Math.max(0, logPage - 1))}
                     disabled={logPage === 0}
-                    className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                   >
                     Previous
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    size="sm"
                     onClick={() => setLogPage(logPage + 1)}
                     disabled={(logPage + 1) * 50 >= logs.total}
-                    className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                   >
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>
           ) : (
-            <p className="text-center py-8 text-muted-foreground">No logs found</p>
+            <EmptyState title="No logs found" />
           )}
         </div>
       )}
 
       {subTab === "system-logs" && (
-        <div className="space-y-3">
+        <div role="tabpanel" id={panelId("diag", "system-logs")} aria-labelledby={tabId("diag", "system-logs")} className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <select
@@ -304,16 +292,13 @@ export default function DiagnosticsTab() {
                 {liveLogs?.total || 0} entries (auto-refreshing)
               </span>
             </div>
-            <button
-              onClick={() => api.exportLogs()}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border hover:bg-accent"
-            >
+            <Button onClick={() => api.exportLogs()}>
               <ClipboardCopy className="h-4 w-4" />
               Export Debug Log
-            </button>
+            </Button>
           </div>
 
-          <div className="rounded-lg border bg-card overflow-hidden">
+          <Card className="overflow-hidden p-0 space-y-0">
             <div className="max-h-[600px] overflow-y-auto p-3 font-mono text-xs leading-relaxed">
               {liveLogs?.entries?.length ? (
                 liveLogs.entries.map((entry: any, i: number) => {
@@ -338,10 +323,10 @@ export default function DiagnosticsTab() {
                   )
                 })
               ) : (
-                <p className="text-center py-8 text-muted-foreground">No log entries</p>
+                <EmptyState title="No log entries" />
               )}
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>
@@ -357,12 +342,12 @@ function StatusCard({ label, status, value }: { label: string; status: "ok" | "w
   }
 
   return (
-    <div className="rounded-lg border bg-card p-4 flex items-center gap-3">
+    <Card className="flex items-center gap-3 space-y-0">
       {icons[status]}
       <div>
         <p className="text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{value}</p>
       </div>
-    </div>
+    </Card>
   )
 }

@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Help is a "?" next to each heading.** Help text used to sit inline in headings and field labels, often repeating the paragraph below it. Each now opens from a small "?" with a link to the matching part of the README, and closes with Esc or a click outside.
-- **Confirmations look and behave like the rest of the app's dialogs,** with a close button, Esc and a click outside to close, and focus going back where it was. The other dialogs follow as the pages move to the new building blocks.
+- **Every dialog works the same way.** Each one has a close button, closes with Esc, keeps its buttons in view on short screens (the form scrolls instead), and puts focus back where it was. Dialogs that hold typed-in work (Add Channel, Move All, Bulk Import) don't close on a stray click outside, and dialogs that are deleting or moving files can't be closed until they finish.
+- **Buttons, labels and dates are consistent across pages.** Buttons that delete something are outlined in red until the final confirmation, times read as "3 hours ago" with the full date on hover, and upload dates no longer show a day early west of UTC.
+- **The phone menu slides in from the left and closes when you pick a page.**
 
 ### Added
 - **"Download anyway" for videos below a channel's minimum quality.** Fresh uploads often show only low resolutions for their first hours. A video below the minimum now waits and checks again after 1, 6 and 24 hours, and the Downloads page shows when the next check is. If it is still too low after that, it fails with a "Download anyway" button that downloads the best quality available.

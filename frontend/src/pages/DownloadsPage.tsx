@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { formatDateTime, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed, buildVideoUrl } from "@/lib/utils"
+import { formatDate, formatBytes, formatDuration, formatSpeed, formatEta, formatElapsed, buildVideoUrl } from "@/lib/utils"
 import { STATUS_COLORS } from "@/lib/types"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useDebounce } from "@/hooks/useDebounce"
@@ -9,6 +9,14 @@ import { useToast } from "@/components/ui/toaster"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { HelpIcon } from "@/components/ui/HelpIcon"
 import { StatusIcon } from "@/components/ui/StatusIcon"
+import { Badge } from "@/components/ui/Badge"
+import { Banner } from "@/components/ui/Banner"
+import { Button, buttonClasses } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { DateTime } from "@/components/ui/DateTime"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { PageHeader } from "@/components/ui/PageHeader"
+import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
 import {
   RotateCcw,
   Loader2,
@@ -105,12 +113,13 @@ const ERROR_DESCRIPTIONS: Record<string, { label: string; color: string; tip: st
   },
 }
 
+type DownloadsTab = "queue" | "history" | "failed"
+
 export default function DownloadsPage() {
   const queryClient = useQueryClient()
-  const [tab, setTab] = useState<"queue" | "history" | "failed">(() => {
-    const saved = localStorage.getItem("downloads_tab")
-    return (saved as any) || "queue"
-  })
+  const [tab, setTab] = useState<DownloadsTab>(() =>
+    readSavedTab("downloads_tab", ["queue", "history", "failed"] as const, "queue"),
+  )
   const [search, setSearch] = useState("")
   const [queueSearch, setQueueSearch] = useState("")
   const debouncedSearch = useDebounce(search, 300)
@@ -350,7 +359,6 @@ export default function DownloadsPage() {
   // Clear selection when switching tabs
   const handleTabChange = useCallback((newTab: typeof tab) => {
     setTab(newTab)
-    localStorage.setItem("downloads_tab", newTab)
     setPage(0)
     setQueuePage(0)
     setSelectedQueueIds(new Set())
@@ -385,11 +393,15 @@ export default function DownloadsPage() {
     })
   }, [queue])
 
-  const tabs = [
-    { key: "queue", label: "Queue" },
+  const tabs: readonly TabItem<DownloadsTab>[] = [
+    {
+      key: "queue",
+      label: "Queue",
+      badge: queueTotal > 0 ? <Badge tone="info" className="ml-1.5 px-1.5">{queueTotal}</Badge> : undefined,
+    },
     { key: "history", label: "History" },
     { key: "failed", label: "Failed" },
-  ] as const
+  ]
 
   /** Determine what state label to show for a queue entry */
   const getQueueEntryState = (entry: any, progress: any) => {
@@ -411,8 +423,8 @@ export default function DownloadsPage() {
     if (entry.retry_after && new Date(entry.retry_after).getTime() > Date.now()) {
       return {
         label: entry.quality_attempts > 0
-          ? `Waiting for higher quality, retrying at ${formatDateTime(entry.retry_after)}`
-          : `Retrying at ${formatDateTime(entry.retry_after)}`,
+          ? <>Waiting for higher quality, retrying <DateTime value={entry.retry_after} /></>
+          : <>Retrying <DateTime value={entry.retry_after} /></>,
         icon: <Clock className="h-3.5 w-3.5 text-yellow-500" />,
         color: "text-yellow-500",
       }
@@ -420,93 +432,66 @@ export default function DownloadsPage() {
     return { label: "Queued", icon: <Clock className="h-3.5 w-3.5 text-muted-foreground" />, color: "text-muted-foreground" }
   }
 
-  /** Time since a date as human-readable string */
-  const timeSince = (dateStr: string | null) => {
-    if (!dateStr) return null
-    const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
-    if (diff < 60) return `${Math.round(diff)}s ago`
-    if (diff < 3600) return `${Math.round(diff / 60)}m ago`
-    return `${Math.round(diff / 3600)}h ago`
-  }
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">Downloads</h1>
-          <HelpIcon text="Pause stops new downloads; in-progress downloads finish." anchor="downloads" />
-        </div>
-        <div className="flex items-center gap-2">
-          {isPaused ? (
-            <button
-              onClick={() => resumeMutation.mutate()}
-              disabled={resumeMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+      <PageHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            Downloads
+            <HelpIcon text="Pause stops new downloads; in-progress downloads finish." anchor="downloads" />
+          </span>
+        }
+        actions={
+          <>
+            {isPaused ? (
+              <Button
+                variant="success"
+                onClick={() => resumeMutation.mutate()}
+                disabled={resumeMutation.isPending}
+              >
+                <Play className="h-4 w-4" />
+                Resume
+              </Button>
+            ) : (
+              <Button variant="warning" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>
+                <Pause className="h-4 w-4" />
+                Pause
+              </Button>
+            )}
+            <Button
+              variant="danger-outline"
+              onClick={() => setConfirmAction(() => () => clearQueueMutation.mutate())}
+              disabled={clearQueueMutation.isPending}
             >
-              <Play className="h-4 w-4" />
-              Resume
-            </button>
-          ) : (
-            <button
-              onClick={() => pauseMutation.mutate()}
-              disabled={pauseMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-yellow-600 text-white hover:bg-yellow-700 disabled:opacity-50"
-            >
-              <Pause className="h-4 w-4" />
-              Pause
-            </button>
-          )}
-          <button
-            onClick={() => setConfirmAction(() => () => clearQueueMutation.mutate())}
-            disabled={clearQueueMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
-          >
-            <Trash2 className="h-4 w-4" />
-            Clear Queue
-          </button>
-        </div>
-      </div>
+              <Trash2 className="h-4 w-4" />
+              Clear Queue
+            </Button>
+          </>
+        }
+      />
 
       {/* Paused banner */}
       {isPaused && (
-        <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 flex items-center gap-3">
-          <Pause className="h-5 w-5 text-yellow-500 shrink-0" />
-          <div>
-            <p className="text-sm font-medium text-yellow-500">Queue Paused</p>
-            <p className="text-xs text-muted-foreground">
-              {pauseStatus?.reason === "disk_full"
-                ? "Paused: disk full. Free space, then Resume."
-                : "No new downloads will start. In-flight downloads will finish."}
-            </p>
-          </div>
-        </div>
+        <Banner tone="warning" title="Queue Paused">
+          {pauseStatus?.reason === "disk_full"
+            ? "Paused: disk full. Free space, then Resume."
+            : "No new downloads will start. In-flight downloads will finish."}
+        </Banner>
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => handleTabChange(t.key)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-              tab === t.key
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-            {t.key === "queue" && queueTotal > 0 && (
-              <span className="ml-1.5 text-xs bg-primary/20 text-primary px-1.5 py-0.5 rounded-full">
-                {queueTotal}
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={tabs}
+        value={tab}
+        onChange={handleTabChange}
+        storageKey="downloads_tab"
+        label="Downloads sections"
+        idPrefix="downloads"
+      />
 
       {/* Queue Tab */}
       {tab === "queue" && (
-        <div className="space-y-3">
+        <div role="tabpanel" id={panelId("downloads", "queue")} aria-labelledby={tabId("downloads", "queue")} className="space-y-3">
           {/* Queue summary */}
           {queueTotal > 0 && (
             <div className="flex items-center gap-4 text-sm text-muted-foreground px-1">
@@ -553,10 +538,7 @@ export default function DownloadsPage() {
           {/* Select all + bulk action bar */}
           {queue && queue.length > 0 && (
             <div className="flex items-center justify-between">
-              <button
-                onClick={toggleSelectAll}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"
-              >
+              <Button variant="ghost" onClick={toggleSelectAll} className="text-muted-foreground hover:text-foreground">
                 {selectedQueueIds.size === 0 ? (
                   <Square className="h-4 w-4" />
                 ) : selectedQueueIds.size === queue.length ? (
@@ -567,16 +549,16 @@ export default function DownloadsPage() {
                 {selectedQueueIds.size > 0
                   ? `${selectedQueueIds.size} selected`
                   : "Select all"}
-              </button>
+              </Button>
               {selectedQueueIds.size > 0 && (
-                <button
+                <Button
+                  variant="danger-outline"
                   onClick={() => setConfirmAction(() => () => bulkRemoveMutation.mutate(Array.from(selectedQueueIds)))}
                   disabled={bulkRemoveMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 disabled:opacity-50"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   Remove Selected ({selectedQueueIds.size})
-                </button>
+                </Button>
               )}
             </div>
           )}
@@ -595,7 +577,7 @@ export default function DownloadsPage() {
                 const isSelected = selectedQueueIds.has(entry.id)
 
                 return (
-                  <div key={entry.id} className={`rounded-lg border bg-card overflow-hidden ${isSelected ? "ring-2 ring-primary/50" : ""}`}>
+                  <Card key={entry.id} className={`overflow-hidden p-0 space-y-0 ${isSelected ? "ring-2 ring-primary/50" : ""}`}>
                     <div className="p-4">
                       <div className="flex items-start gap-3">
                         {/* Position + Checkbox */}
@@ -603,13 +585,20 @@ export default function DownloadsPage() {
                           <span className="text-[10px] font-mono text-muted-foreground w-5 text-center">
                             {queuePage * PAGE_SIZE + idx + 1}
                           </span>
-                          <button onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="p-0"
+                            aria-label={isSelected ? "Deselect video" : "Select video"}
+                            aria-pressed={isSelected}
+                            onClick={(e) => toggleQueueSelection(entry.id, idx, e.shiftKey)}
+                          >
                             {isSelected ? (
                               <CheckSquare className="h-4 w-4 text-primary" />
                             ) : (
                               <Square className="h-4 w-4 text-muted-foreground" />
                             )}
-                          </button>
+                          </Button>
                         </div>
 
                         {/* Thumbnail */}
@@ -636,17 +625,17 @@ export default function DownloadsPage() {
                               <span className="font-medium text-foreground/70">{video.channel_name}</span>
                             )}
                             {video?.upload_date && (
-                              <span>Uploaded: {video.upload_date}</span>
+                              <span>Uploaded: {formatDate(video.upload_date)}</span>
                             )}
                             {video?.duration != null && video.duration > 0 && (
                               <span>{formatDuration(video.duration)}</span>
                             )}
-                            <span>Queued {timeSince(entry.queued_at) || formatDateTime(entry.queued_at)}</span>
+                            <span>Queued <DateTime value={entry.queued_at} /></span>
                             {entry.started_at && (
-                              <span>Started {timeSince(entry.started_at)}</span>
+                              <span>Started <DateTime value={entry.started_at} /></span>
                             )}
                             {entry.target_quality && (
-                              <span className="inline-flex px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 font-medium">{entry.target_quality}</span>
+                              <Badge tone="info" className="px-1.5">{entry.target_quality}</Badge>
                             )}
                             {entry.estimated_size && (
                               <span>{formatBytes(entry.estimated_size)}</span>
@@ -671,41 +660,46 @@ export default function DownloadsPage() {
                         {/* Queue controls */}
                         <div className="flex items-center gap-0.5 shrink-0">
                           {!entry.started_at && (
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => moveToTopMutation.mutate(entry.id)}
-                              className="p-1.5 hover:bg-accent rounded"
                               title="Move to top"
                               aria-label="Move to top"
                             >
                               <ArrowUpToLine className="h-4 w-4 text-muted-foreground" />
-                            </button>
+                            </Button>
                           )}
                           {!entry.started_at && entry.quality_attempts > 0 && entry.retry_after && (
-                            <button
+                            <Button
+                              size="sm"
                               onClick={() => downloadAnywayMutation.mutate(video.id)}
-                              className="px-2 py-1 text-xs hover:bg-accent rounded border"
                               title="Download at the best available quality"
                             >
                               Download anyway
-                            </button>
+                            </Button>
                           )}
                           {(!entry.started_at || entry.stuck) && (
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => downloadNowMutation.mutate(entry.id)}
-                              className="p-1.5 hover:bg-green-500/10 rounded"
                               title="Download now"
+                              aria-label="Download now"
                             >
                               <Zap className="h-4 w-4 text-green-500" />
-                            </button>
+                            </Button>
                           )}
                           {(!entry.started_at || entry.stuck) && (
-                            <button
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => removeFromQueue.mutate(entry.id)}
-                              className="p-1.5 hover:bg-accent rounded"
                               title="Remove from queue"
+                              aria-label="Remove from queue"
                             >
                               <XCircle className="h-4 w-4 text-muted-foreground" />
-                            </button>
+                            </Button>
                           )}
                         </div>
                       </div>
@@ -775,7 +769,7 @@ export default function DownloadsPage() {
                         </div>
                       )}
                     </div>
-                  </div>
+                  </Card>
                 )
               })}
 
@@ -786,37 +780,37 @@ export default function DownloadsPage() {
                     Showing {queuePage * PAGE_SIZE + 1}-{Math.min((queuePage + 1) * PAGE_SIZE, queueTotal)} of {queueTotal}
                   </p>
                   <div className="flex gap-2">
-                    <button
+                    <Button
+                      size="sm"
                       onClick={() => { setQueuePage(Math.max(0, queuePage - 1)); setSelectedQueueIds(new Set()) }}
                       disabled={queuePage === 0}
-                      className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                     >
                       Previous
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      size="sm"
                       onClick={() => { setQueuePage(queuePage + 1); setSelectedQueueIds(new Set()) }}
                       disabled={(queuePage + 1) * PAGE_SIZE >= queueTotal}
-                      className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
                     >
                       Next
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
             </>
           ) : (
-            <div className="text-center py-12">
-              <CheckCircle className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
-              <p className="text-muted-foreground">Download queue is empty</p>
-              <p className="text-xs text-muted-foreground/70 mt-1">New videos will appear here when channels are scanned</p>
-            </div>
+            <EmptyState
+              icon={<CheckCircle />}
+              title="Download queue is empty"
+              text="New videos will appear here when channels are scanned"
+            />
           )}
         </div>
       )}
 
       {/* History / Failed Tab */}
       {tab !== "queue" && (
-        <div className="space-y-4">
+        <div role="tabpanel" id={panelId("downloads", tab)} aria-labelledby={tabId("downloads", tab)} className="space-y-4">
           <div className="flex items-center gap-2">
             <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -829,14 +823,10 @@ export default function DownloadsPage() {
               />
             </div>
             {tab === "failed" && (
-              <button
-                onClick={() => retryAllMutation.mutate()}
-                disabled={retryAllMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-2 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              >
+              <Button variant="primary" onClick={() => retryAllMutation.mutate()} disabled={retryAllMutation.isPending}>
                 <RotateCcw className="h-4 w-4" />
                 Retry All Failed
-              </button>
+              </Button>
             )}
           </div>
 
@@ -857,7 +847,7 @@ export default function DownloadsPage() {
                   }
 
                   return (
-                    <div key={video.id} className="rounded-lg border bg-card overflow-hidden">
+                    <Card key={video.id} className="overflow-hidden p-0 space-y-0">
                       <div className="p-3">
                         <div className="flex items-start gap-3">
                           {/* Thumbnail */}
@@ -888,10 +878,10 @@ export default function DownloadsPage() {
                               {video.channel_name && (
                                 <span className="font-medium text-foreground/70">{video.channel_name}</span>
                               )}
-                              {video.upload_date && <span>{video.upload_date}</span>}
+                              {video.upload_date && <span>{formatDate(video.upload_date)}</span>}
                               {video.duration != null && video.duration > 0 && <span>{formatDuration(video.duration)}</span>}
                               {video.file_size ? <span>{formatBytes(video.file_size)}</span> : null}
-                              <span>{formatDateTime(video.downloaded_at || video.discovered_at)}</span>
+                              <DateTime value={video.downloaded_at || video.discovered_at} />
                               {video.retry_count > 0 && (
                                 <span className="text-yellow-500">Retries: {video.retry_count}</span>
                               )}
@@ -908,13 +898,16 @@ export default function DownloadsPage() {
                                   {video.error_message}
                                 </span>
                                 {(errorDetails || errorInfo) && tab !== "failed" && (
-                                  <button
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
                                     onClick={() => toggleExpanded(video.id)}
-                                    className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 ml-auto shrink-0"
+                                    aria-expanded={isExpanded}
+                                    className="ml-auto shrink-0 gap-0.5 px-1 py-0 text-muted-foreground hover:text-foreground"
                                   >
                                     {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
                                     Details
-                                  </button>
+                                  </Button>
                                 )}
                               </div>
                             )}
@@ -926,28 +919,31 @@ export default function DownloadsPage() {
                               href={buildVideoUrl(video.platform || "youtube", video.video_id)}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="p-1.5 hover:bg-accent rounded"
+                              className={buttonClasses("ghost", "icon")}
+                              aria-label={`Open on ${(video.platform || "youtube").charAt(0).toUpperCase() + (video.platform || "youtube").slice(1)}`}
                               title={`Open on ${(video.platform || "youtube").charAt(0).toUpperCase() + (video.platform || "youtube").slice(1)}`}
                             >
                               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
                             </a>
                             {(video.status === "failed" || video.status === "skipped") && (
-                              <button
+                              <Button
+                                variant="ghost"
+                                size="icon"
                                 onClick={() => retryMutation.mutate(video.id)}
-                                className="p-1.5 hover:bg-accent rounded"
                                 title="Retry download"
+                                aria-label="Retry download"
                               >
                                 <RotateCcw className="h-3.5 w-3.5" />
-                              </button>
+                              </Button>
                             )}
                             {video.status === "failed" && video.error_code === "QUALITY_TOO_LOW" && (
-                              <button
+                              <Button
+                                size="sm"
                                 onClick={() => downloadAnywayMutation.mutate(video.id)}
-                                className="px-2 py-1 text-xs hover:bg-accent rounded border"
                                 title="Download at the best available quality"
                               >
                                 Download anyway
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </div>
@@ -979,7 +975,7 @@ export default function DownloadsPage() {
                           </div>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   )
                 })}
               </div>
@@ -990,29 +986,17 @@ export default function DownloadsPage() {
                   Showing {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, history.total)} of {history.total}
                 </p>
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(Math.max(0, page - 1))}
-                    disabled={page === 0}
-                    className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
-                  >
+                  <Button size="sm" onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}>
                     Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(page + 1)}
-                    disabled={(page + 1) * PAGE_SIZE >= history.total}
-                    className="px-3 py-1 rounded-md border text-sm disabled:opacity-50"
-                  >
+                  </Button>
+                  <Button size="sm" onClick={() => setPage(page + 1)} disabled={(page + 1) * PAGE_SIZE >= history.total}>
                     Next
-                  </button>
+                  </Button>
                 </div>
               </div>
             </>
           ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                {tab === "failed" ? "No failed downloads" : "No downloads found"}
-              </p>
-            </div>
+            <EmptyState title={tab === "failed" ? "No failed downloads" : "No downloads found"} />
           )}
         </div>
       )}

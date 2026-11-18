@@ -1,5 +1,6 @@
-import { Menu, Moon, Sun, RefreshCw } from "lucide-react"
+import { Menu, Moon, Sun } from "lucide-react"
 import { useEffect, useState } from "react"
+import { Button } from "@/components/ui/Button"
 import { useWebSocket } from "@/hooks/useWebSocket"
 
 export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
@@ -19,9 +20,9 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
 
   return (
     <header className="flex items-center gap-4 border-b bg-card px-4 py-3">
-      <button onClick={onMenuClick} className="lg:hidden">
+      <Button variant="ghost" size="icon" onClick={onMenuClick} className="lg:hidden" aria-label="Open menu">
         <Menu className="h-6 w-6" />
-      </button>
+      </Button>
 
       <div className="flex-1" />
 
@@ -34,12 +35,14 @@ export default function Header({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       {/* Dark mode toggle */}
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={() => setDark(!dark)}
-        className="p-2 rounded-md hover:bg-accent transition-colors"
+        aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       >
         {dark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-      </button>
+      </Button>
     </header>
   )
 }

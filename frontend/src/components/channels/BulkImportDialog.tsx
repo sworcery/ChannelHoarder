@@ -3,7 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { extractChannelUrls } from "@/lib/bulkImport"
 import { useToast } from "@/components/ui/toaster"
-import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/Button"
+import { Dialog } from "@/components/ui/Dialog"
+import { Field } from "@/components/ui/Field"
 
 type Outcome = { url: string; status: "added" | "exists" | "failed"; detail: string }
 
@@ -56,8 +58,6 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
     window.addEventListener("beforeunload", warn)
     return () => window.removeEventListener("beforeunload", warn)
   }, [running])
-
-  if (!open) return null
 
   const close = () => {
     setText("")
@@ -141,32 +141,64 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
   const pct = total > 0 ? Math.round((outcomes.length / total) * 100) : 0
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-card rounded-lg p-6 w-full max-w-lg mx-4 border shadow-lg max-h-[90vh] overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Bulk Import Channels</h2>
+    <Dialog
+      open={open}
+      onClose={() => { if (!running) close() }}
+      title="Bulk Import Channels"
+      // An import in progress can't be closed: no Esc, no backdrop click, no X
+      closeOnEsc={!running}
+      closeOnBackdrop={false}
+      showClose={!running}
+      footer={
+        <>
+          {running && (
+            <Button
+              onClick={() => { stopRef.current = true; setStopping(true) }}
+              disabled={stopping}
+            >
+              {stopping ? "Stopping..." : "Stop"}
+            </Button>
+          )}
+          <Button onClick={close} disabled={running}>
+            {done ? "Close" : "Cancel"}
+          </Button>
+          <Button
+            variant="primary"
+            onClick={start}
+            disabled={urls.length === 0}
+            loading={running}
+          >
+            {running ? "Importing..." : `Import ${urls.length}`}
+          </Button>
+        </>
+      }
+    >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">
-              Paste channel URLs or @handles, one per line or comma-separated
-            </label>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              disabled={running}
-              rows={6}
-              placeholder={"https://youtube.com/@channel\n@anotherchannel"}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm font-mono disabled:opacity-50"
-            />
-            <input
-              type="file"
-              accept=".csv,.txt,text/csv,text/plain"
-              onChange={onFile}
-              disabled={running}
-              className="mt-2 block w-full text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:bg-background file:text-sm hover:file:bg-accent disabled:opacity-50"
-            />
-            <p className="text-xs text-muted-foreground mt-1">
-              Upload a CSV or text file, such as subscriptions.csv from YouTube Takeout.
-            </p>
+            <Field label="Paste channel URLs or @handles, one per line or comma-separated">
+              <textarea
+                value={text}
+                autoFocus
+                onChange={(e) => setText(e.target.value)}
+                disabled={running}
+                rows={6}
+                placeholder={"https://youtube.com/@channel\n@anotherchannel"}
+                className="w-full px-3 py-2 rounded-md border bg-background text-sm font-mono disabled:opacity-50"
+              />
+            </Field>
+            <Field
+              className="mt-2"
+              label="Or upload a file"
+              hint="Upload a CSV or text file, such as subscriptions.csv from YouTube Takeout."
+            >
+              <input
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain"
+                onChange={onFile}
+                disabled={running}
+                className="block w-full text-sm file:mr-3 file:px-3 file:py-1.5 file:rounded-md file:border file:bg-background file:text-sm hover:file:bg-accent disabled:opacity-50"
+              />
+            </Field>
           </div>
 
           <div>
@@ -180,8 +212,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Quality</label>
+          <Field label="Quality">
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
@@ -194,9 +225,8 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
               <option value="720p">720p</option>
               <option value="480p">480p</option>
             </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Download Directory</label>
+          </Field>
+          <Field label="Download Directory">
             <input
               type="text"
               placeholder="Leave blank for default (/downloads)"
@@ -205,7 +235,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
               disabled={running}
               className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
             />
-          </div>
+          </Field>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -219,8 +249,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
           <p className="text-xs text-muted-foreground -mt-2">
             When on, each channel downloads every video it has published unless you set a date. Off by default for bulk imports, since every channel would queue its whole back catalogue at once; when off, videos are listed and you pick what to download, or turn auto-download on per channel later.
           </p>
-          <div>
-            <label className="block text-sm font-medium mb-1">Download from date (optional)</label>
+          <Field label="Download from date (optional)" hint="Leave empty to include everything.">
             <input
               type="date"
               value={fromDate}
@@ -228,8 +257,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
               disabled={running}
               className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
             />
-            <p className="text-xs text-muted-foreground mt-1">Leave empty to include everything.</p>
-          </div>
+          </Field>
 
           <p className="text-xs text-muted-foreground">
             Channels are added a few seconds apart, then scanned automatically by the scheduler one at a time. Keep this tab open until the import finishes.
@@ -278,35 +306,7 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
               )}
             </div>
           )}
-
-          <div className="flex justify-end gap-2">
-            {running && (
-              <button
-                onClick={() => { stopRef.current = true; setStopping(true) }}
-                disabled={stopping}
-                className="px-4 py-2 rounded-md border hover:bg-accent disabled:opacity-50"
-              >
-                {stopping ? "Stopping..." : "Stop"}
-              </button>
-            )}
-            <button
-              onClick={close}
-              disabled={running}
-              className="px-4 py-2 rounded-md border hover:bg-accent disabled:opacity-50"
-            >
-              {done ? "Close" : "Cancel"}
-            </button>
-            <button
-              onClick={start}
-              disabled={running || urls.length === 0}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50 flex items-center gap-2"
-            >
-              {running && <Loader2 className="h-4 w-4 animate-spin" />}
-              {running ? "Importing..." : `Import ${urls.length}`}
-            </button>
-          </div>
         </div>
-      </div>
-    </div>
+    </Dialog>
   )
 }

@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import type { LibraryCheckItem, LibraryCheckKind } from "@/lib/types"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
+import { Banner } from "@/components/ui/Banner"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
 import { Loader2, FolderSearch } from "lucide-react"
 
 const GROUPS: { kind: LibraryCheckKind; title: string; hint: string }[] = [
@@ -70,19 +73,15 @@ export default function LibraryCheckCard() {
     i.kind === "lost" ? (lostAction[i.id] === "skip" ? "Skip it" : "Re-download") : "Move file to its video"
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <h3 className="font-semibold flex items-center gap-2">
-          <FolderSearch className="h-4 w-4" /> Library check
-        </h3>
-        <button
-          onClick={start}
-          disabled={running}
-          className="px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-        >
+    <Card
+      icon={<FolderSearch />}
+      title="Library check"
+      actions={
+        <Button onClick={start} disabled={running}>
           {running ? "Checking..." : "Start check"}
-        </button>
-      </div>
+        </Button>
+      }
+    >
 
       <p className="text-sm text-muted-foreground">
         Before version 1.9.50, a scan could move a downloaded file onto a newer video with a similar title
@@ -92,8 +91,8 @@ export default function LibraryCheckCard() {
         then queues the video it was wrongly filed under to download again, since that video's own file is gone.
       </p>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
-      {data?.status === "error" && <p className="text-sm text-red-500">Check failed: {data.error}</p>}
+      {error && <Banner tone="danger">{error}</Banner>}
+      {data?.status === "error" && <Banner tone="danger">Check failed: {data.error}</Banner>}
 
       {running && (
         <div className="space-y-1">
@@ -123,22 +122,14 @@ export default function LibraryCheckCard() {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
             {certainOpen.length > 0 && (
-              <button
-                onClick={() => setConfirmAll(true)}
-                disabled={busy}
-                className="px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground disabled:opacity-50"
-              >
+              <Button variant="primary" onClick={() => setConfirmAll(true)} disabled={busy}>
                 Fix all certain ({certainOpen.length})
-              </button>
+              </Button>
             )}
             {lostToRedownload.length > 0 && (
-              <button
-                onClick={() => setConfirmLost(true)}
-                disabled={busy}
-                className="px-3 py-1.5 text-sm rounded-md border hover:bg-accent disabled:opacity-50"
-              >
+              <Button onClick={() => setConfirmLost(true)} disabled={busy}>
                 Re-download all missing ({lostToRedownload.length})
-              </button>
+              </Button>
             )}
           </div>
           {GROUPS.map((g) => {
@@ -172,13 +163,13 @@ export default function LibraryCheckCard() {
                             <option value="skip">Skip</option>
                           </select>
                         )}
-                        <button
+                        <Button
+                          size="sm"
                           onClick={() => apply({ item_ids: [i.id], actions: { [i.id]: lostAction[i.id] ?? "redownload" } })}
                           disabled={busy}
-                          className="px-2 py-1 text-xs rounded-md border hover:bg-accent disabled:opacity-50"
                         >
                           {fixLabel(i)}
-                        </button>
+                        </Button>
                       </div>
                     )}
                     {i.state !== "open" && <p className="text-xs text-muted-foreground">Done: {i.state}</p>}
@@ -215,6 +206,6 @@ export default function LibraryCheckCard() {
         }}
         onCancel={() => setConfirmLost(false)}
       />
-    </div>
+    </Card>
   )
 }

@@ -4,6 +4,13 @@ import { api } from "@/lib/api"
 import { useToast } from "@/components/ui/toaster"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { formatBytes, formatSpeed, formatEta, formatElapsed, formatDuration } from "@/lib/utils"
+import { Badge } from "@/components/ui/Badge"
+import { Banner } from "@/components/ui/Banner"
+import { Button, buttonClasses } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { Field } from "@/components/ui/Field"
+import { PageHeader } from "@/components/ui/PageHeader"
 import {
   Download,
   Loader2,
@@ -140,20 +147,21 @@ export default function StandaloneDownloadPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Quick Download</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Download any video by URL. Files are stored temporarily and available for download from your browser for 7 days.
-        </p>
-      </div>
+      <PageHeader
+        title="Quick Download"
+        subtitle="Download any video by URL. Files are stored temporarily and available for download from your browser for 7 days."
+      />
 
       {/* Download Form */}
-      <div className="rounded-lg border bg-card p-6 space-y-4">
-        <div>
-          <label className="block text-sm font-medium mb-1.5">
-            <LinkIcon className="h-4 w-4 inline mr-1.5" />
-            Video URL
-          </label>
+      <Card className="p-6">
+        <Field
+          label={
+            <>
+              <LinkIcon className="h-4 w-4 inline mr-1.5" />
+              Video URL
+            </>
+          }
+        >
           <input
             type="text"
             value={url}
@@ -164,11 +172,10 @@ export default function StandaloneDownloadPage() {
               if (e.key === "Enter" && url.trim() && !downloadMutation.isPending) downloadMutation.mutate()
             }}
           />
-        </div>
+        </Field>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium mb-1.5">Quality</label>
+          <Field label="Quality">
             <select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
@@ -180,27 +187,26 @@ export default function StandaloneDownloadPage() {
               <option value="720p">720p</option>
               <option value="480p">480p</option>
             </select>
-          </div>
+          </Field>
         </div>
 
-        <button
+        <Button
+          variant="primary"
+          className="w-full"
           onClick={() => downloadMutation.mutate()}
-          disabled={!url.trim() || downloadMutation.isPending}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          disabled={!url.trim()}
+          loading={downloadMutation.isPending}
         >
           {downloadMutation.isPending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Fetching video info...
-            </>
+            "Fetching video info..."
           ) : (
             <>
               <Download className="h-4 w-4" />
               Download
             </>
           )}
-        </button>
-      </div>
+        </Button>
+      </Card>
 
       {/* Active Downloads */}
       {activeDownloads.length > 0 && (
@@ -217,7 +223,7 @@ export default function StandaloneDownloadPage() {
             const elapsed = prog?.startTime ? Math.floor((Date.now() - prog.startTime) / 1000) : 0
 
             return (
-              <div key={id} className="rounded-lg border bg-card overflow-hidden">
+              <Card key={id} className="overflow-hidden p-0 space-y-0">
                 <div className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="flex-1 min-w-0">
@@ -228,29 +234,29 @@ export default function StandaloneDownloadPage() {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {isComplete && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-green-500">
+                        <Badge tone="success" className="gap-1">
                           <CheckCircle className="h-3.5 w-3.5" /> Ready
-                        </span>
+                        </Badge>
                       )}
                       {failError && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-red-500">
+                        <Badge tone="danger" className="gap-1">
                           <AlertCircle className="h-3.5 w-3.5" /> Failed
-                        </span>
+                        </Badge>
                       )}
                       {!isComplete && !failError && !isActive && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+                        <Badge className="gap-1">
                           <Clock className="h-3.5 w-3.5" /> Starting...
-                        </span>
+                        </Badge>
                       )}
                       {isActive && !isProcessing && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-blue-500">
+                        <Badge tone="info" className="gap-1">
                           <Download className="h-3.5 w-3.5" /> {percent}%
-                        </span>
+                        </Badge>
                       )}
                       {isProcessing && (
-                        <span className="flex items-center gap-1 text-xs font-medium text-yellow-500">
+                        <Badge tone="warning" className="gap-1">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Processing...
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   </div>
@@ -281,12 +287,10 @@ export default function StandaloneDownloadPage() {
                   )}
 
                   {failError && (
-                    <div className="mt-3 p-2.5 rounded-md bg-red-50 dark:bg-red-900/20">
-                      <p className="text-xs text-red-600 dark:text-red-400 truncate">{failError}</p>
-                    </div>
+                    <Banner tone="danger" className="mt-3 p-2.5">{failError}</Banner>
                   )}
                 </div>
-              </div>
+              </Card>
             )
           })}
         </div>
@@ -309,9 +313,7 @@ export default function StandaloneDownloadPage() {
         )}
 
         {files && files.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground text-sm">
-            No files yet. Download a video to get started.
-          </div>
+          <EmptyState title="No files yet" text="Download a video to get started." />
         )}
 
         {files && files.length > 0 && (
@@ -319,7 +321,7 @@ export default function StandaloneDownloadPage() {
             {files.map((file) => {
               const days = daysUntilExpiry(file.expires_at)
               return (
-                <div key={file.filename} className="rounded-lg border bg-card p-4 flex items-center gap-3">
+                <Card key={file.filename} className="flex items-center gap-3 space-y-0">
                   <FileVideo className="h-5 w-5 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{file.filename}</p>
@@ -334,20 +336,23 @@ export default function StandaloneDownloadPage() {
                     <a
                       href={`/api/v1/quick-download/files/${encodeURIComponent(file.filename)}`}
                       download
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                      className={buttonClasses("primary", "sm")}
                     >
                       <Download className="h-3.5 w-3.5" /> Save
                     </a>
-                    <button
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-red-500"
                       onClick={() => deleteMutation.mutate(file.filename)}
                       disabled={deleteMutation.isPending}
-                      className="p-1.5 rounded-md hover:bg-accent text-muted-foreground hover:text-red-500 transition-colors"
                       title="Delete file"
+                      aria-label="Delete file"
                     >
                       <Trash2 className="h-4 w-4" />
-                    </button>
+                    </Button>
                   </div>
-                </div>
+                </Card>
               )
             })}
           </div>

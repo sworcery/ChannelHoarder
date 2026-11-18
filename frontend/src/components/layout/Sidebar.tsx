@@ -7,7 +7,6 @@ import {
   Download,
   Video,
   Settings,
-  X,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -30,9 +29,6 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
     <div className="flex h-full flex-col bg-card border-r">
       {/* Logo */}
       <div className="flex flex-col items-center px-4 py-5 border-b relative">
-        <button onClick={onClose} className="absolute top-3 right-3 lg:hidden">
-          <X className="h-5 w-5" />
-        </button>
         <img src="/logo.svg" alt="ChannelHoarder" className="h-32 w-32" />
         <span className="text-xl font-bold mt-2">ChannelHoarder</span>
       </div>

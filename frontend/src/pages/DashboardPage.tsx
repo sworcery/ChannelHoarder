@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query"
 import { api } from "@/lib/api"
-import { formatDateTime, formatBytes, formatSpeed } from "@/lib/utils"
+import { formatBytes, formatSpeed } from "@/lib/utils"
+import { Banner } from "@/components/ui/Banner"
+import { Button } from "@/components/ui/Button"
+import { Card } from "@/components/ui/Card"
+import { DateTime } from "@/components/ui/DateTime"
+import { EmptyState } from "@/components/ui/EmptyState"
+import { PageHeader } from "@/components/ui/PageHeader"
 import { useWebSocket } from "@/hooks/useWebSocket"
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
@@ -78,7 +84,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <PageHeader title="Dashboard" />
 
       {/* Stats Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -89,46 +95,47 @@ export default function DashboardPage() {
       </div>
 
       {sharedKey && sharedKey !== dismissedKey && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 p-4 flex items-start justify-between gap-3">
-          <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            Some channels share one folder on disk.{" "}
-            <Link
-              to="/settings"
+        <Banner
+          tone="warning"
+          action={
+            <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
-                localStorage.setItem("settings_tab", "diagnostics")
-                localStorage.setItem("diagnostics_tab", "overview")
+                localStorage.setItem("shared_folders_dismissed", sharedKey)
+                setDismissedKey(sharedKey)
               }}
-              className="underline font-medium"
+              title="Dismiss"
+              aria-label="Dismiss"
             >
-              Separate them in Settings &rarr; Diagnostics
-            </Link>.
-          </p>
-          <button
+              <X className="h-4 w-4" />
+            </Button>
+          }
+        >
+          Some channels share one folder on disk.{" "}
+          <Link
+            to="/settings"
             onClick={() => {
-              localStorage.setItem("shared_folders_dismissed", sharedKey)
-              setDismissedKey(sharedKey)
+              localStorage.setItem("settings_tab", "diagnostics")
+              localStorage.setItem("diagnostics_tab", "overview")
             }}
-            className="shrink-0 rounded p-1 hover:bg-yellow-200 dark:hover:bg-yellow-900"
-            title="Dismiss"
+            className="underline font-medium"
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
+            Separate them in Settings &rarr; Diagnostics
+          </Link>.
+        </Banner>
       )}
 
       {/* Health Banner */}
       {stats.pot_status !== "enabled" && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20 dark:border-yellow-700 p-4">
-          <p className="text-sm text-yellow-800 dark:text-yellow-200">
-            PO token server is {stats.pot_status}. Downloads may fail without PO tokens.
-          </p>
-        </div>
+        <Banner tone="warning">
+          PO token server is {stats.pot_status}. Downloads may fail without PO tokens.
+        </Banner>
       )}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Download Queue */}
-        <div className="rounded-lg border bg-card p-4">
-          <h2 className="text-lg font-semibold mb-3">Download Queue ({stats.queue_length})</h2>
+        <Card as="h2" title={`Download Queue (${stats.queue_length})`}>
           {queue && queue.length > 0 ? (
             <div className="space-y-3">
               {queue.slice(0, 5).map((entry: any) => {
@@ -171,13 +178,12 @@ export default function DashboardPage() {
               )}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No downloads in queue</p>
+            <EmptyState title="No downloads in queue" />
           )}
-        </div>
+        </Card>
 
         {/* Recent Downloads */}
-        <div className="rounded-lg border bg-card p-4">
-          <h2 className="text-lg font-semibold mb-3">Recent Downloads</h2>
+        <Card as="h2" title="Recent Downloads">
           {recent && recent.length > 0 ? (
             <div className="space-y-2">
               {recent.map((video: any) => (
@@ -190,22 +196,22 @@ export default function DashboardPage() {
                     )}
                   </div>
                   <span className="text-xs text-muted-foreground flex-shrink-0">
-                    {formatDateTime(video.downloaded_at)}
+                    <DateTime value={video.downloaded_at} />
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">No downloads yet</p>
+            <EmptyState title="No downloads yet" />
           )}
-        </div>
+        </Card>
       </div>
 
       {/* Last Scan */}
       {stats.last_scan_at && (
         <p className="text-sm text-muted-foreground flex items-center gap-1">
           <Clock className="h-4 w-4" />
-          Last scan: {formatDateTime(stats.last_scan_at)}
+          Last scan: <DateTime value={stats.last_scan_at} />
         </p>
       )}
     </div>
@@ -226,7 +232,7 @@ function StatCard({
   color?: string
 }) {
   return (
-    <div className="rounded-lg border bg-card p-4">
+    <Card>
       <div className="flex items-center gap-3">
         <Icon className={`h-8 w-8 ${color || "text-primary"}`} />
         <div>
@@ -235,6 +241,6 @@ function StatCard({
           <p className="text-xs text-muted-foreground">{sub}</p>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }
