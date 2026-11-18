@@ -65,6 +65,20 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # v<version> is a rollback point: tag it only on the first build of each version,
+      # so the weekly yt-dlp rebuild never replaces a released image.
+      - name: Version tag
+        id: ver
+        run: |
+          ver=$(sed -n 's/^ *APP_VERSION: str = "\(.*\)"$/\1/p' backend/app/config.py)
+          img=$(echo "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" | tr '[:upper:]' '[:lower:]')
+          if [ -n "$ver" ] && ! docker manifest inspect "$img:v$ver" > /dev/null 2>&1; then
+            echo "add=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "add=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -74,7 +88,8 @@ jobs:
             # Push to main = latest + edge
             type=raw,value=latest,enable={{is_default_branch}}
             type=raw,value=edge,enable={{is_default_branch}}
-            type=sha,prefix=
+            type=raw,value=v${{ steps.ver.outputs.ver }},enable=${{ steps.ver.outputs.add == 'true' }}
+            type=sha,prefix=,enable=${{ github.event_name == 'push' }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.9.50] - unreleased
 
+### Changed
+- **Versioned images for rolling back.** The image on GitHub's registry is now also tagged with its version (for example `ghcr.io/sworcery/channelhoarder:v1.9.50`), so you can pin or roll back to a specific release. The weekly rebuild that picks up the newest yt-dlp updates only `latest`, never a version tag. The scheduler library is also held below its upcoming 4.0 release, which changes how it works, so a weekly rebuild can't pick it up and break the app.
+
 ### Added
 - **Library check** (Settings > Diagnostics). It finds and repairs damage from the scan bug fixed below. A file that ended up under the wrong video is moved back to the video it really belongs to, and the video it was wrongly filed under is queued to download again.
   - **What it reports:** "certain" mismatches, from the file's own embedded source address or the `.info.json` beside it; "likely" ones, from the file's length plus the leftover files of a video whose file went missing; downloaded videos whose file is gone; and files to check by hand.
