@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Detect & Clean shows every file it will delete.** Its preview lists each already-flagged Short whose file will be removed, not just a count, and confirming deletes only the videos the preview showed you. A file another channel also uses is kept, and Shorts still waiting in the queue are taken out so they don't download afterwards.
 
 ### Fixed
+- **Updated web interface dependencies** (React Router 7.18, Vite 6.4.6, PostCSS 8.5.33 and their build tools) to pick up security fixes.
 - **A channel's scan failure stays visible, and you hear about it once.** Every way a scan can fail (scheduled, Scan Now, Scan All, feed checks) now records it the same way, and a later download error no longer hides a failed scan or flips the channel's health back and forth. The "Scan failed" notification goes out once per outage. When the channel lists again, its health comes back from its real state.
 - **Scan All behaves like scheduled scans.** It waits a little between channels, skips channels that are busy, and sends the usual scan-complete notification. A channel whose feed shows new videos but whose scan fails is retried the next day, not on every feed check.
 - **A newly added channel's first scan lands inside your scan window** instead of waiting as "due now". Scan after adding still scans straight away.
