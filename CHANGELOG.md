@@ -5,7 +5,7 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.9.50] - unreleased
+## [1.9.50] - 2026-11-17
 
 ### Changed
 - **Versioned images for rolling back.** The image on GitHub's registry is now also tagged with its version (for example `ghcr.io/sworcery/channelhoarder:v1.9.50`), so you can pin or roll back to a specific release. The weekly rebuild that picks up the newest yt-dlp updates only `latest`, never a version tag. The scheduler library is also held below its upcoming 4.0 release, which changes how it works, so a weekly rebuild can't pick it up and break the app.
