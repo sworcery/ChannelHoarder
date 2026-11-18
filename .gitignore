@@ -33,9 +33,6 @@ config/settings.json
 .DS_Store
 Thumbs.db
 
-# Docker
-.dockerignore
-
 # Env
 .env
 .env.local

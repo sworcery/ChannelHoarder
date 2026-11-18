@@ -22,9 +22,17 @@ fi
 
 # Create directories and set ownership
 mkdir -p /config /downloads /cookies /tmp/quick-downloads /home/appuser
+# /config is small, so it is always fixed (the database must stay writable).
 chown -R appuser:appuser /config /home/appuser /app /opt/pot-provider
+# A recursive chown of the whole library is slow on big shares; skip it when the
+# top folder already has the right owner (files the app writes get it anyway).
+needs_chown() {
+    [ "$(stat -c %u "$1" 2>/dev/null)" != "$PUID" ] || [ "$(stat -c %g "$1" 2>/dev/null)" != "$PGID" ]
+}
 # Downloads and cookies may be NFS/SMB mounts that reject chown  - don't fail the container
-chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?)  - continuing"
+if needs_chown /downloads; then
+    chown -R appuser:appuser /downloads 2>/dev/null || echo "WARNING: Could not chown /downloads (NFS/SMB mount?)  - continuing"
+fi
 chown -R appuser:appuser /cookies 2>/dev/null || echo "WARNING: Could not chown /cookies (NFS/SMB mount?)  - continuing"
 chown -R appuser:appuser /tmp/quick-downloads 2>/dev/null || true
 # Optional temp folder: Docker creates a new bind-mount folder owned by root. Change only

@@ -39,6 +39,21 @@ class Base(DeclarativeBase):
     pass
 
 
+def _create_missing_indexes(sync_conn):
+    from sqlalchemy.schema import CreateIndex
+
+    for table in Base.metadata.sorted_tables:
+        for index in sorted(table.indexes, key=lambda i: i.name or ""):
+            # Each in its own savepoint: an old database can hold rows a unique index
+            # refuses (duplicates). That index is skipped with a warning; the app
+            # still starts.
+            try:
+                with sync_conn.begin_nested():
+                    sync_conn.execute(CreateIndex(index, if_not_exists=True))
+            except Exception as e:
+                logger.warning("Could not add index %s on upgrade: %s", index.name, e)
+
+
 async def init_database():
     # Import models so Base.metadata knows about all tables before create_all
     import app.models  # noqa: F401
@@ -163,6 +178,11 @@ async def init_database():
         await conn.execute(text(
             "CREATE INDEX IF NOT EXISTS ix_videos_downloaded_at ON videos (downloaded_at)"
         ))
+
+        # create_all never adds indexes to tables that already exist, so databases made
+        # by older versions miss indexes the models declare. Create them idempotently
+        # from the model metadata (same names SQLAlchemy would use).
+        await conn.run_sync(_create_missing_indexes)
 
         # Add target_quality and estimated_size to download_queue
         result3 = await conn.execute(text("PRAGMA table_info(download_queue)"))

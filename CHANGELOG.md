@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - unreleased
+
+### Fixed
+- **Upgraded installs get the database indexes new installs have.** Databases created by older versions never received indexes added later, which slows large libraries. They're added on startup now. If an old database holds rows that block one of them, that index is skipped with a warning, and the app still starts.
+- **Faster container start on big libraries.** The container used to re-apply file ownership to the entire download folder on every start. It now does that only when the download folder's owner is wrong.
+
 ## [1.9.50] - 2026-11-17
 
 ### Changed
