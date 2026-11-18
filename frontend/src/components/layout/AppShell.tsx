@@ -1,5 +1,7 @@
 import { ReactNode, useState, useEffect } from "react"
 import { useLocation } from "react-router-dom"
+import { useQuery } from "@tanstack/react-query"
+import { api } from "@/lib/api"
 import { AlertStrip } from "@/components/AlertStrip"
 import { Dialog } from "@/components/ui/Dialog"
 import { useWebSocket } from "@/hooks/useWebSocket"
@@ -7,17 +9,51 @@ import { useToast } from "@/components/ui/toaster"
 import Sidebar from "./Sidebar"
 import Header from "./Header"
 
+/** True while Settings has its Authentication tab open. Settings keeps the open tab in
+ *  localStorage and announces changes with a "settings-tab" window event. */
+function useAuthTabOpen(onSettings: boolean) {
+  const read = () => {
+    try { return localStorage.getItem("settings_tab") === "auth" } catch { return false }
+  }
+  const [open, setOpen] = useState(read)
+  useEffect(() => {
+    if (!onSettings) return
+    setOpen(read())
+    const onTab = (e: Event) => setOpen((e as CustomEvent<string>).detail === "auth")
+    window.addEventListener("settings-tab", onTab)
+    return () => window.removeEventListener("settings-tab", onTab)
+  }, [onSettings])
+  return onSettings && open
+}
+
 /** The one alert slot: hidden on the Dashboard, which shows the full list itself.
- *  The Downloads page explains a paused queue in its own banner, so skip those there. */
+ *  The Downloads page explains a paused queue in its own banner, so skip those there.
+ *  A queue the user paused is not a fault: it shows on the Dashboard and Downloads only.
+ *  Cookie expiry is skipped where the page already shows its own banner. */
 function SlimAlerts() {
   const { pathname } = useLocation()
-  if (pathname === "/") return null
-  // Only the paused kinds: a "disk almost full" without a pause must still show there
   const onDownloads = pathname.startsWith("/downloads")
+  const onAuthTab = useAuthTabOpen(pathname.startsWith("/settings"))
+  // Same key as the Downloads page, so the answer is shared
+  const { data: pause } = useQuery({
+    queryKey: ["download-paused"],
+    queryFn: api.getPauseStatus,
+    refetchInterval: 30000,
+    staleTime: 10000,
+  })
+  const pausedFor = pause?.paused ? pause.reason : null
+  if (pathname === "/") return null
   return (
     <AlertStrip
       variant="slim"
-      hide={(a) => onDownloads && a.action.kind === "resume_queue"}
+      hide={(a) =>
+        a.id === "queue_paused" ||
+        // The Downloads banner covers a disk-full or cookie pause; a "disk almost full"
+        // or expired cookies without that pause have no banner there, so they still show
+        (onDownloads && a.id === "disk_full" && pausedFor === "disk_full") ||
+        (onDownloads && a.id === "cookies_expired" && pausedFor === "cookies_expired") ||
+        (a.id === "cookies_expired" && onAuthTab)
+      }
     />
   )
 }

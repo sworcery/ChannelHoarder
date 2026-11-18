@@ -84,8 +84,11 @@ class DiagnosticsService:
         disk_free = int(free_gb * 1024 ** 3)
 
         # PO token status
-        pot_healthy = await self._check_pot_health()
-        pot_status = "healthy" if pot_healthy else "unhealthy"
+        # Same words as /auth/status
+        if not settings.POT_SERVER_ENABLED:
+            pot_status = "off"
+        else:
+            pot_status = "running" if await self._check_pot_health() else "not_responding"
 
         return DiagnosticReport(
             generated_at=datetime.now(timezone.utc),

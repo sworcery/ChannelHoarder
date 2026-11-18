@@ -1,4 +1,4 @@
-import { useParams, useNavigate, useLocation } from "react-router-dom"
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom"
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { cn, formatDate, formatBytes, formatDuration, formatVideoCounts } from "@/lib/utils"
@@ -197,6 +197,18 @@ export default function ChannelDetailPage() {
     onError: (e: Error) => toast(e.message, "error"),
   })
   scanPendingRef.current = scanMutation.isPending
+
+  // A scan that just finished with auto-download on: point to Downloads if something was queued
+  const scanRunning = !!channel?.activity?.scanning || scanMutation.isPending
+  const wasScanning = useRef(false)
+  const [scanJustFinished, setScanJustFinished] = useState(false)
+  useEffect(() => {
+    if (scanRunning) setScanJustFinished(false)
+    else if (wasScanning.current) setScanJustFinished(true)
+    wasScanning.current = scanRunning
+  }, [scanRunning])
+  // The Scan Now response carries the number of new videos it found
+  const somethingQueued = ((scanMutation.data as { new_videos?: number } | undefined)?.new_videos ?? 0) > 0
 
   // Arriving from Add Channel with "Scan after adding" on: start the scan here, so the page
   // shows it running ("Scan started" until the call returns, then the polled activity.scanning).
@@ -603,6 +615,13 @@ export default function ChannelDetailPage() {
           </h2>
         </div>
 
+        {scanJustFinished && !scanRunning && channel.auto_download && somethingQueued && (
+          <p className="mb-3 text-sm text-muted-foreground">
+            Scan finished. New videos were queued for download;{" "}
+            <Link to="/downloads" className="underline font-medium text-foreground">watch them on Downloads</Link>.
+          </p>
+        )}
+
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <div className="relative flex-1 min-w-[180px] max-w-sm">
@@ -903,7 +922,9 @@ export default function ChannelDetailPage() {
           <EmptyState
             title={searchQuery || statusFilter || typeFilter
               ? "No episodes match your filters."
-              : "No videos found. Try scanning the channel."}
+              : scanRunning
+                ? "Scanning the channel. Its videos appear here in a minute or two."
+                : "No videos found. Try scanning the channel."}
           />
         )}
 

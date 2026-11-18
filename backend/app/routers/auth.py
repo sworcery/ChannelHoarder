@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.config import settings
 from app.database import async_session
 from app.models import AppSetting
+from app.routers.dashboard import _pot_server_healthy
 from app.services.queue_state import get_cookies_expired, resume_if_paused_for_cookies
 from app.services.youtube_api_service import YouTubeAPIService
 
@@ -203,8 +204,16 @@ async def get_auth_status():
     """Get overall authentication status."""
     try:
         # PO token status
-        pot_status = "enabled" if settings.POT_SERVER_ENABLED else "disabled"
-        pot_message = "PO token server is enabled" if settings.POT_SERVER_ENABLED else "PO token server is disabled"
+        # One status from the real ping (cached 60 s): running / not_responding / off
+        if not settings.POT_SERVER_ENABLED:
+            pot_status = "off"
+            pot_message = "Turned off"
+        elif await _pot_server_healthy():
+            pot_status = "running"
+            pot_message = "Running"
+        else:
+            pot_status = "not_responding"
+            pot_message = "Not responding. Restart the container; uploading cookies works as a fallback."
 
         # Cookie status
         cookies_status = "not_configured"

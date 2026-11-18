@@ -6,6 +6,7 @@ import { HelpIcon } from "@/components/ui/HelpIcon"
 import { Banner } from "@/components/ui/Banner"
 import { Button, buttonClasses } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { DateTime } from "@/components/ui/DateTime"
 import { Input, Select } from "@/components/ui/Input"
 import {
@@ -28,6 +29,7 @@ export default function AuthTab() {
   const { toast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [apiKey, setApiKey] = useState("")
+  const [confirmRemove, setConfirmRemove] = useState(false)
   const queryClient = useQueryClient()
 
   const { data: authStatus, refetch: refetchAuth, error: authError, isLoading: authLoading } = useQuery({
@@ -36,7 +38,12 @@ export default function AuthTab() {
     retry: 2,
   })
 
-  const uploadMutation = useMutation({
+  const { data: pauseStatus } = useQuery({
+    queryKey: ["download-paused"],
+    queryFn: api.getPauseStatus,
+  })
+
+  const uploadMutation =useMutation({
     mutationFn: (file: File) => api.uploadCookies(file),
     onSuccess: (data: any) => {
       refetchAuth()
@@ -81,6 +88,8 @@ export default function AuthTab() {
 
   return (
     <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">Changes here apply at once.</p>
+
       {authError && (
         <Banner
           tone="danger"
@@ -93,7 +102,11 @@ export default function AuthTab() {
 
       {isExpired && (
         <Banner tone="warning" title="Cookies Expired">
-          Your YouTube cookies have expired and the download queue has been auto-paused.
+          {!pauseStatus?.paused
+            ? "Your YouTube cookies have expired. The download queue is not paused."
+            : pauseStatus.reason === "cookies_expired"
+              ? "Your YouTube cookies have expired and the download queue is paused because of it."
+              : "Your YouTube cookies have expired. The download queue is also paused, for another reason."}{" "}
           Export fresh cookies from your browser and upload them below to resume downloads.
         </Banner>
       )}
@@ -112,8 +125,10 @@ export default function AuthTab() {
         <div className="flex items-center gap-2">
           {authLoading ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : authStatus?.pot_status === "enabled" ? (
+          ) : authStatus?.pot_status === "running" ? (
             <CheckCircle2 className="h-4 w-4 text-success" />
+          ) : authStatus?.pot_status === "off" ? (
+            <XCircle className="h-4 w-4 text-muted-foreground" />
           ) : (
             <XCircle className="h-4 w-4 text-danger" />
           )}
@@ -205,7 +220,7 @@ export default function AuthTab() {
                 {validateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 Validate
               </Button>
-              <Button variant="danger-outline" onClick={() => deleteCookiesMutation.mutate()}>
+              <Button variant="danger-outline" onClick={() => setConfirmRemove(true)}>
                 Remove
               </Button>
             </>
@@ -330,6 +345,18 @@ export default function AuthTab() {
           <option value="mediaconnect">mediaconnect</option>
         </Select>
       </Card>
+
+      <ConfirmDialog
+        open={confirmRemove}
+        title="Remove cookies?"
+        message="Downloads will use PO tokens only until you upload cookies again."
+        confirmLabel="Remove"
+        onConfirm={() => {
+          setConfirmRemove(false)
+          deleteCookiesMutation.mutate()
+        }}
+        onCancel={() => setConfirmRemove(false)}
+      />
     </div>
   )
 }

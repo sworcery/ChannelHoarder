@@ -25,6 +25,7 @@ def _texts(info):
         "suggested_fix": info.suggested_fix,
         "label": info.label,
         "tip": info.tip,
+        "failed_tip": info.failed_text,
     }
 
 
@@ -155,6 +156,53 @@ async def test_held_channels_lists_only_channels_with_waiting_rows(tmp_path):
         channel_activity.moving_channels.discard(ch_id)
     assert [h["id"] for h in held] == [ch_id]
     assert "moved" in held[0]["reason"]
+
+
+@pytest.mark.parametrize("code", list(ErrorCode))
+def test_failed_tab_tip_never_promises_an_automatic_retry(code):
+    # A video reaches Failed only after its automatic retries are used up
+    info = ERROR_CATALOG[code]
+    for text in (info.failed_text.lower(), info.failed_fix_text.lower()):
+        for phrase in ("on their own", "on its own", "retry after", "retries after", "tries again",
+                       "tries a few more", "retried automatically", "automatically", "retry these"):
+            assert phrase not in text, f"{code}: {phrase!r}"
+
+
+def test_failed_tips_name_the_button_as_it_reads():
+    for info in ERROR_CATALOG.values():
+        assert "Retry these" not in info.failed_text and "Retry these" not in info.failed_fix_text
+
+
+def test_failed_tip_keeps_the_site_placeholder_first():
+    for info in ERROR_CATALOG.values():
+        if "{site}" in info.failed_text:
+            assert info.failed_text.startswith("{site}"), info.code
+
+
+def test_permanent_causes_are_not_retryable():
+    for info in ERROR_CATALOG.values():
+        if info.permanent:
+            assert not info.retryable, info.code
+
+
+async def test_failed_counts_cover_every_page_and_fold_no_code_into_unknown(tmp_path):
+    from datetime import date
+
+    from app.models import Video
+    from app.routers import downloads
+    from tests.test_enqueue import _maker
+
+    maker, (vid, ch_id) = await _maker(tmp_path)
+    async with maker() as db:
+        first = await db.get(Video, vid)
+        first.status, first.error_code = "failed", None
+        db.add(Video(channel_id=ch_id, video_id="v2", title="B", status="failed",
+                     error_code="UNKNOWN", season=1, episode=2, upload_date=date(2025, 1, 2)))
+        db.add(Video(channel_id=ch_id, video_id="v3", title="C", status="failed",
+                     error_code="NETWORK_ERROR", season=1, episode=3, upload_date=date(2025, 1, 3)))
+        await db.commit()
+    async with maker() as db:
+        assert await downloads.get_failed_counts(db=db) == {"UNKNOWN": 2, "NETWORK_ERROR": 1}
 
 
 def test_retry_rule_follows_the_strategy():

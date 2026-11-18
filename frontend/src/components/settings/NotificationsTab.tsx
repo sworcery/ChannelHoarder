@@ -140,7 +140,7 @@ export default function NotificationsTab() {
           <Field label="Application Token">
             <Input
               type="password"
-              placeholder="azGDORePK8gMaC0QOYAMyEEuzJnyUi"
+              placeholder="Your application token"
               value={values.pushoverAppToken}
               onChange={(e) => set("pushoverAppToken", e.target.value)}
             />
@@ -148,7 +148,7 @@ export default function NotificationsTab() {
           <Field label="User Key">
             <Input
               type="password"
-              placeholder="uQiRzpo4DXghDmr9QzzfQu27cmVRsG"
+              placeholder="Your user key"
               value={values.pushoverUserKey}
               onChange={(e) => set("pushoverUserKey", e.target.value)}
             />

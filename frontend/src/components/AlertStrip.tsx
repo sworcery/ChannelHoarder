@@ -178,7 +178,7 @@ export function AlertStrip({ variant, hide }: { variant: "full" | "slim"; hide?:
       }
     >
       <div className="flex items-center gap-2">
-        <p className="min-w-0 truncate">
+        <p className="min-w-0 line-clamp-2 md:block md:truncate">
           <strong>{top.title}</strong>
           <span className="hidden md:inline"> &middot; {top.message}</span>
         </p>

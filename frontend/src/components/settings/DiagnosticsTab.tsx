@@ -46,6 +46,18 @@ export default function DiagnosticsTab() {
     enabled: subTab === "overview",
   })
 
+  // The PO token status is the same one the Authentication tab shows (from the real ping)
+  const { data: authStatus, isLoading: authLoading } = useQuery({
+    queryKey: ["auth-status"],
+    queryFn: api.getAuthStatus,
+    enabled: subTab === "overview",
+  })
+  const potLabel =
+    authStatus?.pot_status === "running" ? "Running"
+    : authStatus?.pot_status === "off" ? "Turned off"
+    : authStatus?.pot_status === "not_responding" ? "Not responding"
+    : authLoading ? "Checking..." : "Unknown"
+
   const { data: logs } = useQuery({
     queryKey: ["system-logs", logPage, logSearch],
     queryFn: () => api.getLogs({ skip: logPage * 50, limit: 50, search: logSearch || undefined }),
@@ -66,7 +78,7 @@ export default function DiagnosticsTab() {
       `Generated: ${new Date().toISOString()}`,
       `App Version: ${diagnostics.app_version}`,
       `yt-dlp Version: ${diagnostics.ytdlp_version}`,
-      `PO Tokens: ${diagnostics.pot_status}`,
+      `PO Tokens: ${potLabel}`,
       `Cookies: ${diagnostics.cookies_status}`,
       `API Key: ${diagnostics.api_key_configured ? "configured" : "not configured"}`,
       `Disk Free: ${diagnostics.disk_free_formatted}`,
@@ -131,7 +143,11 @@ export default function DiagnosticsTab() {
         ) : diagnostics ? (
           <div role="tabpanel" id={panelId("diag", "overview")} aria-labelledby={tabId("diag", "overview")} className="space-y-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <StatusCard label="PO Tokens" status={diagnostics.pot_status === "healthy" ? "ok" : "error"} value={diagnostics.pot_status} />
+              <StatusCard
+                label="PO Tokens"
+                status={authStatus?.pot_status === "running" ? "ok" : authStatus?.pot_status === "not_responding" ? "error" : "info"}
+                value={authStatus?.pot_status === "not_responding" ? `${potLabel}. Restart the container; uploading cookies works as a fallback.` : potLabel}
+              />
               <StatusCard label="Cookies" status={diagnostics.cookies_status === "present" ? "ok" : "info"} value={diagnostics.cookies_status} />
               <StatusCard label="yt-dlp" status="ok" value={diagnostics.ytdlp_version} />
               <StatusCard

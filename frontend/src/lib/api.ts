@@ -246,9 +246,10 @@ export const api = {
     )
   },
   getErrorCatalog: () =>
-    request<Record<string, { label: string; tip: string; explanation: string; suggested_fix: string; severity: string; retryable: boolean }>>(
+    request<Record<string, { label: string; tip: string; failed_tip: string; failed_fix: string; explanation: string; suggested_fix: string; severity: string; retryable: boolean; permanent: boolean }>>(
       "/downloads/error-catalog",
     ),
+  getFailedCounts: () => request<Record<string, number>>("/downloads/failed-counts"),
   getHeldChannels: () =>
     request<{ id: number; name: string; reason: string }[]>("/downloads/held-channels"),
   getActiveDownloads: () => request<QueueEntry[]>("/downloads/active"),

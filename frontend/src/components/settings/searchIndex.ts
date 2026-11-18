@@ -66,18 +66,53 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { label: "Recent Errors", keywords: "error codes failures", tab: "diagnostics", anchorId: "recent-errors" },
 ]
 
-export function searchSettings(query: string): SettingEntry[] {
-  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return []
-  return SETTINGS_INDEX
-    .map((e) => {
-      const label = e.label.toLowerCase()
-      const hay = `${label} ${e.keywords.toLowerCase()} ${TAB_LABELS[e.tab].toLowerCase()}`
-      if (!words.every((w) => hay.includes(w))) return null
-      // Matches in the label rank above matches in keywords.
-      return { e, score: words.every((w) => label.includes(w)) ? 0 : 1 }
-    })
-    .filter((x): x is { e: SettingEntry; score: number } => x !== null)
+/** Things people search for that are not on this page. Choosing one shows the text instead of jumping. */
+export interface PointerEntry {
+  label: string
+  keywords: string
+  text: string
+}
+
+export const POINTER_INDEX: readonly PointerEntry[] = [
+  { label: "Download folder", keywords: "path directory location output where files saved", text: "Set per channel (in its settings), or with DOWNLOAD_DIR in the container settings." },
+  { label: "Minimum quality", keywords: "min quality cutoff resolution upgrade", text: "Set per channel: open the channel's page and change its Quality settings." },
+  { label: "Retention", keywords: "delete old videos days keep cleanup", text: "Set per channel: open the channel's page and use its \"Delete videos after (days)\" field." },
+  { label: "Theme", keywords: "dark light mode appearance colour color", text: "Use the theme button in the page header." },
+  { label: "Timezone", keywords: "time zone clock tz", text: "Set with the TZ variable in the container settings." },
+  { label: "Proxy", keywords: "http socks vpn", text: "ChannelHoarder has no proxy setting." },
+  { label: "Download order", keywords: "queue priority newest oldest", text: "Set on the Downloads page." },
+]
+
+type Scored<T> = { e: T; score: number }
+
+function matches(words: string[], label: string, rest: string): number | null {
+  const l = label.toLowerCase()
+  // A word matches only at the start of a word, so "nfo" does not find "Info".
+  const tokens = `${l} ${rest.toLowerCase()}`.split(/[^a-z0-9.]+/).filter(Boolean)
+  if (!words.every((w) => tokens.some((t) => t.startsWith(w)))) return null
+  // Matches in the label rank above matches in keywords.
+  const labelTokens = l.split(/[^a-z0-9.]+/).filter(Boolean)
+  return words.every((w) => labelTokens.some((t) => t.startsWith(w))) ? 0 : 1
+}
+
+function rank<T>(items: readonly T[], score: (e: T) => number | null): T[] {
+  return items
+    .map((e) => ({ e, score: score(e) }))
+    .filter((x): x is Scored<T> => x.score !== null)
     .sort((a, b) => a.score - b.score)
     .map((x) => x.e)
+}
+
+const toWords = (query: string) => query.toLowerCase().split(/[^a-z0-9.]+/).filter(Boolean)
+
+export function searchSettings(query: string): SettingEntry[] {
+  const words = toWords(query)
+  if (words.length === 0) return []
+  return rank(SETTINGS_INDEX, (e) => matches(words, e.label, `${e.keywords} ${TAB_LABELS[e.tab]}`))
+}
+
+export function searchPointers(query: string): PointerEntry[] {
+  const words = toWords(query)
+  if (words.length === 0) return []
+  return rank(POINTER_INDEX, (e) => matches(words, e.label, e.keywords))
 }

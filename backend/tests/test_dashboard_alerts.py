@@ -1,3 +1,4 @@
+import time
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -48,6 +49,7 @@ def _fake_client(pings, status=200, fail=False):
 def env(monkeypatch):
     pings = []
     monkeypatch.setattr(dashboard, "_pot_cache", None)
+    monkeypatch.setattr(dashboard, "_APP_START", time.monotonic() - 3600)
     monkeypatch.setattr(settings, "POT_SERVER_ENABLED", True)
     monkeypatch.setattr(dashboard, "disk_space_status", lambda: (50.0, "", "healthy"))
     monkeypatch.setattr(dashboard.httpx, "AsyncClient", _fake_client(pings))
@@ -75,7 +77,8 @@ async def test_disk_full_paused_and_critical(env, monkeypatch):
         monkeypatch.setattr(dashboard, "disk_space_status", lambda: (0.4, "", "critical"))
         alerts = await dashboard.get_alerts(db)
         assert _ids(alerts) == ["disk_full"]  # no second "paused" alert
-        assert alerts[0]["action"] == {"label": "Resume", "kind": "resume_queue", "target": None}
+        assert alerts[0]["action"]["label"] == "Open Diagnostics"
+        assert alerts[0]["action"]["kind"] == "link"
         assert alerts[0]["severity"] == "critical"
 
         # Space freed after the pause: only the Resume is left, worded that way
@@ -191,3 +194,24 @@ async def test_priority_order(env, monkeypatch):
             "disk_full", "cookies_expired", "pot_server_down", "queue_paused",
             "unhealthy_channels", "overdue_scans",
         ]
+
+
+async def test_pot_quiet_in_first_two_minutes(env, monkeypatch):
+    pings = env
+    monkeypatch.setattr(dashboard.httpx, "AsyncClient", _fake_client(pings, fail=True))
+    monkeypatch.setattr(dashboard, "_APP_START", time.monotonic() - 30)
+    maker = await _maker()
+    async with maker() as db:
+        assert await dashboard.get_alerts(db) == []
+        assert pings == []
+
+
+async def test_stats_ignore_standalone_channel(env, monkeypatch):
+    monkeypatch.setattr(dashboard, "get_storage_usage", lambda custom_dirs=None: {
+        "downloads_used": 0, "disk_free": 1, "disk_total": 1, "disk_used": 0, "channels": {}})
+    maker = await _maker()
+    async with maker() as db:
+        db.add(Channel(channel_id="__standalone__", channel_name="Standalone", channel_url="x"))
+        await db.commit()
+        stats = await dashboard.get_stats(db)
+        assert stats.total_channels == 0 and stats.active_channels == 0

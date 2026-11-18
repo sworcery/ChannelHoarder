@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { api } from "@/lib/api"
 import { useToast } from "@/components/ui/toaster"
@@ -28,6 +29,8 @@ export default function ScanningTab() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({ queryKey: ["app-settings"], queryFn: api.getSettings })
   const { values, set, dirty, reset } = useSettingsDraft(settings, fromServer)
+
+  const [intervalText, setIntervalText] = useState<string | null>(null)
 
   const scanAllMutation = useMutation({
     mutationFn: api.scanAll,
@@ -83,8 +86,14 @@ export default function ScanningTab() {
             <div className="flex items-center gap-2">
               <Input
                 type="number"
-                value={values.scanMinIntervalHours}
-                onChange={(e) => set("scanMinIntervalHours", Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
+                value={intervalText ?? values.scanMinIntervalHours}
+                onChange={(e) => {
+                  // Let the box be cleared while typing; clamp on blur.
+                  setIntervalText(e.target.value)
+                  const n = Number(e.target.value)
+                  if (e.target.value !== "" && Number.isFinite(n)) set("scanMinIntervalHours", Math.max(1, Math.min(168, Math.round(n))))
+                }}
+                onBlur={() => setIntervalText(null)}
                 min={1}
                 max={168}
                 className="w-32"

@@ -14,7 +14,7 @@ import AntiDetectTab from "@/components/settings/AntiDetectTab"
 import NotificationsTab from "@/components/settings/NotificationsTab"
 import DiagnosticsTab from "@/components/settings/DiagnosticsTab"
 import { SettingsFormContext, type FormStatus } from "@/components/settings/settingsForm"
-import { TAB_LABELS, searchSettings, type SettingsTab } from "@/components/settings/searchIndex"
+import { TAB_LABELS, searchSettings, searchPointers, type SettingsTab } from "@/components/settings/searchIndex"
 
 const STORAGE_KEY = "settings_tab"
 
@@ -30,6 +30,8 @@ const isTab = (v: string | null): v is SettingsTab => !!v && (TAB_KEYS as string
 
 function remember(tab: SettingsTab) {
   try { localStorage.setItem(STORAGE_KEY, tab) } catch { /* ignore */ }
+  // The app shell hides alerts this tab already shows (e.g. expired cookies on Authentication)
+  window.dispatchEvent(new CustomEvent("settings-tab", { detail: tab }))
 }
 
 /** Scroll to a setting and ring it for a moment. Waits briefly for tabs that load their content. */
@@ -82,6 +84,8 @@ export default function SettingsPage() {
   const [query, setQuery] = useState("")
 
   const results = useMemo(() => searchSettings(query), [query])
+  const pointers = useMemo(() => searchPointers(query), [query])
+  const [openPointer, setOpenPointer] = useState<string | null>(null)
 
   const doSwitch = (next: SettingsTab, to?: string) => {
     setTab(next)
@@ -183,7 +187,7 @@ export default function SettingsPage() {
             aria-label="Search settings"
             placeholder="Search settings (e.g. cookies, quality, Discord)"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => { setQuery(e.target.value); setOpenPointer(null) }}
             onKeyDown={(e) => {
               if (e.key === "Escape") setQuery("")
               else if (e.key === "Enter" && results[0]) pick(results[0].tab, results[0].anchorId)
@@ -192,9 +196,30 @@ export default function SettingsPage() {
           />
           {query.trim() && (
             <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
-              {results.length === 0 ? (
+              {results.length === 0 && pointers.length === 0 && (
                 <p className="px-3 py-2 text-sm text-muted-foreground">No settings match "{query.trim()}".</p>
-              ) : (
+              )}
+              {pointers.length > 0 && (
+                <ul>
+                  {pointers.map((p) => (
+                    <li key={p.label}>
+                      <button
+                        type="button"
+                        aria-expanded={openPointer === p.label}
+                        onClick={() => setOpenPointer(openPointer === p.label ? null : p.label)}
+                        className="flex min-h-10 w-full items-center justify-between gap-3 rounded px-3 py-1.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0"
+                      >
+                        <span>{p.label}</span>
+                        <span className="shrink-0 text-xs text-muted-foreground">Not on this page</span>
+                      </button>
+                      {openPointer === p.label && (
+                        <p className="px-3 pb-2 text-sm text-muted-foreground">{p.text}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {results.length > 0 && (
                 <ul>
                   {results.map((r) => (
                     <li key={r.anchorId}>
@@ -226,7 +251,7 @@ export default function SettingsPage() {
           {tab === "diagnostics" && <DiagnosticsTab />}
         </div>
 
-        {form?.dirty && (
+        {form?.dirty && pending === null && !leaving && (
           <div
             role="region"
             aria-label="Unsaved changes"
@@ -249,7 +274,6 @@ export default function SettingsPage() {
         open={pending !== null || leaving}
         onClose={closePending}
         title="Unsaved changes"
-        description={`You have unsaved changes on ${TAB_LABELS[tab]}. Save them before you leave, or discard them.`}
         size="sm"
         footer={
           <>
@@ -286,7 +310,11 @@ export default function SettingsPage() {
             </Button>
           </>
         }
-      />
+      >
+        <p className="text-sm text-muted-foreground">
+          {`You have unsaved changes on ${TAB_LABELS[tab]}. Save them before you leave, or discard them.`}
+        </p>
+      </Dialog>
     </SettingsFormContext.Provider>
   )
 }

@@ -43,8 +43,23 @@ class ErrorInfo:
     # tip is the platform's name (the page fills it in), so the tip is right on every platform.
     label: str = ""
     tip: str = ""
+    # The tip for the Failed tab, where the automatic retries are already used up. Empty
+    # means the tip is right there too.
+    failed_tip: str = ""
+    # The suggested fix for the Failed tab, when the normal one promises an automatic retry.
+    failed_fix: str = ""
+    # True when the video itself is gone or blocked, so retrying it never helps.
+    permanent: bool = False
     # True when the text may name YouTube because the cause only exists there.
     youtube_only: bool = False
+
+    @property
+    def failed_text(self) -> str:
+        return self.failed_tip or self.tip
+
+    @property
+    def failed_fix_text(self) -> str:
+        return self.failed_fix or self.suggested_fix
 
     @property
     def retryable(self) -> bool:
@@ -72,6 +87,8 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="warning",
         label="Rate limited",
         tip="{site} is limiting requests. These retry on their own with a longer delay; if it keeps happening, raise the download delay in Settings > Anti-Detection.",
+        failed_tip="{site} kept limiting requests until the automatic retries ran out. Raise the download delay in Settings > Anti-Detection, then use Retry all.",
+        failed_fix="Raise the download delay in Settings > Anti-Detection, wait a while, then use Retry all.",
     ),
     ErrorCode.GEO_BLOCKED: ErrorInfo(
         code=ErrorCode.GEO_BLOCKED,
@@ -82,6 +99,7 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="info",
         label="Geo-blocked",
         tip="These videos are not available in your region. A retry will not change that.",
+        permanent=True,
     ),
     ErrorCode.VIDEO_UNAVAILABLE: ErrorInfo(
         code=ErrorCode.VIDEO_UNAVAILABLE,
@@ -92,6 +110,7 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="info",
         label="Unavailable",
         tip="{site} no longer serves these videos. A retry will not change that.",
+        permanent=True,
     ),
     ErrorCode.VIDEO_PRIVATE: ErrorInfo(
         code=ErrorCode.VIDEO_PRIVATE,
@@ -102,6 +121,7 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="info",
         label="Private",
         tip="The uploader made these private (or members-only). Only they can reopen them.",
+        permanent=True,
     ),
     ErrorCode.VIDEO_REMOVED: ErrorInfo(
         code=ErrorCode.VIDEO_REMOVED,
@@ -112,16 +132,19 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="info",
         label="Removed",
         tip="{site} removed these videos for good. A retry will not bring them back.",
+        permanent=True,
     ),
     ErrorCode.NETWORK_ERROR: ErrorInfo(
         code=ErrorCode.NETWORK_ERROR,
         summary="Network connection error",
         explanation="Could not connect to the site. This may be a temporary network issue.",
-        suggested_fix="Check your internet connection. The download will be retried automatically.",
+        suggested_fix="Check the server's internet connection. ChannelHoarder tries a few more times on its own; if it still fails, retry once the connection is back.",
         retry_strategy="linear",
         severity="warning",
         label="Network error",
         tip="{site} could not be reached. These retry on their own; check the server's internet connection if it keeps happening.",
+        failed_tip="{site} could not be reached and the automatic retries ran out. Check the server's internet connection, then use Retry all.",
+        failed_fix="Check the server's internet connection. Once it is back, use Retry all.",
     ),
     ErrorCode.YTDLP_OUTDATED: ErrorInfo(
         code=ErrorCode.YTDLP_OUTDATED,
@@ -137,11 +160,13 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         code=ErrorCode.FFMPEG_ERROR,
         summary="Video processing error",
         explanation="ffmpeg failed to merge or convert the video/audio streams.",
-        suggested_fix="This is usually a temporary issue. The download will be retried. If persistent, check disk space and try a different quality setting.",
+        suggested_fix="Usually temporary. ChannelHoarder tries a few more times on its own; if it keeps failing, check disk space and try a different quality setting, then retry.",
         retry_strategy="linear",
         severity="warning",
         label="Processing error",
         tip="Merging the video and audio failed. These retry on their own; if it keeps happening, check free disk space.",
+        failed_tip="Merging the video and audio failed and the automatic retries ran out. Check free disk space, then use Retry all.",
+        failed_fix="Check disk space and try a different quality setting, then use Retry all.",
     ),
     ErrorCode.DISK_FULL: ErrorInfo(
         code=ErrorCode.DISK_FULL,
@@ -162,6 +187,8 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="error",
         label="PO token failed",
         tip="The PO token server could not make a token for YouTube. These retry on their own; if it keeps happening, check Settings > Diagnostics.",
+        failed_tip="The PO token server could not make a token for YouTube and the automatic retries ran out. Check Settings > Diagnostics, then use Retry all.",
+        failed_fix="Check Settings > Diagnostics for the PO token server status, or upload cookies as a fallback, then use Retry all.",
         youtube_only=True,
     ),
     ErrorCode.FORMAT_UNAVAILABLE: ErrorInfo(
@@ -188,11 +215,13 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         code=ErrorCode.DOWNLOAD_STALLED,
         summary="Download stalled",
         explanation="The download stopped making progress. This can happen with very large files on slow connections, or if the source server stopped responding.",
-        suggested_fix="The download will be retried automatically. If this keeps happening, check your network connection and available disk space.",
+        suggested_fix="ChannelHoarder tries a few more times on its own. If it keeps happening, check the network connection and free disk space, then retry.",
         retry_strategy="linear",
         severity="warning",
         label="Download stalled",
         tip="These stopped making progress. They retry on their own; if it keeps happening, check the network and free disk space.",
+        failed_tip="These stopped making progress and the automatic retries ran out. Check the network and free disk space, then use Retry all.",
+        failed_fix="Check the network connection and free disk space, then use Retry all.",
     ),
     ErrorCode.QUALITY_TOO_LOW: ErrorInfo(
         code=ErrorCode.QUALITY_TOO_LOW,
@@ -203,6 +232,7 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="info",
         label="Quality below minimum",
         tip="Only low formats were available. They retry after 1, 6 and 24 hours; use Download anyway to take the best quality now, or lower the channel's minimum quality.",
+        failed_tip="Only low formats were available, even after the 1, 6 and 24 hour retries. Use Download anyway to take the best quality now, or lower the channel's minimum quality and use Retry all.",
     ),
     ErrorCode.SCAN_FAILED: ErrorInfo(
         code=ErrorCode.SCAN_FAILED,
@@ -213,6 +243,8 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         severity="warning",
         label="Scan failed",
         tip="The channel's video list could not be read. The scan tries again on its next run; see Settings > Diagnostics if it keeps failing.",
+        failed_tip="The channel's video list could not be read. See Settings > Diagnostics, then scan the channel again.",
+        failed_fix="Check the channel's error on its page and Settings > Diagnostics, then scan the channel again.",
     ),
     ErrorCode.LIVESTREAM_SCHEDULED: ErrorInfo(
         code=ErrorCode.LIVESTREAM_SCHEDULED,
@@ -231,6 +263,7 @@ ERROR_CATALOG: dict[ErrorCode, ErrorInfo] = {
         suggested_fix="Upload fresh cookies.txt in Settings > Authentication, then scan again. The skipped videos are picked up automatically on the next successful scan; nothing is lost. For videos already saved with a wrong date, open the channel and use Repair Dates.",
         retry_strategy="linear",
         severity="warning",
+        failed_fix="Upload fresh cookies.txt in Settings > Authentication, then scan again. For videos already saved with a wrong date, open the channel and use Repair Dates.",
         label="Dates could not be read",
         tip="Upload dates could not be read, so those videos were left out of the scan. Upload fresh cookies in Settings > Authentication and scan again; nothing is lost.",
     ),

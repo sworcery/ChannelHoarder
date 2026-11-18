@@ -61,7 +61,7 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 <details>
 <summary><b>First steps</b></summary>
 
-1. Go to **Settings → Authentication** and verify the PO Token Server shows **Running**
+1. Go to **Settings → Authentication** and verify the PO token status reads **Running**
 2. *(Optional)* Add a YouTube Data API key for faster channel discovery
 3. *(Optional)* Configure Telegram, Pushover, or Discord notifications
 4. Go to **Channels** → **Add Channel** and paste a channel URL
@@ -73,14 +73,19 @@ Then open `http://your-server-ip:8587` in your browser. Update later with `docke
 
 ## How It Works
 
-<details>
-<summary><b>Adding channels & automatic scanning</b></summary>
-
 ### Adding channels
+
+<details>
+<summary><b>Show details</b></summary>
 
 Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on the **Channels** page. ChannelHoarder fetches the channel metadata (name, description, thumbnail), adds it to your subscription list, and lets you set per-channel options (quality, custom download directory, enabled/disabled). It can auto-scan immediately after adding. To add many channels at once, use **Bulk Import** to paste a list or upload a CSV/text file, such as YouTube Takeout's `subscriptions.csv`.
 
+</details>
+
 ### Automatic scanning
+
+<details>
+<summary><b>Show details</b></summary>
 
 - Each channel is scanned at its own random time, every 12 to 24 hours by default (set the interval under Settings > Scanning, and optionally limit scans to certain hours with a scan window on the same tab)
 - Optionally, YouTube channels' RSS feeds can be checked every so many minutes (Settings > Scanning, off by default), and a channel is scanned as soon as its feed shows a new video. Checks stay under YouTube's daily feed limit, and interval scans keep running as the backup
@@ -90,10 +95,10 @@ Paste a channel URL or @handle (e.g. `https://www.youtube.com/@ChannelName`) on 
 
 </details>
 
+### Downloads
+
 <details>
 <summary><b>Download pipeline</b></summary>
-
-### Downloads
 
 The **Downloads** page shows the queue, the history and the failed downloads. Pause stops new downloads while in-progress ones finish. The pipeline works like this:
 
@@ -106,10 +111,10 @@ The **Downloads** page shows the queue, the history and the failed downloads. Pa
 
 </details>
 
-<details>
-<summary><b>Importing existing videos</b></summary>
-
 ### Importing existing videos
+
+<details>
+<summary><b>Show details</b></summary>
 
 If you already have downloaded videos from a channel, you can import them instead of re-downloading:
 
@@ -123,10 +128,10 @@ If you already have downloaded videos from a channel, you can import them instea
 
 </details>
 
-<details>
-<summary><b>Channel & episode management</b></summary>
-
 ### Channel management
+
+<details>
+<summary><b>Show details</b></summary>
 
 Open a channel to change how it downloads. The options apply to future scans and leave videos already queued alone:
 
@@ -137,14 +142,21 @@ Open a channel to change how it downloads. The options apply to future scans and
 - **Delete after** - remove downloaded files a set number of days after download. The videos stay listed as skipped and are not downloaded again, including after Force Rescan
 - **Scan Now** - scans the channel at once. A cooldown (Settings > Scanning) stops repeated clicks
 
+</details>
+
 ### Episode management
+
+<details>
+<summary><b>Show details</b></summary>
 
 A channel's videos are listed as episodes. Shorts (60 seconds or less, or on the channel's Shorts tab) and livestreams or premieres have their own sections and are skipped unless both Settings > Media Management and the channel allow them. A minimum duration skips shorter videos; the maximum duration in Settings flags longer ones for review. Subtitles, chapters and SponsorBlock are set under Settings > Media Management.
 
 </details>
 
+### Error handling and channel health
+
 <details>
-<summary><b>Error handling & channel health</b></summary>
+<summary><b>Show details</b></summary>
 
 When a download fails, ChannelHoarder classifies the error and provides actionable information:
 
@@ -245,10 +257,10 @@ From 2.0, `MAX_RETRIES`, `USER_AGENT_ROTATION` and `LOG_LEVEL` are starting valu
 
 </details>
 
-<details>
-<summary><b>YouTube Data API key (optional)</b></summary>
-
 ### YouTube Data API key (optional)
+
+<details>
+<summary><b>How to get a key</b></summary>
 
 A YouTube Data API key improves channel scanning reliability and speed. Without it, yt-dlp handles discovery directly, which works but can be slower.
 
@@ -268,8 +280,10 @@ The free tier provides 10,000 quota units per day, which is enough for most pers
 
 </details>
 
+### Settings in the web UI
+
 <details>
-<summary><b>Settings (via Web UI)</b></summary>
+<summary><b>Show details</b></summary>
 
 All settings are on the **Settings** page, in seven tabs. Type in the search box at the top to find any setting by name; choosing a result opens its tab and highlights it. Changes on the General, Scanning, Media Management, Anti-Detection and Notifications tabs wait for the **Save** button in the bar that appears at the bottom; **Discard** puts the saved values back. Switching tabs or leaving the page with unsaved changes asks first. On the Authentication and Diagnostics tabs, and for Export/Import Config, Scan All Channels Now, naming Preview and the notification test buttons, the action happens when you press its button.
 
@@ -285,14 +299,19 @@ Environment variables set the starting values; see the table above.
 
 </details>
 
-<details>
-<summary><b>Anti-detection & notifications</b></summary>
-
 ### Anti-detection
+
+<details>
+<summary><b>Show details</b></summary>
 
 Random delays between downloads (default 10 to 30 seconds), optional random jitter (0 to 10 extra seconds), rotating user-agent strings and a random pause between channel scans keep traffic from looking like a script. All of it is under **Settings > Anti-Detection**.
 
+</details>
+
 ### Notifications
+
+<details>
+<summary><b>Show details</b></summary>
 
 Under **Settings > Notifications**, add a Telegram bot (token and chat ID), Pushover (application token and user key) and/or a Discord webhook URL. Save first, then use the test buttons, which send through the saved settings. Per-event toggles choose what triggers a message: downloads finishing or failing, cookies expiring or refreshing, health alerts, long videos waiting for review, moves, scans and quality upgrades.
 
@@ -300,21 +319,28 @@ Under **Settings > Notifications**, add a Telegram bot (token and chat ID), Push
 
 ## Cookie Authentication
 
-<details>
-<summary><b>PO tokens & player client</b></summary>
-
 ### PO tokens
 
-YouTube asks clients to prove they are a real browser. The built-in PO token server makes those proofs automatically, so downloads work without any setup. **Settings > Authentication** shows whether it is running. When you also upload cookies, the cookies take priority.
+<details>
+<summary><b>Show details</b></summary>
+
+YouTube asks clients to prove they are a real browser. The built-in PO token server makes those proofs automatically, so downloads work without any setup. **Settings > Authentication** shows its status: **Running**, **Not responding** or **Turned off**. If it is not responding, restart the container; uploading cookies works as a fallback. When you also upload cookies, the cookies take priority.
+
+</details>
 
 ### Player client
+
+<details>
+<summary><b>Show details</b></summary>
 
 The player client is the YouTube API yt-dlp uses to list a video's formats. Leave it on **Default (automatic)**: yt-dlp picks a working client and adapts when YouTube changes. Override it only if one specific video fails with a format error; `ios` and `web_safari` are good fallbacks. The choice applies as soon as you select it.
 
 </details>
 
+### Cookies (optional)
+
 <details>
-<summary><b>Cookie authentication (optional) - three methods</b></summary>
+<summary><b>Three methods</b></summary>
 
 Cookies are optional but can help if you have YouTube Premium, need to access region-specific content, or want to download **premium/authenticated Rumble** content. The same `cookies.txt` covers all platforms - cookies are matched per-domain, so you can include YouTube and Rumble cookies in one file. There are three ways to provide cookies:
 
@@ -365,10 +391,10 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
 ## Reference
 
+### Tech stack
+
 <details>
 <summary><b>Tech stack & volumes</b></summary>
-
-### Tech stack
 
 - **Backend**: Python 3.12, FastAPI, SQLAlchemy (async), APScheduler, yt-dlp
 - **Frontend**: React 18, TypeScript, Tailwind CSS, TanStack Query, React Router
@@ -386,8 +412,10 @@ Cookies expire periodically. Options 1 and 2 handle re-export automatically.
 
 </details>
 
+### API
+
 <details>
-<summary><b>API</b></summary>
+<summary><b>Show details</b></summary>
 
 ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live progress. See [docs/API.md](docs/API.md) for the full endpoint list, or browse the interactive Swagger UI at `/docs` on a running instance.
 
@@ -413,8 +441,10 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 
 </details>
 
+### Known limitations
+
 <details>
-<summary><b>Known limitations</b></summary>
+<summary><b>Show details</b></summary>
 
 - **YouTube Shorts** - YouTube videos of 60 seconds or less (or on the Shorts tab) are treated as Shorts and skipped by default (toggleable per channel)
 - **Livestreams / long videos** - Videos over the max duration setting are skipped by default
@@ -427,10 +457,10 @@ ChannelHoarder exposes a REST API under `/api/v1/` plus a WebSocket for live pro
 
 ## Troubleshooting
 
+### Library repair
+
 <details>
 <summary><b>Library repair (Settings > Diagnostics)</b></summary>
-
-### Library repair
 
 Two tools fix problems older versions could leave behind. Both show what they found before changing anything, and neither overwrites a file.
 
@@ -444,11 +474,13 @@ Two tools fix problems older versions could leave behind. Both show what they fo
 
 </details>
 
+### Common issues and fixes
+
 <details>
-<summary><b>Common issues & fixes</b></summary>
+<summary><b>Show details</b></summary>
 
 **Queue not downloading / stuck**
-- Check Settings → Authentication: PO Token Server must show **Running**
+- Check Settings → Authentication: the PO token status must read **Running**. If it says **Not responding**, restart the container; uploading cookies works as a fallback
 - Check Settings → Diagnostics → System Logs for error details
 - If cookies expired, upload fresh ones via Settings → Authentication
 

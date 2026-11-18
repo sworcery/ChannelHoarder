@@ -43,10 +43,16 @@ import {
 interface ErrorCatalogEntry {
   label: string
   tip: string
+  /** The tip for the Failed tab, where the automatic retries are used up. */
+  failed_tip: string
+  /** The suggested fix for the Failed tab (empty when the normal fix is right there too). */
+  failed_fix: string
   explanation: string
   suggested_fix: string
   severity: string
   retryable: boolean
+  /** The video itself is gone or blocked, so a retry never helps. */
+  permanent: boolean
 }
 type ErrorCatalog = Record<string, ErrorCatalogEntry>
 
@@ -79,8 +85,14 @@ function errorLabel(catalog: ErrorCatalog | undefined, code: string | null | und
 }
 
 /** The group's tip with "{site}" filled in: the platform's name, or "The site" when mixed. */
-function errorTip(catalog: ErrorCatalog | undefined, code: string | null | undefined, platforms: string[]): string {
-  return fillSite(code ? catalog?.[code]?.tip : undefined, platforms)
+function errorTip(
+  catalog: ErrorCatalog | undefined,
+  code: string | null | undefined,
+  platforms: string[],
+  failed = false,
+): string {
+  const entry = code ? catalog?.[code] : undefined
+  return fillSite(failed ? entry?.failed_tip || entry?.tip : entry?.tip, platforms)
 }
 
 /** "{site}" is the platform's name, or "The site" when the group mixes platforms (tips start with it). */
@@ -99,30 +111,21 @@ function errorColor(catalog: ErrorCatalog | undefined, code: string | null | und
   }
 }
 
-/** The pause banner text for each reason the API reports. */
-function pauseExplanation(reason: string | null | undefined): { title: string; text: ReactNode } {
+/** The reason line under the "Queue paused" title, for each reason the API reports. */
+function pauseExplanation(reason: string | null | undefined): ReactNode {
   if (reason === "disk_full") {
-    return {
-      title: "Queue paused: the disk is full",
-      text: "Free space on the downloads volume, then press Resume. Downloads in progress finish if they can.",
-    }
+    return "The queue paused because the disk filled up. Once there's free space on the downloads volume, Resume appears here. Downloads in progress finish if they can."
   }
   if (reason === "cookies_expired") {
-    return {
-      title: "Queue paused: your cookies expired",
-      text: (
-        <>
-          The site is asking for sign-in. Upload fresh cookies in{" "}
-          <Link to="/settings?tab=auth" className="underline">Settings &gt; Authentication</Link>
-          ; the queue resumes by itself once they work. Downloads in progress finish.
-        </>
-      ),
-    }
+    return (
+      <>
+        Your cookies expired and the site is asking for sign-in. Upload fresh cookies in{" "}
+        <Link to="/settings?tab=auth" className="underline">Settings &gt; Authentication</Link>
+        ; the queue resumes by itself once they work. Downloads in progress finish.
+      </>
+    )
   }
-  return {
-    title: "Queue paused by you",
-    text: "Nothing new starts until you press Resume. Downloads in progress finish.",
-  }
+  return "Paused by you. Nothing new starts until you press Resume. Downloads in progress finish."
 }
 
 type DownloadsTab = "queue" | "history" | "failed"
@@ -184,6 +187,7 @@ export default function DownloadsPage() {
   const [queuePage, setQueuePage] = useState(0)
   const [activeProgress, setActiveProgress] = useState<Record<string, any>>({})
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set())
+  const [moreGroups, setMoreGroups] = useState<Set<string>>(new Set())
   const [selectedQueueIds, setSelectedQueueIds] = useState<Set<number>>(new Set())
   const [lastSelectedIdx, setLastSelectedIdx] = useState<number | null>(null)
   const [confirm, setConfirm] = useState<{ title: string; message: string; confirmLabel: string; run: () => void } | null>(null)
@@ -288,6 +292,26 @@ export default function DownloadsPage() {
     queryKey: ["error-catalog"],
     queryFn: fetchErrorCatalog,
     staleTime: Infinity,
+  })
+
+  // While paused for a full disk, Resume only shows once the dashboard's disk alert says space is back
+  const { data: pauseAlerts } = useQuery({
+    queryKey: ["dashboard-alerts"],
+    queryFn: api.getAlerts,
+    refetchInterval: 30000,
+    staleTime: 10000,
+    enabled: !!pauseStatus?.paused && pauseStatus?.reason === "disk_full",
+  })
+  const diskStillFull =
+    !!pauseStatus?.paused && pauseStatus?.reason === "disk_full" &&
+    (pauseAlerts ?? []).some((a) => a.id === "disk_full" && a.action.kind !== "resume_queue")
+
+  // Failed videos per cause across all pages (the sets "Retry all" re-queues)
+  const { data: failedCounts } = useQuery({
+    queryKey: ["download-history", "failed-counts"],
+    queryFn: api.getFailedCounts,
+    staleTime: 10000,
+    enabled: tab === "failed",
   })
 
   // Channels whose queued videos are held back (a move, file work, a scan, or a finishing download)
@@ -560,8 +584,13 @@ export default function DownloadsPage() {
     const color = errorColor(errorCatalog, code)
     const platform = platformName(video.platform)
     const tip = errorTip(errorCatalog, code, [video.platform])
-    // On Failed the tip is shown once per group, so it doesn't count as a row detail there.
-    const hasDetails = !!(errorDetails?.explanation || errorDetails?.suggested_fix || (tab !== "failed" && tip))
+    const onFailed = tab === "failed"
+    // On Failed the group banner already names the cause, so a row shows its own text only behind Details.
+    const permanent = onFailed && !!(code && errorCatalog?.[code]?.permanent)
+    const hasDetails = !!(
+      errorDetails?.explanation || errorDetails?.suggested_fix || (!onFailed && tip) ||
+      (onFailed && video.error_message) || permanent
+    )
     const showDetails = hasDetails && isExpanded
 
     return (
@@ -599,8 +628,12 @@ export default function DownloadsPage() {
             {code && (
               <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                 <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${color}`} />
-                <span className={`text-xs font-medium ${color}`}>{errorLabel(errorCatalog, code)}</span>
-                <span className="text-xs text-muted-foreground truncate">{video.error_message}</span>
+                {!onFailed && (
+                  <>
+                    <span className={`text-xs font-medium ${color}`}>{errorLabel(errorCatalog, code)}</span>
+                    <span className="text-xs text-muted-foreground truncate">{video.error_message}</span>
+                  </>
+                )}
                 {hasDetails && (
                   <Button
                     variant="ghost"
@@ -617,6 +650,9 @@ export default function DownloadsPage() {
             )}
             {showDetails && (
               <div className="mt-2 rounded-md bg-muted/50 border p-3 text-xs space-y-2">
+                {onFailed && video.error_message && (
+                  <p className="text-muted-foreground break-words">{video.error_message}</p>
+                )}
                 {errorDetails?.explanation && (
                   <div>
                     <p className="font-medium text-foreground mb-0.5">What happened</p>
@@ -629,7 +665,18 @@ export default function DownloadsPage() {
                     <p className="text-muted-foreground">{errorDetails.suggested_fix}</p>
                   </div>
                 )}
-                {tab !== "failed" && tip && <p className="text-muted-foreground">{tip}</p>}
+                {!onFailed && tip && <p className="text-muted-foreground">{tip}</p>}
+                {permanent && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => retryMutation.mutate(video.id)}
+                    disabled={retryMutation.isPending}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Retry anyway
+                  </Button>
+                )}
               </div>
             )}
           </>
@@ -646,7 +693,7 @@ export default function DownloadsPage() {
             >
               <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             </a>
-            {(video.status === "failed" || video.status === "skipped") && (
+            {(video.status === "failed" || video.status === "skipped") && !permanent && (
               <Button
                 size="sm"
                 variant="outline"
@@ -696,16 +743,7 @@ export default function DownloadsPage() {
         actions={
           tab === "queue" ? (
             <>
-              {isPaused ? (
-                <Button
-                  variant="success"
-                  onClick={() => resumeMutation.mutate()}
-                  disabled={resumeMutation.isPending}
-                >
-                  <Play className="h-4 w-4" />
-                  Resume
-                </Button>
-              ) : (
+              {!isPaused && (
                 <Button variant="warning" onClick={() => pauseMutation.mutate()} disabled={pauseMutation.isPending}>
                   <Pause className="h-4 w-4" />
                   Pause
@@ -725,23 +763,20 @@ export default function DownloadsPage() {
       />
 
       {/* Paused banner: why, and what fixes it */}
-      {isPaused && (() => {
-        const why = pauseExplanation(pauseStatus?.reason)
-        return (
-          <Banner
-            tone="warning"
-            title={why.title}
-            action={tab !== "queue" ? (
-              <Button variant="success" size="sm" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>
-                <Play className="h-3.5 w-3.5" />
-                Resume
-              </Button>
-            ) : undefined}
-          >
-            {why.text}
-          </Banner>
-        )
-      })()}
+      {isPaused && (
+        <Banner
+          tone="warning"
+          title="Queue paused"
+          action={diskStillFull ? undefined : (
+            <Button variant="success" size="sm" onClick={() => resumeMutation.mutate()} disabled={resumeMutation.isPending}>
+              <Play className="h-3.5 w-3.5" />
+              Resume
+            </Button>
+          )}
+        >
+          {pauseExplanation(pauseStatus?.reason)}
+        </Banner>
+      )}
 
       {/* Tabs */}
       <Tabs
@@ -1115,7 +1150,7 @@ export default function DownloadsPage() {
           {tab === "failed" && failedGroups.some(([c]) => errorCatalog?.[c]?.retryable) && (
             <p className="text-xs text-muted-foreground">
               Retry All Fixable skips causes that need a change first, such as expired cookies or an old yt-dlp. Once
-              you have made that change, use Retry these on its group.
+              you have made that change, use Retry all on its group.
             </p>
           )}
 
@@ -1130,33 +1165,70 @@ export default function DownloadsPage() {
                 <div className="space-y-6">
                   {failedGroups.map(([code, items]) => {
                     const platforms = items.map((v: any) => v.platform)
-                    const tip = errorTip(errorCatalog, code, platforms)
+                    const tip = errorTip(errorCatalog, code, platforms, true)
                     const entry = errorCatalog?.[code]
                     const explanation = fillSite(entry?.explanation, platforms)
-                    const fix = fillSite(entry?.suggested_fix, platforms)
+                    const fix = fillSite(entry?.failed_fix || entry?.suggested_fix, platforms)
+                    const total = Math.max(failedCounts?.[code] ?? 0, items.length)
+                    const permanent = !!entry?.permanent
+                    const showMore = moreGroups.has(code)
                     return (
                       <section key={code} className="space-y-2" aria-label={errorLabel(errorCatalog, code)}>
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <h2 className="text-sm font-semibold">
                             {errorLabel(errorCatalog, code)}
                             <span className="ml-2 font-normal text-muted-foreground">
-                              {items.length} {items.length === 1 ? "video" : "videos"} on this page
+                              {total} {total === 1 ? "video" : "videos"}
+                              {total > items.length && ` (${items.length} on this page)`}
                             </span>
                           </h2>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => retryGroupMutation.mutate(code)}
-                            disabled={retryGroupMutation.isPending}
-                          >
-                            <RotateCcw className="h-3.5 w-3.5" />
-                            Retry these
-                          </Button>
+                          {!permanent && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => retryGroupMutation.mutate(code)}
+                              disabled={retryGroupMutation.isPending}
+                              title={debouncedSearch ? "Retries every failure of this cause; the search box is ignored" : undefined}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              Retry all {total}
+                            </Button>
+                          )}
                         </div>
+                        {!permanent && debouncedSearch && (
+                          <p className="text-xs text-muted-foreground">
+                            The retry button ignores the search and re-queues all {total} failures of this cause.
+                          </p>
+                        )}
                         {(tip || explanation || fix) && (
                           <Banner tone="info" title={tip || undefined}>
-                            {explanation && <p>{explanation}</p>}
-                            {fix && <p className="mt-1">{fix}</p>}
+                            {(explanation || fix) && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    setMoreGroups((prev) => {
+                                      const next = new Set(prev)
+                                      if (next.has(code)) next.delete(code)
+                                      else next.add(code)
+                                      return next
+                                    })
+                                  }
+                                  aria-expanded={showMore}
+                                  className="gap-0.5 px-1 py-0"
+                                >
+                                  {showMore ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                                  More
+                                </Button>
+                                {showMore && (
+                                  <>
+                                    {explanation && <p>{explanation}</p>}
+                                    {fix && <p className="mt-1">{fix}</p>}
+                                  </>
+                                )}
+                              </>
+                            )}
                           </Banner>
                         )}
                         <div className="space-y-2">{items.map(renderHistoryRow)}</div>

@@ -243,13 +243,30 @@ async def get_error_catalog():
         c.value: {
             "label": info.label,
             "tip": info.tip,
+            "failed_tip": info.failed_text,
+            "failed_fix": info.failed_fix_text,
             "explanation": info.explanation,
             "suggested_fix": info.suggested_fix,
             "severity": info.severity,
             "retryable": info.retryable,
+            "permanent": info.permanent,
         }
         for c, info in ERROR_CATALOG.items()
     }
+
+
+@router.get("/failed-counts")
+async def get_failed_counts(db: AsyncSession = Depends(get_db)):
+    """Failed videos per error code across all pages (no code counts as UNKNOWN),
+    the same sets "Retry all" re-queues."""
+    rows = (await db.execute(
+        select(Video.error_code, func.count()).where(Video.status == "failed").group_by(Video.error_code)
+    )).all()
+    counts: dict[str, int] = {}
+    for code, n in rows:
+        key = code or ErrorCode.UNKNOWN.value
+        counts[key] = counts.get(key, 0) + n
+    return counts
 
 
 _HELD_REASONS = (

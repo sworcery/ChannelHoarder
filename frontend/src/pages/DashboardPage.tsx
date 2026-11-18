@@ -118,8 +118,10 @@ export default function DashboardPage() {
         <StatCard icon={Tv} label="Channels" value={stats.total_channels} sub={`${stats.active_channels} active`} />
         <StatCard icon={Download} label="Downloaded" value={stats.total_downloaded} sub={`of ${stats.total_videos_known} known`} />
         <StatCard icon={ListOrdered} label="Queued" value={stats.queued_count} sub={`${stats.active_downloads} downloading`} />
-        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={stats.total_failed > 0 ? "see Downloads → Failed" : "none"} color={stats.total_failed > 0 ? "text-danger" : undefined} />
-        <StatCard icon={HardDrive} label="Storage" value={`${formatBytes(stats.free_space_bytes)} free`} sub={`${stats.storage_used_formatted} used`} />
+        <StatCard icon={AlertCircle} label="Failed" value={stats.total_failed} sub={stats.total_failed > 0 ? "see Downloads → Failed" : "none"} color={stats.total_failed > 0 ? "text-danger" : undefined}
+          to={stats.total_failed > 0 ? "/downloads" : undefined}
+          onNavigate={() => { try { localStorage.setItem("downloads_tab", "failed") } catch { /* storage unavailable */ } }} />
+        <StatCard icon={HardDrive} label="Storage" value={formatBytes(stats.free_space_bytes)} unit="free" sub={`${formatBytes(stats.storage_used_bytes)} used`} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -223,25 +225,41 @@ function StatCard({
   icon: Icon,
   label,
   value,
+  unit,
   sub,
   color,
+  to,
+  onNavigate,
 }: {
   icon: any
   label: string
   value: string | number
+  unit?: string
   sub: string
   color?: string
+  to?: string
+  onNavigate?: () => void
 }) {
+  const body = (
+    <div className="flex items-center gap-3">
+      <Icon className={`h-8 w-8 flex-shrink-0 ${color || "text-primary"}`} />
+      <div className="min-w-0">
+        <p className="text-2xl font-bold whitespace-nowrap">
+          {value}
+          {unit && <span className="ml-1 text-sm font-medium text-muted-foreground">{unit}</span>}
+        </p>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </div>
+    </div>
+  )
   return (
     <Card>
-      <div className="flex items-center gap-3">
-        <Icon className={`h-8 w-8 ${color || "text-primary"}`} />
-        <div>
-          <p className="text-2xl font-bold">{value}</p>
-          <p className="text-sm font-medium">{label}</p>
-          <p className="text-xs text-muted-foreground">{sub}</p>
-        </div>
-      </div>
+      {to ? (
+        <Link to={to} onClick={onNavigate} className="block rounded-md hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
+          {body}
+        </Link>
+      ) : body}
     </Card>
   )
 }

@@ -31,7 +31,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             func.count(Channel.id),
             func.count(Channel.id).filter(Channel.enabled == True),
             func.max(Channel.last_scanned_at),
-        )
+        ).where(Channel.channel_id != "__standalone__")  # the hidden Download Video channel
     )
     ch_row = ch_result.one()
     total_channels, active_channels, last_scan = ch_row[0] or 0, ch_row[1] or 0, ch_row[2]
@@ -102,6 +102,8 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
 
 _POT_CACHE_SECONDS = 60
 _pot_cache: tuple[float, bool] | None = None  # (monotonic time, healthy)
+_APP_START = time.monotonic()
+_POT_GRACE_SECONDS = 120  # the token server may still be starting
 
 
 async def _pot_server_healthy() -> bool:
@@ -160,8 +162,9 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
                                  f"{free_text if free_text else 'Space is free'} now. Resume when you are ready.",
                                  "Resume", "resume_queue"))
         elif paused:
+            # Resume would only pause again on the next download; fix the space first
             alerts.append(_alert("disk_full", "critical", "Disk full", message + " The queue is paused.",
-                                 "Resume", "resume_queue"))
+                                 "Open Diagnostics", "link", "/settings?tab=diagnostics"))
         else:
             alerts.append(_alert("disk_full", "critical", "Disk almost full", message + " Free up space before downloading more.",
                                  "Open Diagnostics", "link", "/settings?tab=diagnostics"))
@@ -175,7 +178,8 @@ async def get_alerts(db: AsyncSession = Depends(get_db)):
                              "Upload cookies", "link", "/settings?tab=auth"))
 
     # PO token server down
-    if settings.POT_SERVER_ENABLED and not await _pot_server_healthy():
+    if (settings.POT_SERVER_ENABLED and time.monotonic() - _APP_START >= _POT_GRACE_SECONDS
+            and not await _pot_server_healthy()):
         alerts.append(_alert("pot_server_down", "warning", "PO token server not responding",
                              "Without it YouTube downloads may fail.",
                              "Open Diagnostics", "link", "/settings?tab=diagnostics"))

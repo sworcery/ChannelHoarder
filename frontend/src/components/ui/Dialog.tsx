@@ -125,7 +125,10 @@ export function Dialog({
               )}
             </div>
           )}
-          <div className={cn("flex-1 overflow-y-auto", side !== "left" && "p-4")}>{children}</div>
+          {/* No body box when there's nothing in it (a confirm with only a description) */}
+          {children != null && children !== false && (
+            <div className={cn("flex-1 overflow-y-auto", side !== "left" && "p-4")}>{children}</div>
+          )}
           {footer && <div className="flex flex-wrap justify-end gap-2 border-t p-4">{footer}</div>}
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>

@@ -112,6 +112,15 @@ export default function ChannelsPage() {
   const debouncedSearch = useDebounce(search, 300)
 
   // Add Channel starts at the saved Default Quality
+  const { data: health } = useQuery({
+    queryKey: ["system-health"],
+    queryFn: api.getHealth,
+    staleTime: 300000,
+  })
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  // Stay open while the folder or filter holds a value, so nothing set is hidden
+  const advancedOpen = showAdvanced || !!addDownloadDir || !!addTitleFilter
+
   const { data: appSettings } = useQuery({
     queryKey: ["app-settings"],
     queryFn: api.getSettings,
@@ -153,6 +162,7 @@ export default function ChannelsPage() {
     setAddTitleFilter("")
     setAddTitleFilterIsRegex(false)
     setAddTitleFilterMode("include")
+    setShowAdvanced(false)
   }
 
   const addMutation = useMutation({
@@ -408,10 +418,17 @@ export default function ChannelsPage() {
               <option value="480p">480p</option>
             </Select>
           </Field>
-          <Field label="Download Directory" hint="Custom path inside the container, e.g. /media/youtube">
+          {!advancedOpen && (
+            <Button type="button" variant="ghost" size="sm" aria-expanded={false} onClick={() => setShowAdvanced(true)}>
+              Advanced: folder and title filter
+            </Button>
+          )}
+          {advancedOpen && (
+          <>
+          <Field label="Download Directory" hint="Must be inside the download folder, or one of the folders allowed by EXTRA_DOWNLOAD_DIRS. Leave blank to use the download folder.">
             <Input
               type="text"
-              placeholder="Leave blank for default (/downloads)"
+              placeholder={health?.download_dir ? `Leave blank for default (${health.download_dir})` : "Leave blank for the default download folder"}
               value={addDownloadDir}
               onChange={(e) => setAddDownloadDir(e.target.value)}
             />
@@ -439,6 +456,8 @@ export default function ChannelsPage() {
             </div>
             <p className="text-xs text-muted-foreground mt-1">{addTitleFilterMode === "exclude" ? "Skip" : "Only download"} videos {addTitleFilterMode === "exclude" ? "containing" : "matching"} these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
           </div>
+          </>
+          )}
           <Checkbox
             label="Scan for videos after adding"
             checked={scanAfterAdd}

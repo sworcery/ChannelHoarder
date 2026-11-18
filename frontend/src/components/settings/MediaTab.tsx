@@ -108,14 +108,14 @@ export default function MediaTab() {
           Videos of 60 seconds or less, or on the channel's Shorts tab, are excluded from downloads by default.
         </p>
         <Checkbox
-          label="Allow shorts downloading (per-channel opt-in)"
+          label="Let channels opt in to Shorts"
           checked={values.shortsEnabled}
           onChange={(e) => set("shortsEnabled", e.target.checked)}
         />
         <p className="text-xs text-muted-foreground">
           {values.shortsEnabled
-            ? "Channels can individually enable shorts downloading in their settings."
-            : "Shorts are excluded from all channel downloads."}
+            ? "This turns nothing on by itself. To download Shorts for a channel, open its page and turn on \"Include shorts when downloading\" in its YouTube Shorts section. Other channels still skip them."
+            : "Shorts are excluded from all channel downloads, and channels cannot opt in until you turn this on."}
         </p>
       </Card>
 
@@ -130,14 +130,14 @@ export default function MediaTab() {
           Livestreams and premieres are excluded from downloads by default. Scheduled livestreams that haven't started are skipped.
         </p>
         <Checkbox
-          label="Allow livestream downloading (per-channel opt-in)"
+          label="Let channels opt in to livestreams"
           checked={values.livestreamsEnabled}
           onChange={(e) => set("livestreamsEnabled", e.target.checked)}
         />
         <p className="text-xs text-muted-foreground">
           {values.livestreamsEnabled
-            ? "Now open a channel's page and turn on \"Include livestreams when downloading\" in its Livestreams section. Livestreams stay excluded until you opt in per channel."
-            : "Livestreams are excluded from all channel downloads."}
+            ? "This turns nothing on by itself. To download livestreams for a channel, open its page and turn on \"Include livestreams when downloading\" in its Livestreams section. Other channels still skip them."
+            : "Livestreams are excluded from all channel downloads, and channels cannot opt in until you turn this on."}
         </p>
       </Card>
 
