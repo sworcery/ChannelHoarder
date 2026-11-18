@@ -8,6 +8,8 @@ import { Button, buttonClasses } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { DateTime } from "@/components/ui/DateTime"
 import { Field } from "@/components/ui/Field"
+import { Input, Select, Textarea } from "@/components/ui/Input"
+import { Checkbox } from "@/components/ui/Checkbox"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
 import DiagnosticsTab from "@/components/settings/DiagnosticsTab"
@@ -181,48 +183,53 @@ function GeneralTab() {
       <Card
         icon={<Clock />}
         title="Scan Schedule"
+        as="h2"
         help={<HelpIcon text="How often each channel is checked for new uploads." anchor="automatic-scanning" />}
       >
         <div>
           <label htmlFor="scan-min-interval-hours" className="block text-sm font-medium mb-1">Scan each channel every</label>
-          <input
-            id="scan-min-interval-hours"
-            type="number"
-            value={scanMinIntervalHours}
-            onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
-            min={1}
-            max={168}
-            className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
-          />
-          <span className="text-sm text-muted-foreground ml-2">hours</span>
+          <div className="flex items-center gap-2">
+            <Input
+              id="scan-min-interval-hours"
+              type="number"
+              value={scanMinIntervalHours}
+              onChange={(e) => setScanMinIntervalHours(Math.max(1, Math.min(168, Number(e.target.value) || 12)))}
+              min={1}
+              max={168}
+              className="w-32"
+            />
+            <span className="text-sm text-muted-foreground">hours</span>
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             Each channel gets its own random scan time, between this many hours and twice that (never more than 12 hours extra) after its last scan, so channels aren't all scanned at once. With a scan window set, a scan that comes due outside it waits for the window to open. A new interval applies from each channel's next scan; Scan All Channels Now applies it right away. To keep scans to certain hours of the day, set a scan window under Anti-Detection.
           </p>
         </div>
         <div>
           <label htmlFor="rss-check-minutes" className="block text-sm font-medium mb-1">Check YouTube feeds every</label>
-          <input
-            id="rss-check-minutes"
-            type="number"
-            value={rssCheckMinutes}
-            onChange={(e) => {
-              const n = Math.round(Number(e.target.value) || 0)
-              setRssCheckMinutes(Math.max(0, Math.min(1440, n)))
-            }}
-            onBlur={() => {
-              if (rssCheckMinutes > 0 && rssCheckMinutes < 15) setRssCheckMinutes(15)
-            }}
-            min={0}
-            max={1440}
-            className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
-          />
-          <span className="text-sm text-muted-foreground ml-2">minutes (0 = off, otherwise 15 to 1440)</span>
+          <div className="flex items-center gap-2">
+            <Input
+              id="rss-check-minutes"
+              type="number"
+              value={rssCheckMinutes}
+              onChange={(e) => {
+                const n = Math.round(Number(e.target.value) || 0)
+                setRssCheckMinutes(Math.max(0, Math.min(1440, n)))
+              }}
+              onBlur={() => {
+                if (rssCheckMinutes > 0 && rssCheckMinutes < 15) setRssCheckMinutes(15)
+              }}
+              min={0}
+              max={1440}
+              className="w-32"
+            />
+            <span className="text-sm text-muted-foreground">minutes (0 = off, otherwise 15 to 1440)</span>
+          </div>
           <p className="text-xs text-muted-foreground mt-1">
             Checks each YouTube channel's feed and scans only when a new video appears, so new uploads are found sooner without extra scans. Interval scans still run as the backup. With many channels it checks less often to stay under YouTube's daily feed limit, and with a scan window set it only checks inside the window.
           </p>
         </div>
         <Button
-          variant="primary"
+          variant="outline"
           onClick={() => scanAllMutation.mutate()}
           disabled={scanAllMutation.isPending}
         >
@@ -232,52 +239,42 @@ function GeneralTab() {
       </Card>
 
       {/* Download & System Settings */}
-      <Card icon={<Settings />} title="Download Settings">
+      <Card icon={<Settings />} title="Download Settings" as="h2">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Default Quality" hint="Default quality for new channels">
-            <select
-              value={defaultQuality}
-              onChange={(e) => setDefaultQuality(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
-            >
+            <Select value={defaultQuality} onChange={(e) => setDefaultQuality(e.target.value)}>
               <option value="best">Best Available</option>
               <option value="2160p">4K (2160p)</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
               <option value="480p">480p</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Max Concurrent Downloads" hint="Simultaneous downloads (1-5)">
-            <input
+            <Input
               type="number"
               min={1}
               max={5}
               value={maxConcurrent}
               onChange={(e) => setMaxConcurrent(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
           <Field label="Max Retries" hint="Retry attempts for failed downloads">
-            <input
+            <Input
               type="number"
               min={1}
               max={10}
               value={maxRetries}
               onChange={(e) => setMaxRetries(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
           <Field label="Log Level" hint="Set to debug for troubleshooting">
-            <select
-              value={logLevel}
-              onChange={(e) => setLogLevel(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
-            >
+            <Select value={logLevel} onChange={(e) => setLogLevel(e.target.value)}>
               <option value="debug">Debug</option>
               <option value="info">Info</option>
               <option value="warning">Warning</option>
               <option value="error">Error</option>
-            </select>
+            </Select>
           </Field>
         </div>
       </Card>
@@ -293,7 +290,7 @@ function GeneralTab() {
       </Button>
 
       {/* System Info */}
-      <Card title="System Info" className="space-y-2">
+      <Card title="System Info" as="h2" className="space-y-2">
         <div className="grid gap-2 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Total Channels</span>
@@ -313,6 +310,7 @@ function GeneralTab() {
       {/* yt-dlp */}
       <Card
         title="yt-dlp"
+        as="h2"
         help={<HelpIcon text="Video download engine. Keep updated for YouTube compatibility." anchor="tech-stack" />}
       >
         <div>
@@ -324,12 +322,12 @@ function GeneralTab() {
       </Card>
 
       {/* Backup & Restore */}
-      <Card title="Backup & Restore" className="space-y-3">
+      <Card title="Backup & Restore" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Export all settings and channel subscriptions as JSON. Import to restore on a new instance.
         </p>
         <div className="flex gap-2">
-          <Button variant="primary" onClick={handleExport}>
+          <Button variant="outline" onClick={handleExport}>
             <Download className="h-4 w-4" />
             Export Config
           </Button>
@@ -429,6 +427,7 @@ function AuthTab() {
       <Card
         icon={<Shield />}
         title="PO Tokens"
+        as="h2"
         help={<HelpIcon text="Auto-generated tokens for YouTube auth. Cookies take priority when available." anchor="authentication" />}
         className="space-y-3"
       >
@@ -451,6 +450,7 @@ function AuthTab() {
       <Card
         icon={<FileText />}
         title="Cookie Authentication"
+        as="h2"
         help={<HelpIcon text="Upload cookies from your browser for YouTube auth." anchor="cookie-authentication-optional" />}
         className="space-y-3"
       >
@@ -519,7 +519,7 @@ function AuthTab() {
             }}
             className="hidden"
           />
-          <Button variant="primary" onClick={() => fileRef.current?.click()}>
+          <Button variant="outline" onClick={() => fileRef.current?.click()}>
             <Upload className="h-4 w-4" />
             Upload cookies.txt
           </Button>
@@ -546,6 +546,7 @@ function AuthTab() {
       <Card
         icon={<Globe />}
         title="Browser Cookie Sync"
+        as="h2"
         help={<HelpIcon text="Auto-sync cookies from your browser using Tampermonkey." anchor="cookie-authentication-optional" />}
         className="space-y-3"
       >
@@ -558,7 +559,7 @@ function AuthTab() {
             href="/api/v1/settings/userscript.user.js"
             target="_blank"
             rel="noopener noreferrer"
-            className={buttonClasses("primary", "md")}
+            className={buttonClasses("outline", "md")}
           >
             <ExternalLink className="h-4 w-4" />
             Install Tampermonkey Script
@@ -582,6 +583,7 @@ function AuthTab() {
       <Card
         icon={<Key />}
         title="YouTube Data API Key (Optional)"
+        as="h2"
         help={<HelpIcon text="Free API key from Google Cloud Console. 10,000 units/day." anchor="youtube-data-api-key-optional" />}
         className="space-y-3"
       >
@@ -601,12 +603,13 @@ function AuthTab() {
           )}
         </div>
         <div className="flex gap-2">
-          <input
+          <Input
             type="text"
+            aria-label="YouTube Data API key"
             placeholder="Paste your API key here..."
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm"
+            className="flex-1"
           />
           <Button
             variant="primary"
@@ -625,31 +628,30 @@ function AuthTab() {
       <Card
         icon={<Key />}
         title="yt-dlp Player Client"
+        as="h2"
         help={<HelpIcon text="The YouTube client yt-dlp uses when fetching formats. Leave on Default (automatic) - yt-dlp picks a working client and adapts to YouTube's changes. Only override if a specific video fails; 'ios' and 'web_safari' are good fallbacks." anchor="player-client" />}
         className="space-y-3"
       >
         <p className="text-sm text-muted-foreground">
           Controls which YouTube player API yt-dlp uses to list downloadable formats. Change this if downloads fail with a format error.
         </p>
-        <div className="flex gap-2">
-          <select
-            value={authStatus?.player_client || "default"}
-            onChange={(e) => playerClientMutation.mutate(e.target.value)}
-            disabled={authLoading || playerClientMutation.isPending}
-            className="flex-1 px-3 py-2 rounded-md border bg-background text-sm disabled:opacity-50"
-          >
-            <option value="default">Default (automatic - recommended)</option>
-            <option value="ios">ios</option>
-            <option value="web_safari">web_safari</option>
-            <option value="tv">tv</option>
-            <option value="web">web</option>
-            <option value="web_creator">web_creator</option>
-            <option value="mweb">mweb</option>
-            <option value="android">android</option>
-            <option value="android_vr">android_vr</option>
-            <option value="mediaconnect">mediaconnect</option>
-          </select>
-        </div>
+        <Select
+          aria-label="Player client"
+          value={authStatus?.player_client || "default"}
+          onChange={(e) => playerClientMutation.mutate(e.target.value)}
+          disabled={authLoading || playerClientMutation.isPending}
+        >
+          <option value="default">Default (automatic - recommended)</option>
+          <option value="ios">ios</option>
+          <option value="web_safari">web_safari</option>
+          <option value="tv">tv</option>
+          <option value="web">web</option>
+          <option value="web_creator">web_creator</option>
+          <option value="mweb">mweb</option>
+          <option value="android">android</option>
+          <option value="android_vr">android_vr</option>
+          <option value="mediaconnect">mediaconnect</option>
+        </Select>
       </Card>
     </div>
   )
@@ -725,16 +727,18 @@ function MediaManagementTab() {
       {/* Naming Template */}
       <Card
         title="Default Naming Template"
+        as="h2"
         help={<HelpIcon text="Controls how downloaded files are named and organized." anchor="file-organization" />}
       >
         <p className="text-sm text-muted-foreground">
           Available variables: {"{channel_name}"}, {"{season}"}, {"{episode}"}, {"{title}"}, {"{upload_date}"}, {"{video_id}"}
         </p>
-        <textarea
+        <Textarea
+          aria-label="Default naming template"
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
           rows={2}
-          className="w-full px-3 py-2 rounded-md border bg-background font-mono text-sm"
+          className="font-mono"
         />
         <div className="flex gap-2">
           <Button onClick={() => previewMutation.mutate(template)}>
@@ -749,20 +753,16 @@ function MediaManagementTab() {
       </Card>
 
       {/* YouTube Shorts */}
-      <Card title="YouTube Shorts" className="space-y-3">
+      <Card title="YouTube Shorts" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           By default, YouTube Shorts (videos of 60 seconds or less, or on the channel's Shorts tab) are excluded from downloads. Enable this
           to allow channels to opt-in to downloading shorts.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={shortsEnabled}
-            onChange={(e) => setShortsEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Allow shorts downloading (per-channel opt-in)</span>
-        </label>
+        <Checkbox
+          label="Allow shorts downloading (per-channel opt-in)"
+          checked={shortsEnabled}
+          onChange={(e) => setShortsEnabled(e.target.checked)}
+        />
         <p className="text-xs text-muted-foreground">
           {shortsEnabled
             ? "Channels can individually enable shorts downloading in their settings."
@@ -771,19 +771,15 @@ function MediaManagementTab() {
       </Card>
 
       {/* Livestreams */}
-      <Card title="Livestreams" className="space-y-3">
+      <Card title="Livestreams" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           By default, YouTube livestreams and premieres are excluded from downloads. Enable this to allow channels to opt-in to downloading livestreams. Scheduled livestreams that haven't started will be automatically skipped.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={livestreamsEnabled}
-            onChange={(e) => setLivestreamsEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Allow livestream downloading (per-channel opt-in)</span>
-        </label>
+        <Checkbox
+          label="Allow livestream downloading (per-channel opt-in)"
+          checked={livestreamsEnabled}
+          onChange={(e) => setLivestreamsEnabled(e.target.checked)}
+        />
         <p className="text-xs text-muted-foreground">
           {livestreamsEnabled
             ? "Now open a channel's page and turn on \"Include livestreams when downloading\" in its Livestreams section - livestreams stay excluded until you opt in per channel."
@@ -794,18 +790,15 @@ function MediaManagementTab() {
       {/* Subtitles */}
       <Card
         title="Subtitles / Captions"
+        as="h2"
         help={<HelpIcon text="Downloads English subtitles and auto-generated captions alongside videos." anchor="episode-management" />}
         className="space-y-3"
       >
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={subtitlesEnabled}
-            onChange={(e) => setSubtitlesEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Download subtitles and auto-generated captions</span>
-        </label>
+        <Checkbox
+          label="Download subtitles and auto-generated captions"
+          checked={subtitlesEnabled}
+          onChange={(e) => setSubtitlesEnabled(e.target.checked)}
+        />
         <p className="text-xs text-muted-foreground">
           Auto-generated captions may not be available for all videos depending on authentication method. PO token authentication has limited subtitle support.
         </p>
@@ -814,18 +807,15 @@ function MediaManagementTab() {
       {/* Chapters */}
       <Card
         title="Chapters"
+        as="h2"
         help={<HelpIcon text="Embeds chapter markers into the MP4 file so players like Plex and VLC can display them." anchor="episode-management" />}
         className="space-y-3"
       >
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={chaptersEnabled}
-            onChange={(e) => setChaptersEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Embed chapter markers in downloaded videos</span>
-        </label>
+        <Checkbox
+          label="Embed chapter markers in downloaded videos"
+          checked={chaptersEnabled}
+          onChange={(e) => setChaptersEnabled(e.target.checked)}
+        />
         <p className="text-xs text-muted-foreground">
           Only applies to videos that have chapter markers set by the uploader.
         </p>
@@ -834,19 +824,20 @@ function MediaManagementTab() {
       {/* SponsorBlock */}
       <Card
         title="SponsorBlock"
+        as="h2"
         help={<HelpIcon text="Uses the crowdsourced SponsorBlock database to handle sponsor, self-promotion, and interaction-reminder segments. 'Mark' adds them as chapters you can skip; 'Remove' cuts them out of the file. YouTube only." anchor="episode-management" />}
         className="space-y-3"
       >
         <div className="max-w-xs">
-          <select
+          <Select
+            aria-label="SponsorBlock mode"
             value={sponsorblockMode}
             onChange={(e) => setSponsorblockMode(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
           >
             <option value="off">Off</option>
             <option value="mark">Mark segments as chapters</option>
             <option value="remove">Remove segments from video</option>
-          </select>
+          </Select>
         </div>
         <p className="text-xs text-muted-foreground">
           {sponsorblockMode === "remove"
@@ -860,45 +851,39 @@ function MediaManagementTab() {
       {/* File Permissions */}
       <Card
         title="File Permissions"
+        as="h2"
         help={<HelpIcon text="Apply chmod/chown after downloading files." anchor="configuration" />}
         className="space-y-3"
       >
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={setPermissions}
-            onChange={(e) => setSetPermissions(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Set permissions on downloaded files</span>
-        </label>
+        <Checkbox
+          label="Set permissions on downloaded files"
+          checked={setPermissions}
+          onChange={(e) => setSetPermissions(e.target.checked)}
+        />
         {setPermissions && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Field label="Folder chmod">
-              <input
+              <Input
                 type="text"
                 value={chmodFolder}
                 onChange={(e) => setChmodFolder(e.target.value)}
                 placeholder="755"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
               />
             </Field>
             <Field label="File chmod">
-              <input
+              <Input
                 type="text"
                 value={chmodFile}
                 onChange={(e) => setChmodFile(e.target.value)}
                 placeholder="644"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
               />
             </Field>
             <Field label="chown group">
-              <input
+              <Input
                 type="text"
                 value={chownGroup}
                 onChange={(e) => setChownGroup(e.target.value)}
                 placeholder="Group name or GID"
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
               />
             </Field>
           </div>
@@ -906,7 +891,7 @@ function MediaManagementTab() {
       </Card>
 
       {/* Max Duration Filter */}
-      <Card title="Max Video Duration Filter" className="space-y-3">
+      <Card title="Max Video Duration Filter" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Skip auto-downloading videos longer than this duration. They'll be flagged for manual review
           and you'll get a push notification (if configured). Set to 0 to disable.
@@ -918,12 +903,11 @@ function MediaManagementTab() {
             : "Disabled  - all videos auto-queue"}
           className="max-w-xs"
         >
-          <input
+          <Input
             type="number"
             min={0}
             value={maxDuration}
             onChange={(e) => setMaxDuration(Number(e.target.value))}
-            className="w-full px-3 py-2 rounded-md border bg-background"
           />
         </Field>
       </Card>
@@ -999,6 +983,7 @@ function AntiDetectTab() {
     <div className="space-y-6">
       <Card
         title="Download Delays"
+        as="h2"
         help={<HelpIcon text="Random delay between downloads to avoid rate limiting." anchor="anti-detection" />}
       >
         <p className="text-sm text-muted-foreground">
@@ -1006,67 +991,53 @@ function AntiDetectTab() {
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Min Delay (seconds)">
-            <input
+            <Input
               type="number"
               value={minDelay}
               onChange={(e) => setMinDelay(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             />
           </Field>
           <Field label="Max Delay (seconds)">
-            <input
+            <Input
               type="number"
               value={maxDelay}
               onChange={(e) => setMaxDelay(Number(e.target.value))}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             />
           </Field>
         </div>
       </Card>
 
-      <Card title="User-Agent Rotation" className="space-y-3">
+      <Card title="User-Agent Rotation" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Rotate user-agent strings between downloads to appear as different browsers.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={uaRotation}
-            onChange={(e) => setUaRotation(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Enable user-agent rotation</span>
-        </label>
+        <Checkbox
+          label="Enable user-agent rotation"
+          checked={uaRotation}
+          onChange={(e) => setUaRotation(e.target.checked)}
+        />
       </Card>
 
-      <Card title="Random Jitter" className="space-y-3">
+      <Card title="Random Jitter" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Add random extra delay (0-10s) to make download timing less predictable.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={jitter}
-            onChange={(e) => setJitter(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Enable jitter</span>
-        </label>
+        <Checkbox
+          label="Enable jitter"
+          checked={jitter}
+          onChange={(e) => setJitter(e.target.checked)}
+        />
       </Card>
 
-      <Card title="Scan Schedule" className="space-y-3">
+      <Card title="Scan Schedule" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           How often each channel is scanned is set under General. By default scans spread across the full 24 hours for the most organic traffic pattern. You can optionally constrain them to a specific local-time window (e.g. 10 PM to 6 AM); a scan that comes due outside the window waits for the next one. Windows must be at least 8 hours wide to avoid clustering.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={scanWindowEnabled}
-            onChange={(e) => setScanWindowEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Limit scans to a time window</span>
-        </label>
+        <Checkbox
+          label="Limit scans to a time window"
+          checked={scanWindowEnabled}
+          onChange={(e) => setScanWindowEnabled(e.target.checked)}
+        />
         {scanWindowEnabled && (() => {
           const width = scanWindowEndHour > scanWindowStartHour
             ? scanWindowEndHour - scanWindowStartHour
@@ -1076,26 +1047,26 @@ function AntiDetectTab() {
             <div className="space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <Field label="Start (local time)">
-                  <select
+                  <Select
                     value={scanWindowStartHour}
                     onChange={(e) => setScanWindowStartHour(Number(e.target.value))}
-                    className="px-2 py-1.5 rounded-md border bg-background text-sm"
+                    className="w-32"
                   >
                     {Array.from({ length: 24 }, (_, i) => (
                       <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
                 <Field label="End (local time)">
-                  <select
+                  <Select
                     value={scanWindowEndHour}
                     onChange={(e) => setScanWindowEndHour(Number(e.target.value))}
-                    className="px-2 py-1.5 rounded-md border bg-background text-sm"
+                    className="w-32"
                   >
                     {Array.from({ length: 24 }, (_, i) => (
                       <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
                     ))}
-                  </select>
+                  </Select>
                 </Field>
               </div>
               <p className={`text-xs ${tooNarrow ? "text-danger" : "text-muted-foreground"}`}>
@@ -1112,43 +1083,39 @@ function AntiDetectTab() {
             help={<HelpIcon text="Prevents spam-clicking the Scan Now button. Attempts within this window are rejected with a 429 response." anchor="channel-management" />}
             hint="Minutes. Set to 0 to disable the cooldown."
           >
-            <input
+            <Input
               type="number"
               value={manualScanCooldownMinutes}
               onChange={(e) => setManualScanCooldownMinutes(Math.max(0, Math.min(1440, Number(e.target.value) || 0)))}
               min={0}
               max={1440}
-              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+              className="w-32"
             />
           </Field>
         </div>
       </Card>
 
-      <Card title="Scan Jitter" className="space-y-3">
+      <Card title="Scan Jitter" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           When multiple channels become due at the same tick, this adds a random delay between each scan so they don't all fire at once.
         </p>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={scanJitterEnabled}
-            onChange={(e) => setScanJitterEnabled(e.target.checked)}
-            className="rounded"
-          />
-          <span className="text-sm">Enable scan jitter</span>
-        </label>
+        <Checkbox
+          label="Enable scan jitter"
+          checked={scanJitterEnabled}
+          onChange={(e) => setScanJitterEnabled(e.target.checked)}
+        />
         {scanJitterEnabled && (
           <Field
             label="Max jitter between channels (seconds)"
             hint={`Each channel waits a random 0 to ${scanJitterMaxSeconds}s before its scan begins. Channel scan order is also randomized.`}
           >
-            <input
+            <Input
               type="number"
               value={scanJitterMaxSeconds}
               onChange={(e) => setScanJitterMaxSeconds(Math.max(0, Number(e.target.value) || 0))}
               min={0}
               max={3600}
-              className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+              className="w-32"
             />
           </Field>
         )}
@@ -1251,6 +1218,7 @@ function NotificationsTab() {
       <Card
         icon={<Send />}
         title="Telegram"
+        as="h2"
         help={<HelpIcon text="Get notified via Telegram bot." anchor="notifications" />}
         className="space-y-3"
       >
@@ -1259,21 +1227,19 @@ function NotificationsTab() {
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Bot Token">
-            <input
+            <Input
               type="password"
               placeholder="123456:ABC-DEF..."
               value={telegramToken}
               onChange={(e) => setTelegramToken(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
           <Field label="Chat ID">
-            <input
+            <Input
               type="text"
               placeholder="-1001234567890"
               value={telegramChatId}
               onChange={(e) => setTelegramChatId(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
         </div>
@@ -1290,6 +1256,7 @@ function NotificationsTab() {
       <Card
         icon={<Bell />}
         title="Pushover"
+        as="h2"
         help={<HelpIcon text="Push notifications to your phone." anchor="notifications" />}
         className="space-y-3"
       >
@@ -1298,21 +1265,19 @@ function NotificationsTab() {
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="Application Token">
-            <input
+            <Input
               type="password"
               placeholder="azGDORePK8gMaC0QOYAMyEEuzJnyUi"
               value={pushoverAppToken}
               onChange={(e) => setPushoverAppToken(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
           <Field label="User Key">
-            <input
+            <Input
               type="password"
               placeholder="uQiRzpo4DXghDmr9QzzfQu27cmVRsG"
               value={pushoverUserKey}
               onChange={(e) => setPushoverUserKey(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background text-sm"
             />
           </Field>
         </div>
@@ -1329,6 +1294,7 @@ function NotificationsTab() {
       <Card
         icon={<Globe />}
         title="Discord"
+        as="h2"
         help={<HelpIcon text="Send notifications to a Discord channel via webhook. Uses embeds with color-coded status." anchor="notifications" />}
         className="space-y-3"
       >
@@ -1336,12 +1302,11 @@ function NotificationsTab() {
           Create a webhook in your Discord channel settings under Integrations.
         </p>
         <Field label="Webhook URL">
-          <input
+          <Input
             type="password"
             placeholder="https://discord.com/api/webhooks/..."
             value={discordWebhookUrl}
             onChange={(e) => setDiscordWebhookUrl(e.target.value)}
-            className="w-full px-3 py-2 rounded-md border bg-background text-sm"
           />
         </Field>
         <Button
@@ -1354,21 +1319,18 @@ function NotificationsTab() {
       </Card>
 
       {/* Event Selection */}
-      <Card title="Notification Events" className="space-y-3">
+      <Card title="Notification Events" as="h2" className="space-y-3">
         <p className="text-sm text-muted-foreground">
           Choose which events trigger push notifications.
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {WEBHOOK_EVENTS.map((evt) => (
-            <label key={evt.key} className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={enabledEvents.includes(evt.key)}
-                onChange={() => toggleEvent(evt.key)}
-                className="rounded"
-              />
-              <span className="text-sm">{evt.label}</span>
-            </label>
+            <Checkbox
+              key={evt.key}
+              label={evt.label}
+              checked={enabledEvents.includes(evt.key)}
+              onChange={() => toggleEvent(evt.key)}
+            />
           ))}
         </div>
       </Card>

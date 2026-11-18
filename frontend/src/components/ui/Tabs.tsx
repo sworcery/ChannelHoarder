@@ -97,7 +97,7 @@ export function Tabs<K extends string>({ tabs, value, onChange, storageKey, labe
             className={cn(
               "shrink-0 px-4 py-2 text-sm font-medium border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               selected
-                ? "border-primary text-primary"
+                ? "border-primary text-red-700 dark:text-red-400"
                 : "border-transparent text-muted-foreground hover:text-foreground",
             )}
           >

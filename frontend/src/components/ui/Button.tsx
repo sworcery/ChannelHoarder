@@ -16,23 +16,24 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const VARIANTS: Record<ButtonVariant, string> = {
   primary: "bg-primary text-primary-foreground hover:bg-primary/90",
-  outline: "border hover:bg-accent",
+  outline: "border-border hover:bg-accent",
   ghost: "hover:bg-accent",
   success: "bg-green-700 text-white hover:bg-green-800",
   warning: "bg-orange-700 text-white hover:bg-orange-800",
   danger: "bg-red-600 text-white hover:bg-red-700",
   "danger-outline": "border border-danger/30 text-danger hover:bg-danger/10",
-  link: "text-primary hover:underline !px-0 !py-0",
+  link: "text-primary hover:underline !px-0 !py-0 !min-h-0 !min-w-0",
 }
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "px-3 py-1 text-xs",
-  md: "px-4 py-2 text-sm",
-  icon: "p-1.5",
+  // Below sm the touch targets grow (min-h only, same glyph size); from sm up they are the compact desktop sizes.
+  sm: "min-h-9 sm:min-h-0 px-3 py-1 text-xs",
+  md: "min-h-10 sm:min-h-0 px-4 py-2 text-sm",
+  icon: "min-h-10 min-w-10 sm:min-h-0 sm:min-w-0 p-1.5",
 }
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors " +
+  "inline-flex items-center justify-center gap-2 rounded-md border border-transparent font-medium transition-colors " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background " +
   "disabled:opacity-50 disabled:pointer-events-none"
 

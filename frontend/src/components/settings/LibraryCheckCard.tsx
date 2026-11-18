@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { Banner } from "@/components/ui/Banner"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
+import { Select } from "@/components/ui/Input"
 import { Loader2, FolderSearch } from "lucide-react"
 
 const GROUPS: { kind: LibraryCheckKind; title: string; hint: string }[] = [
@@ -76,6 +77,7 @@ export default function LibraryCheckCard() {
     <Card
       icon={<FolderSearch />}
       title="Library check"
+      as="h2"
       actions={
         <Button onClick={start} disabled={running}>
           {running ? "Checking..." : "Start check"}
@@ -152,16 +154,18 @@ export default function LibraryCheckCard() {
                     {i.kind !== "manual" && i.state === "open" && (
                       <div className="flex items-center gap-2 pt-1">
                         {i.kind === "lost" && (
-                          <select
-                            value={lostAction[i.id] ?? "redownload"}
-                            onChange={(e) =>
-                              setLostAction((a) => ({ ...a, [i.id]: e.target.value as "redownload" | "skip" }))
-                            }
-                            className="px-2 py-1 rounded-md border bg-background text-xs"
-                          >
-                            <option value="redownload">Re-download</option>
-                            <option value="skip">Skip</option>
-                          </select>
+                          <div className="w-40">
+                            <Select
+                              aria-label={`Action for ${i.title}`}
+                              value={lostAction[i.id] ?? "redownload"}
+                              onChange={(e) =>
+                                setLostAction((a) => ({ ...a, [i.id]: e.target.value as "redownload" | "skip" }))
+                              }
+                            >
+                              <option value="redownload">Re-download</option>
+                              <option value="skip">Skip</option>
+                            </Select>
+                          </div>
                         )}
                         <Button
                           size="sm"

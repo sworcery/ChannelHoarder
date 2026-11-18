@@ -6,6 +6,8 @@ import { useToast } from "@/components/ui/toaster"
 import { Button } from "@/components/ui/Button"
 import { Dialog } from "@/components/ui/Dialog"
 import { Field } from "@/components/ui/Field"
+import { Input, Select, Textarea } from "@/components/ui/Input"
+import { Checkbox } from "@/components/ui/Checkbox"
 
 type Outcome = { url: string; status: "added" | "exists" | "failed"; detail: string }
 
@@ -176,14 +178,15 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
         <div className="space-y-4">
           <div>
             <Field label="Paste channel URLs or @handles, one per line or comma-separated">
-              <textarea
+              <Textarea
                 value={text}
                 autoFocus
+                data-autofocus
                 onChange={(e) => setText(e.target.value)}
                 disabled={running}
                 rows={6}
                 placeholder={"https://youtube.com/@channel\n@anotherchannel"}
-                className="w-full px-3 py-2 rounded-md border bg-background text-sm font-mono disabled:opacity-50"
+                className="font-mono"
               />
             </Field>
             <Field
@@ -213,49 +216,42 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
           </div>
 
           <Field label="Quality">
-            <select
+            <Select
               value={quality}
               onChange={(e) => setQuality(e.target.value)}
               disabled={running}
-              className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
             >
               <option value="best">Best Available</option>
               <option value="2160p">4K (2160p)</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
               <option value="480p">480p</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Download Directory">
-            <input
+            <Input
               type="text"
               placeholder="Leave blank for default (/downloads)"
               value={downloadDir}
               onChange={(e) => setDownloadDir(e.target.value)}
               disabled={running}
-              className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
             />
           </Field>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoDownload}
-              onChange={(e) => setAutoDownload(e.target.checked)}
-              disabled={running}
-              className="rounded"
-            />
-            <span className="text-sm">Auto-download videos</span>
-          </label>
+          <Checkbox
+            label="Auto-download videos"
+            checked={autoDownload}
+            onChange={(e) => setAutoDownload(e.target.checked)}
+            disabled={running}
+          />
           <p className="text-xs text-muted-foreground -mt-2">
             When on, each channel downloads every video it has published unless you set a date. Off by default for bulk imports, since every channel would queue its whole back catalogue at once; when off, videos are listed and you pick what to download, or turn auto-download on per channel later.
           </p>
           <Field label="Download from date (optional)" hint="Leave empty to include everything.">
-            <input
+            <Input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               disabled={running}
-              className="w-full px-3 py-2 rounded-md border bg-background disabled:opacity-50"
             />
           </Field>
 
@@ -295,12 +291,13 @@ export default function BulkImportDialog({ open, onClose }: { open: boolean; onC
               {done && failed.length > 0 && (
                 <div>
                   <p className="text-sm font-medium mb-1">Failed URLs</p>
-                  <textarea
+                  <Textarea
                     readOnly
                     rows={4}
+                    aria-label="Failed URLs"
                     value={failed.map((f) => f.url).join("\n")}
                     onFocus={(e) => e.currentTarget.select()}
-                    className="w-full px-3 py-2 rounded-md border bg-background text-xs font-mono"
+                    className="text-xs font-mono"
                   />
                 </div>
               )}

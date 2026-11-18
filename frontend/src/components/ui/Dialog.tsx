@@ -33,6 +33,14 @@ export interface DialogProps {
   children?: ReactNode
 }
 
+/** If the opener is an item inside a dropdown menu (which unmounts on select), use the menu's trigger instead. */
+function resolveOpener(el: HTMLElement | null): HTMLElement | null {
+  const menu = el?.closest<HTMLElement>('[role="menu"]')
+  if (!menu) return el
+  const triggerId = menu.getAttribute("aria-labelledby")
+  return (triggerId && document.getElementById(triggerId)) || el
+}
+
 /** The one modal. Radix handles the focus trap, focus return, Esc and aria wiring. */
 export function Dialog({
   open,
@@ -52,7 +60,7 @@ export function Dialog({
   // Record the opener in the render that opens the dialog, before the content mounts and moves focus.
   // (An effect would run after a child's autoFocus; Radix also skips onOpenAutoFocus then.)
   if (open && !openerRef.current && typeof document !== "undefined") {
-    openerRef.current = document.activeElement as HTMLElement | null
+    openerRef.current = resolveOpener(document.activeElement as HTMLElement | null)
   }
   // Toasts sit above the dialog; a pointer-down on one must not count as an outside click.
   const inToastRegion = (e: { target: EventTarget | null }) =>
@@ -64,7 +72,16 @@ export function Dialog({
         <DialogPrimitive.Content
           aria-modal="true"
           {...(description ? {} : { "aria-describedby": undefined })}
-          onOpenAutoFocus={() => { if (!openerRef.current) openerRef.current = document.activeElement as HTMLElement | null }}
+          onOpenAutoFocus={(e) => {
+            if (!openerRef.current) openerRef.current = resolveOpener(document.activeElement as HTMLElement | null)
+            // Prefer the field marked autofocus (React's autoFocus prop leaves no attribute, so use data-autofocus).
+            // Focus it on the next frame, after a closing menu's focus trap has let go.
+            const target = (e.target as HTMLElement | null)?.querySelector<HTMLElement>("[data-autofocus],[autofocus]")
+            if (target) {
+              e.preventDefault()
+              requestAnimationFrame(() => target.focus())
+            }
+          }}
           onCloseAutoFocus={(e) => {
             e.preventDefault()
             openerRef.current?.focus?.()
@@ -101,7 +118,7 @@ export function Dialog({
                   type="button"
                   onClick={onClose}
                   aria-label="Close"
-                  className="rounded p-1 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="-m-2 flex min-h-10 min-w-10 items-center justify-center rounded p-1 hover:bg-accent sm:m-0 sm:min-h-0 sm:min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <X className="h-4 w-4" />
                 </button>

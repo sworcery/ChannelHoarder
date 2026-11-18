@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { Select } from "@/components/ui/Input"
 import { useToast } from "@/components/ui/toaster"
 import { Loader2, Folders } from "lucide-react"
 
@@ -65,7 +66,7 @@ export default function SharedFoldersCard() {
   }
 
   return (
-    <Card icon={<Folders />} title="Shared folders">
+    <Card icon={<Folders />} title="Shared folders" as="h2">
       <p className="text-sm text-muted-foreground">
         Channels added before 1.9.50 with the same name share one folder. Pick the channel to move into its own
         "Name (Platform)" folder. Only that channel's own videos and their sidecar files move; a file another
@@ -79,18 +80,20 @@ export default function SharedFoldersCard() {
           <p className="font-medium">{g.folder}</p>
           <p className="text-xs font-mono break-all text-muted-foreground">{g.path}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-muted-foreground">Move:</label>
-            <select
-              value={chosen(g)}
-              onChange={(e) => { setPicked((p) => ({ ...p, [g.path]: Number(e.target.value) })); setPreview(null) }}
-              className="px-2 py-1 rounded-md border bg-background text-xs"
-            >
-              {g.channels.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.channel_name} ({c.platform}, {c.file_count} files)
-                </option>
-              ))}
-            </select>
+            <span className="text-xs text-muted-foreground" aria-hidden="true">Move:</span>
+            <div className="min-w-0 flex-1 sm:max-w-sm">
+              <Select
+                aria-label={`Channel to move out of ${g.folder}`}
+                value={chosen(g)}
+                onChange={(e) => { setPicked((p) => ({ ...p, [g.path]: Number(e.target.value) })); setPreview(null) }}
+              >
+                {g.channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.channel_name} ({c.platform}, {c.file_count} files)
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Button
               size="sm"
               onClick={() => showPreview(g)}

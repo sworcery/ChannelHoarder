@@ -11,6 +11,8 @@ import { HelpIcon } from "@/components/ui/HelpIcon"
 import { Button, buttonClasses } from "@/components/ui/Button"
 import { Dialog } from "@/components/ui/Dialog"
 import { Field } from "@/components/ui/Field"
+import { Input, Select } from "@/components/ui/Input"
+import { Checkbox, Switch } from "@/components/ui/Checkbox"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Badge } from "@/components/ui/Badge"
 import { EmptyState } from "@/components/ui/EmptyState"
@@ -264,23 +266,22 @@ export default function ChannelsPage() {
 
       {/* Search + Display Controls */}
       <div className="flex items-center gap-2 flex-wrap">
-        <input
+        <Input
           type="text"
           placeholder="Search channels..."
           aria-label="Search channels"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 min-w-[200px] max-w-sm px-3 py-2 rounded-md border bg-background text-sm"
+          className="flex-1 min-w-[200px] max-w-sm"
         />
 
         {/* Sort */}
         <div className="flex items-center gap-1">
           <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          <select
+          <Select
             value={sortBy}
             aria-label="Sort channels"
             onChange={(e) => setSort(e.target.value as SortBy)}
-            className="px-2 py-2 rounded-md border bg-background text-sm"
           >
             <option value="name_asc">Name (A-Z)</option>
             <option value="name_desc">Name (Z-A)</option>
@@ -289,21 +290,20 @@ export default function ChannelsPage() {
             <option value="completion_asc">Least Complete</option>
             <option value="completion_desc">Most Complete</option>
             <option value="health">Health Status</option>
-          </select>
+          </Select>
         </div>
 
         {/* Card size (grid only) */}
         {viewMode === "grid" && (
-          <select
+          <Select
             value={cardSize}
             aria-label="Card size"
             onChange={(e) => setSize(e.target.value as CardSize)}
-            className="px-2 py-2 rounded-md border bg-background text-sm"
           >
             <option value="small">Small</option>
             <option value="medium">Medium</option>
             <option value="large">Large</option>
-          </select>
+          </Select>
         )}
 
         {/* View mode toggle */}
@@ -366,105 +366,76 @@ export default function ChannelsPage() {
           onSubmit={(e) => { e.preventDefault(); if (addUrl && !addMutation.isPending) submitAdd() }}
         >
           <Field label="Channel URL or @handle">
-            <input
+            <Input
               type="text"
               autoFocus
+              data-autofocus
               placeholder="https://youtube.com/@channel or @channel"
               value={addUrl}
               onChange={(e) => setAddUrl(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             />
           </Field>
           <Field label="Quality">
-            <select
+            <Select
               value={addQuality}
               onChange={(e) => setAddQuality(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             >
               <option value="best">Best Available</option>
               <option value="2160p">4K (2160p)</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
               <option value="480p">480p</option>
-            </select>
+            </Select>
           </Field>
           <Field label="Download Directory" hint="Custom path inside the container, e.g. /media/youtube">
-            <input
+            <Input
               type="text"
               placeholder="Leave blank for default (/downloads)"
               value={addDownloadDir}
               onChange={(e) => setAddDownloadDir(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             />
           </Field>
           <div>
             <Field label="Title Filter (optional)">
-              <input
+              <Input
                 type="text"
                 placeholder={addTitleFilterIsRegex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
                 value={addTitleFilter}
                 onChange={(e) => setAddTitleFilter(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border bg-background"
               />
             </Field>
-            <div className="flex items-center gap-3 mt-1.5">
-              <div className="flex items-center gap-1.5">
-                {/* Switch control, not a labelled action button, so it keeps its own track styling */}
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={addTitleFilterMode === "exclude"}
-                  aria-label="Exclude matching titles"
-                  onClick={() => setAddTitleFilterMode(addTitleFilterMode === "include" ? "exclude" : "include")}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterMode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterMode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">{addTitleFilterMode === "exclude" ? "Exclude" : "Include"}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={addTitleFilterIsRegex}
-                  aria-label="Treat the filter as a regular expression"
-                  onClick={() => setAddTitleFilterIsRegex(!addTitleFilterIsRegex)}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${addTitleFilterIsRegex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${addTitleFilterIsRegex ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">Regex</span>
-              </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
+              <Switch
+                checked={addTitleFilterMode === "exclude"}
+                onCheckedChange={(v) => setAddTitleFilterMode(v ? "exclude" : "include")}
+                label="Exclude matching titles"
+              />
+              <Switch
+                checked={addTitleFilterIsRegex}
+                onCheckedChange={setAddTitleFilterIsRegex}
+                label="Regex (treat the filter as a regular expression)"
+              />
             </div>
             <p className="text-xs text-muted-foreground mt-1">{addTitleFilterMode === "exclude" ? "Skip" : "Only download"} videos {addTitleFilterMode === "exclude" ? "containing" : "matching"} these {addTitleFilterIsRegex ? "patterns" : "keywords"}. Leave blank to download all.</p>
           </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={scanAfterAdd}
-              onChange={(e) => setScanAfterAdd(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">Scan for videos after adding</span>
-          </label>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={autoDownload}
-              onChange={(e) => setAutoDownload(e.target.checked)}
-              className="rounded"
-            />
-            <span className="text-sm">Auto-download videos</span>
-          </label>
+          <Checkbox
+            label="Scan for videos after adding"
+            checked={scanAfterAdd}
+            onChange={(e) => setScanAfterAdd(e.target.checked)}
+          />
+          <Checkbox
+            label="Auto-download videos"
+            checked={autoDownload}
+            onChange={(e) => setAutoDownload(e.target.checked)}
+          />
           <p className="text-xs text-muted-foreground -mt-2">
             Downloads every video the channel has published unless you set a date. Uncheck to list videos and pick what to download.
           </p>
           <Field label="Download from date (optional)" hint="Leave empty to include everything.">
-            <input
+            <Input
               type="date"
               value={addFromDate}
               onChange={(e) => setAddFromDate(e.target.value)}
-              className="w-full px-3 py-2 rounded-md border bg-background"
             />
           </Field>
           {addMutation.error && (
@@ -513,7 +484,7 @@ export default function ChannelsPage() {
                             <div className="flex items-center gap-2">
                               <span className="font-medium truncate max-w-[7.5rem] sm:max-w-none">{channel.channel_name}</span>
                               {channel.platform !== "youtube" && (
-                                <Badge tone="info" className="text-[10px] px-1.5 capitalize">
+                                <Badge tone="info" className="capitalize">
                                   {channel.platform}
                                 </Badge>
                               )}
@@ -529,7 +500,7 @@ export default function ChannelsPage() {
                         <span className="text-xs ml-1 hidden sm:inline">({progress}%)</span>
                       </td>
                       <td className="hidden md:table-cell px-4 py-3">
-                        <Badge className="text-[10px]">{channel.quality}</Badge>
+                        <Badge>{channel.quality}</Badge>
                       </td>
                       <td className="hidden sm:table-cell px-4 py-3">
                         <div className="flex items-center gap-1.5">
@@ -609,7 +580,7 @@ export default function ChannelsPage() {
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold truncate">{channel.channel_name}</h3>
                           {channel.platform && channel.platform !== "youtube" && (
-                            <Badge tone="info" className="text-[10px] px-1.5 capitalize">
+                            <Badge tone="info" className="capitalize">
                               {channel.platform}
                             </Badge>
                           )}
@@ -640,8 +611,8 @@ export default function ChannelsPage() {
                     {/* Metadata badges + actions */}
                     <div className="mt-3 flex items-center justify-between">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <Badge className="text-[10px]">{channel.quality}</Badge>
-                        <Badge tone={channel.enabled ? "success" : "neutral"} className="text-[10px]">
+                        <Badge>{channel.quality}</Badge>
+                        <Badge tone={channel.enabled ? "success" : "neutral"}>
                           {channel.enabled ? "Active" : "Paused"}
                         </Badge>
                       </div>
@@ -732,13 +703,13 @@ export default function ChannelsPage() {
               Move all channel files to a new root directory. File paths in the database will be updated automatically.
             </p>
             <Field label="New Download Directory">
-              <input
+              <Input
                 type="text"
                 autoFocus
+                data-autofocus
                 placeholder="/downloads/youtube"
                 value={moveAllDir}
                 onChange={(e) => setMoveAllDir(e.target.value)}
-                className="w-full px-3 py-2 rounded-md border bg-background"
               />
             </Field>
           </div>

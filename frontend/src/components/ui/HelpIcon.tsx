@@ -19,7 +19,7 @@ export function HelpIcon({ text, anchor }: HelpIconProps) {
           type="button"
           aria-label="Help"
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex rounded-full align-middle text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="-m-[9px] inline-flex rounded-full p-[9px] align-middle max-sm:-m-[13px] max-sm:p-[13px] text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <CircleHelp className="h-3.5 w-3.5" />
         </button>

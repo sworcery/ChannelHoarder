@@ -8,7 +8,9 @@ import { HelpIcon } from "@/components/ui/HelpIcon"
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog"
 import { Dialog } from "@/components/ui/Dialog"
 import { Button } from "@/components/ui/Button"
-import { Badge, BADGE_TONES } from "@/components/ui/Badge"
+import { Badge } from "@/components/ui/Badge"
+import { Input, Select } from "@/components/ui/Input"
+import { Checkbox, Switch } from "@/components/ui/Checkbox"
 import { Banner } from "@/components/ui/Banner"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { Field } from "@/components/ui/Field"
@@ -122,6 +124,7 @@ export default function ChannelDetailPage() {
   const { data: channel } = useQuery({
     queryKey: ["channel", channelId],
     queryFn: () => api.getChannel(channelId),
+    refetchInterval: (q) => (q.state.data?.activity?.scanning || q.state.data?.activity?.exclusive) ? 5000 : false,
   })
 
   const { data: videosData, isLoading: videosLoading } = useQuery({
@@ -419,9 +422,16 @@ export default function ChannelDetailPage() {
                   <Badge tone="info" className="capitalize">{channel.platform}</Badge>
                 )}
                 <Circle className={`h-3 w-3 flex-shrink-0 fill-current ${HEALTH_COLORS[channel.health_status] || HEALTH_COLORS.unknown}`} />
-                <Badge tone={channel.enabled ? "success" : "neutral"}>
-                  {!channel.enabled ? "Not scanned automatically" : channel.auto_download ? "Scanning, auto-download" : "Scanning, manual queue"}
+                <Badge>
+                  {!channel.enabled
+                    ? "Not scanned automatically"
+                    : channel.auto_download
+                      ? "Scans automatically · downloads new videos"
+                      : "Scans automatically · you pick what to download"}
                 </Badge>
+                {(channel.activity?.scanning || channel.activity?.exclusive) && (
+                  <Badge tone="success">Scanning…</Badge>
+                )}
               </div>
               <a href={channel.channel_url} target="_blank" rel="noopener noreferrer" className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1 mt-0.5 min-w-0">
                 <span className="truncate">{channel.channel_url}</span> <ExternalLink className="h-3 w-3 flex-shrink-0" />
@@ -551,14 +561,14 @@ export default function ChannelDetailPage() {
         <div className="flex flex-wrap items-center gap-2 mb-3">
           <div className="relative flex-1 min-w-[180px] max-w-sm">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Search episodes..."
               aria-label="Search episodes"
-              className="w-full pl-9 pr-3 py-1.5 rounded-md border bg-background text-sm"
+              className="pl-9"
             />
           </div>
           <Button onClick={handleSearch}>
@@ -569,11 +579,10 @@ export default function ChannelDetailPage() {
               Clear
             </Button>
           )}
-          <select
+          <Select
             value={statusFilter}
             onChange={(e) => handleStatusChange(e.target.value)}
             aria-label="Filter by status"
-            className="px-2 py-1.5 rounded-md border bg-background text-sm"
           >
             <option value="">All Status</option>
             <option value="completed">Completed</option>
@@ -585,64 +594,18 @@ export default function ChannelDetailPage() {
             <option value="skipped">Skipped</option>
             <option value="monitored">Monitored</option>
             <option value="unmonitored">Unmonitored</option>
-          </select>
-          <select
+          </Select>
+          <Select
             value={typeFilter}
             onChange={(e) => handleTypeChange(e.target.value)}
             aria-label="Filter by type"
-            className="px-2 py-1.5 rounded-md border bg-background text-sm"
           >
             <option value="">All Types</option>
             <option value="regular">Regular</option>
             <option value="short">Shorts</option>
             <option value="livestream">Livestreams</option>
-          </select>
+          </Select>
         </div>
-
-        {/* Bulk action bar */}
-        {selectedCount > 0 && (
-          <div className="flex items-center gap-2 mb-3 p-2 rounded-lg border bg-muted/50 flex-wrap">
-            <span className="text-sm font-medium">{selectedCount} selected</span>
-            <div className="h-4 w-px bg-border" />
-            <Button variant="primary" size="sm" onClick={() => bulkQueueMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
-              <Play className="h-3 w-3" /> Queue
-            </Button>
-            <Button size="sm" onClick={() => bulkSkipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
-              <SkipForward className="h-3 w-3" /> Skip
-            </Button>
-            <Button size="sm" onClick={() => bulkUnskipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
-              <RotateCcw className="h-3 w-3" /> Unskip
-            </Button>
-            <Button size="sm" onClick={() => bulkMonitorMutation.mutate({ monitored: true })} disabled={isBulkLoading}>
-              <Bookmark className="h-3 w-3" /> Monitor
-            </Button>
-            <Button size="sm" onClick={() => bulkMonitorMutation.mutate({ monitored: false })} disabled={isBulkLoading}>
-              <BookmarkX className="h-3 w-3" /> Unmonitor
-            </Button>
-            <div className="h-4 w-px bg-border" />
-            <Button size="sm" onClick={() => bulkReclassifyMutation.mutate({ setShort: true, setLivestream: false })} disabled={isBulkLoading}>
-              Mark Short
-            </Button>
-            <Button size="sm" onClick={() => bulkReclassifyMutation.mutate({ setLivestream: true, setShort: false })} disabled={isBulkLoading}>
-              Mark Livestream
-            </Button>
-            <Button size="sm" onClick={() => bulkReclassifyMutation.mutate({ setShort: false, setLivestream: false })} disabled={isBulkLoading}>
-              Mark Regular
-            </Button>
-            <div className="h-4 w-px bg-border" />
-            <Button size="sm" onClick={() => bulkRenameMutation.mutate()} disabled={isBulkLoading} title="Rename selected files on disk to match the current naming template">
-              <FileEdit className="h-3 w-3" /> Rename
-            </Button>
-            <div className="h-4 w-px bg-border" />
-            <Button variant="danger-outline" size="sm" onClick={() => setFileConfirm({ kind: "bulk-delete", ids: [...selectedVideoIds] })} disabled={isBulkLoading}>
-              <Trash2 className="h-3 w-3" /> Delete
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedVideoIds(new Set())}>
-              <X className="h-3 w-3" /> Clear
-            </Button>
-            {isBulkLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
-          </div>
-        )}
 
         {videosLoading && !videosData ? (
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
@@ -765,15 +728,29 @@ export default function ChannelDetailPage() {
                           rows.push(
                       <tr
                         key={video.id}
-                        className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 md:table-row md:p-0 hover:bg-muted/30 cursor-pointer ${isSelected ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
-                        onClick={(e) => toggleVideoSelection(video.id, globalIdx, e.shiftKey)}
+                        className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 md:table-row md:p-0 hover:bg-muted/30 md:cursor-pointer ${isSelected ? "bg-primary/5 ring-1 ring-inset ring-primary/20" : ""}`}
+                        onClick={(e) => {
+                          // Row-click selection is desktop only; on phones the checkbox is the only way to select.
+                          if (!window.matchMedia("(min-width: 768px)").matches) return
+                          toggleVideoSelection(video.id, globalIdx, e.shiftKey)
+                        }}
                       >
                         <td className="order-1 md:px-3 md:py-2">
-                          {isSelected ? (
-                            <CheckSquare className="h-4 w-4 text-primary" />
-                          ) : (
-                            <Square className="h-4 w-4 text-muted-foreground" />
-                          )}
+                          {/* The label makes a 40px tap target on phones; both stop the click so the row handler doesn't toggle twice. */}
+                          <label
+                            className="flex h-10 w-10 cursor-pointer items-center justify-center md:h-auto md:w-auto"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Checkbox
+                              checked={isSelected}
+                              aria-label={`Select ${video.title}`}
+                              onChange={() => {}}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                toggleVideoSelection(video.id, globalIdx, e.shiftKey)
+                              }}
+                            />
+                          </label>
                         </td>
                         <td className="order-5 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">
                           S{video.season}E{String(video.episode).padStart(3, "0")}
@@ -801,7 +778,7 @@ export default function ChannelDetailPage() {
                             <span className="text-xs text-muted-foreground capitalize">{video.status}</span>
                           </div>
                         </td>
-                        <td className="order-9 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2">
+                        <td className={cn("order-9 text-xs md:text-sm text-muted-foreground md:px-3 md:py-2", !video.file_size && "max-md:hidden")}>
                           {video.file_size ? formatBytes(video.file_size) : "-"}
                         </td>
                         <td className="order-3 shrink-0 md:px-3 md:py-2" onClick={(e) => e.stopPropagation()}>
@@ -881,6 +858,79 @@ export default function ChannelDetailPage() {
               : "No videos found. Try scanning the channel."}
           />
         )}
+
+        {/* Bulk action bar: sticks to the bottom of the episode list while anything is selected */}
+        {selectedCount > 0 && (
+          <div className="sticky bottom-0 z-10 mt-3 flex flex-wrap items-center gap-2 rounded-lg border bg-card p-2 shadow-lg">
+            <span className="text-sm font-medium">{selectedCount} selected</span>
+            <div className="h-4 w-px bg-border" />
+            <Button variant="primary" size="sm" onClick={() => bulkQueueMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
+              <Play className="h-3 w-3" /> Queue
+            </Button>
+            <Button size="sm" onClick={() => bulkSkipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
+              <SkipForward className="h-3 w-3" /> Skip
+            </Button>
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkUnskipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
+              <RotateCcw className="h-3 w-3" /> Unskip
+            </Button>
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkMonitorMutation.mutate({ monitored: true })} disabled={isBulkLoading}>
+              <Bookmark className="h-3 w-3" /> Monitor
+            </Button>
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkMonitorMutation.mutate({ monitored: false })} disabled={isBulkLoading}>
+              <BookmarkX className="h-3 w-3" /> Unmonitor
+            </Button>
+            <div className="h-4 w-px bg-border max-md:hidden" />
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkReclassifyMutation.mutate({ setShort: true, setLivestream: false })} disabled={isBulkLoading}>
+              Mark Short
+            </Button>
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkReclassifyMutation.mutate({ setLivestream: true, setShort: false })} disabled={isBulkLoading}>
+              Mark Livestream
+            </Button>
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkReclassifyMutation.mutate({ setShort: false, setLivestream: false })} disabled={isBulkLoading}>
+              Mark Regular
+            </Button>
+            <div className="h-4 w-px bg-border max-md:hidden" />
+            <Button size="sm" className="max-md:hidden" onClick={() => bulkRenameMutation.mutate()} disabled={isBulkLoading} title="Rename selected files on disk to match the current naming template">
+              <FileEdit className="h-3 w-3" /> Rename
+            </Button>
+            <div className="h-4 w-px bg-border max-md:hidden" />
+            {/* Phones: the less common actions live in a menu so the bar stays one or two rows */}
+            <div className="md:hidden">
+              <DropdownMenu label="More bulk actions" trigger={<span className="flex items-center gap-1 px-2 text-sm">More <ChevronDown className="h-3 w-3" /></span>}>
+                <DropdownItem onClick={() => bulkUnskipMutation.mutate([...selectedVideoIds])} disabled={isBulkLoading}>
+                  <RotateCcw className="h-3.5 w-3.5" /> Unskip
+                </DropdownItem>
+                <DropdownItem onClick={() => bulkMonitorMutation.mutate({ monitored: true })} disabled={isBulkLoading}>
+                  <Bookmark className="h-3.5 w-3.5" /> Monitor
+                </DropdownItem>
+                <DropdownItem onClick={() => bulkMonitorMutation.mutate({ monitored: false })} disabled={isBulkLoading}>
+                  <BookmarkX className="h-3.5 w-3.5" /> Unmonitor
+                </DropdownItem>
+                <DropdownSeparator />
+                <DropdownItem onClick={() => bulkReclassifyMutation.mutate({ setShort: true, setLivestream: false })} disabled={isBulkLoading}>
+                  Mark Short
+                </DropdownItem>
+                <DropdownItem onClick={() => bulkReclassifyMutation.mutate({ setLivestream: true, setShort: false })} disabled={isBulkLoading}>
+                  Mark Livestream
+                </DropdownItem>
+                <DropdownItem onClick={() => bulkReclassifyMutation.mutate({ setShort: false, setLivestream: false })} disabled={isBulkLoading}>
+                  Mark Regular
+                </DropdownItem>
+                <DropdownSeparator />
+                <DropdownItem onClick={() => bulkRenameMutation.mutate()} disabled={isBulkLoading}>
+                  <FileEdit className="h-3.5 w-3.5" /> Rename
+                </DropdownItem>
+              </DropdownMenu>
+            </div>
+            <Button variant="danger-outline" onClick={() => setFileConfirm({ kind: "bulk-delete", ids: [...selectedVideoIds] })} disabled={isBulkLoading}>
+              <Trash2 className="h-4 w-4" /> Delete
+            </Button>
+            <Button variant="ghost" onClick={() => setSelectedVideoIds(new Set())}>
+              <X className="h-4 w-4" /> Clear
+            </Button>
+            {isBulkLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          </div>
+        )}
       </div>
 
       {/* Edit Channel Dialog */}
@@ -894,7 +944,7 @@ export default function ChannelDetailPage() {
         <div className="space-y-6">
           {/* Download Settings */}
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Download Settings</p>
+            <h3 className="text-sm font-semibold mb-3">Download Settings</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="flex items-end gap-1">
                 <Field
@@ -902,17 +952,17 @@ export default function ChannelDetailPage() {
                   label="Quality"
                   help={<HelpIcon text="Target quality for new downloads. Also used as the cutoff for upgrade searches." anchor="channel-management" />}
                 >
-                  <select
+                  <Select
+                    data-autofocus
                     value={channel.quality}
                     onChange={(e) => updateMutation.mutate({ quality: e.target.value })}
-                    className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                   >
                     <option value="best">Best Available</option>
                     <option value="2160p">4K (2160p)</option>
                     <option value="1080p">1080p</option>
                     <option value="720p">720p</option>
                     <option value="480p">480p</option>
-                  </select>
+                  </Select>
                 </Field>
                 <Button
                   size="sm"
@@ -927,40 +977,37 @@ export default function ChannelDetailPage() {
                 label="Minimum Quality"
                 help={<HelpIcon text="Skip videos if the best available quality is below this threshold. Leave as 'None' to download regardless of quality." anchor="channel-management" />}
               >
-                <select
+                <Select
                   value={channel.min_quality || ""}
                   onChange={(e) => updateMutation.mutate({ min_quality: e.target.value || null })}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 >
                   <option value="">None (download any quality)</option>
                   <option value="2160p">4K (2160p)</option>
                   <option value="1080p">1080p</option>
                   <option value="720p">720p</option>
                   <option value="480p">480p</option>
-                </select>
+                </Select>
               </Field>
               <Field
                 label="Preferred Codec"
                 help={<HelpIcon text="Preferred video codec for this channel. H.264 is the most compatible option for devices like Apple TV, but on YouTube it is usually capped at 1080p, so choosing it can limit a 4K channel to 1080p. If the preferred codec is not available for a video, the best available format is downloaded instead. Nothing is re-encoded." anchor="channel-management" />}
               >
-                <select
+                <Select
                   value={channel.preferred_codec || ""}
                   onChange={(e) => updateMutation.mutate({ preferred_codec: e.target.value || null })}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 >
                   <option value="">Any (best quality)</option>
                   <option value="h264">H.264 / AVC (compatibility)</option>
                   <option value="vp9">VP9</option>
-                </select>
+                </Select>
               </Field>
               <div className="sm:col-span-2 flex items-end gap-1">
                 <Field className="flex-1" label="Download Directory">
-                  <input
+                  <Input
                     type="text"
                     value={editDownloadDir ?? channel.download_dir ?? ""}
                     placeholder="/downloads (default)"
                     onChange={(e) => setEditDownloadDir(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                   />
                 </Field>
                 {editDownloadDir !== null && editDownloadDir !== (channel.download_dir ?? "") && (
@@ -1013,12 +1060,12 @@ export default function ChannelDetailPage() {
               label="Download From Date"
               help={<HelpIcon text="Only videos published on or after this date are downloaded. Applies to future scans. Already-queued videos are not affected. Leave empty to download all videos." anchor="channel-management" />}
             >
-              <input
+              <Input
                 type="date"
                 min="2005-01-01"
                 value={editFromDate ?? (channel.download_from_date || "")}
                 onChange={(e) => setEditFromDate(e.target.value)}
-                className="w-44 px-2 py-1.5 rounded-md border bg-background text-sm"
+                className="w-44"
               />
             </Field>
             {editFromDate !== null && editFromDate !== (channel.download_from_date || "") && (
@@ -1042,12 +1089,11 @@ export default function ChannelDetailPage() {
               label="Skip videos shorter than (seconds)"
               help={<HelpIcon text="Videos shorter than this are skipped. Separate from Shorts (60 seconds or less, or listed on the channel's Shorts tab). No default; leave empty to skip nothing." anchor="episode-management" />}
             >
-              <input
+              <Input
                 type="number"
                 value={editMinDuration ?? (channel.min_video_duration || "")}
                 placeholder=""
                 onChange={(e) => setEditMinDuration(e.target.value)}
-                className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 min={0}
               />
             </Field>
@@ -1072,14 +1118,14 @@ export default function ChannelDetailPage() {
               label="Delete videos after (days)"
               help={<HelpIcon text="Deletes the downloaded files this many days after each video was downloaded. The videos stay listed as skipped and will not download again, including after Force Rescan. Leave empty to keep videos forever." anchor="channel-management" />}
             >
-              <input
+              <Input
                 type="number"
                 min="1"
                 max="36500"
                 value={editRetention ?? (channel.retention_days || "")}
                 placeholder="Keep forever"
                 onChange={(e) => setEditRetention(e.target.value)}
-                className="w-32 px-2 py-1.5 rounded-md border bg-background text-sm"
+                className="w-32"
               />
             </Field>
             {editRetention !== null && editRetention !== String(channel.retention_days || "") && (
@@ -1103,12 +1149,11 @@ export default function ChannelDetailPage() {
                 label="Title Filter"
                 help={<HelpIcon text="Filter videos by title. Include mode downloads only matching videos. Exclude mode skips matching videos. Leave empty to download all. Works on future scans only." anchor="channel-management" />}
               >
-                <input
+                <Input
                   type="text"
                   value={editTitleFilter ?? channel.title_filter ?? ""}
                   placeholder={channel.title_filter_is_regex ? "e.g. rust|ark\\s*raiders" : "e.g. Rust, Arc Raiders, Minecraft"}
                   onChange={(e) => setEditTitleFilter(e.target.value)}
-                  className="w-full px-2 py-1.5 rounded-md border bg-background text-sm"
                 />
               </Field>
               {editTitleFilter !== null && editTitleFilter !== (channel.title_filter ?? "") && (
@@ -1131,34 +1176,17 @@ export default function ChannelDetailPage() {
                 </Button>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-2">
-              {/* Custom on/off switches: the shared set has no Switch yet, so these stay hand-made. */}
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={channel.title_filter_mode === "exclude"}
-                  aria-label="Exclude mode"
-                  onClick={() => updateMutation.mutate({ title_filter_mode: channel.title_filter_mode === "include" ? "exclude" : "include" })}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_mode === "exclude" ? "bg-orange-500" : "bg-primary"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_mode === "exclude" ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">{channel.title_filter_mode === "exclude" ? "Exclude mode" : "Include mode"}</span>
-              </label>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!!channel.title_filter_is_regex}
-                  aria-label="Regex mode"
-                  onClick={() => updateMutation.mutate({ title_filter_is_regex: !channel.title_filter_is_regex })}
-                  className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${channel.title_filter_is_regex ? "bg-primary" : "bg-gray-300 dark:bg-gray-600"}`}
-                >
-                  <span className={`inline-block h-3 w-3 rounded-full bg-white transition-transform ${channel.title_filter_is_regex ? "translate-x-4" : "translate-x-0.5"}`} />
-                </button>
-                <span className="text-xs text-muted-foreground">Regex mode</span>
-              </label>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2">
+              <Switch
+                checked={channel.title_filter_mode === "exclude"}
+                onCheckedChange={(v) => updateMutation.mutate({ title_filter_mode: v ? "exclude" : "include" })}
+                label="Exclude matching titles"
+              />
+              <Switch
+                checked={!!channel.title_filter_is_regex}
+                onCheckedChange={(v) => updateMutation.mutate({ title_filter_is_regex: v })}
+                label="Regex mode"
+              />
             </div>
             <p className="text-xs text-muted-foreground mt-1.5">
               {channel.title_filter_mode === "exclude" ? (
@@ -1195,49 +1223,37 @@ export default function ChannelDetailPage() {
 
           {/* Monitoring */}
           <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Monitoring</p>
+            <h3 className="text-sm font-semibold mb-3">Monitoring</h3>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field
                 label="Auto-download"
                 caption
                 hint="New videos found by scans are queued automatically. When off, they're listed and you queue them yourself."
               >
-                <Button
-                  variant="ghost"
-                  aria-pressed={!!channel.auto_download}
-                  className={BADGE_TONES[channel.auto_download ? "success" : "neutral"]}
-                  onClick={() => updateMutation.mutate({ auto_download: !channel.auto_download })}
-                >
-                  {channel.auto_download ? "On" : "Off"}
-                </Button>
+                <Switch
+                  checked={!!channel.auto_download}
+                  onCheckedChange={(v) => updateMutation.mutate({ auto_download: v })}
+                />
               </Field>
               <Field
                 label="Scan this channel"
                 caption
                 hint="When off, the channel isn't scanned on schedule, by RSS checks or by Scan All. Scan Now still works."
               >
-                <Button
-                  variant="ghost"
-                  aria-pressed={!!channel.enabled}
-                  className={BADGE_TONES[channel.enabled ? "success" : "neutral"]}
-                  onClick={() => updateMutation.mutate({ enabled: !channel.enabled })}
-                >
-                  {channel.enabled ? "On" : "Off"}
-                </Button>
+                <Switch
+                  checked={!!channel.enabled}
+                  onCheckedChange={(v) => updateMutation.mutate({ enabled: v })}
+                />
               </Field>
               <Field
                 label="Download first"
                 caption
                 hint="Queued videos from this channel download before other channels' videos."
               >
-                <Button
-                  variant="ghost"
-                  aria-pressed={!!channel.prioritize_downloads}
-                  className={BADGE_TONES[channel.prioritize_downloads ? "success" : "neutral"]}
-                  onClick={() => updateMutation.mutate({ prioritize_downloads: !channel.prioritize_downloads })}
-                >
-                  {channel.prioritize_downloads ? "On" : "Off"}
-                </Button>
+                <Switch
+                  checked={!!channel.prioritize_downloads}
+                  onCheckedChange={(v) => updateMutation.mutate({ prioritize_downloads: v })}
+                />
               </Field>
               <div role="group" aria-labelledby="scan-for-videos-label">
                 <p id="scan-for-videos-label" className="mb-1 text-sm font-medium">Scan for Videos</p>
@@ -1284,20 +1300,18 @@ export default function ChannelDetailPage() {
           {/* Shorts Management */}
           {showAdvanced && channel.platform === "youtube" && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">YouTube Shorts</p>
+              <h3 className="text-sm font-semibold mb-2">YouTube Shorts</h3>
               <div className="space-y-3">
                 {shortsGloballyEnabled ? (
                   <>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        label="Include shorts when downloading"
                         checked={channel.include_shorts}
                         onChange={(e) => updateMutation.mutate({ include_shorts: e.target.checked })}
-                        className="rounded"
                       />
-                      <span className="text-sm">Include shorts when downloading</span>
                       <HelpIcon text={"Videos of 60 seconds or less, or listed on the channel's Shorts tab."} anchor="episode-management" />
-                    </label>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {channel.include_shorts
                         ? "Shorts (60 seconds or less, or listed on the channel's Shorts tab) will be included in downloads."
@@ -1368,20 +1382,18 @@ export default function ChannelDetailPage() {
               channel that hasn't opted in, so the toggle must be reachable everywhere */}
           {showAdvanced && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Livestreams</p>
+              <h3 className="text-sm font-semibold mb-2">Livestreams</h3>
               <div className="space-y-3">
                 {livestreamsGloballyEnabled ? (
                   <>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        label="Include livestreams when downloading"
                         checked={channel.include_livestreams}
                         onChange={(e) => updateMutation.mutate({ include_livestreams: e.target.checked })}
-                        className="rounded"
                       />
-                      <span className="text-sm">Include livestreams when downloading</span>
                       <HelpIcon text="Live streams and premieres from this channel." anchor="episode-management" />
-                    </label>
+                    </div>
                     <p className="text-xs text-muted-foreground">
                       {channel.include_livestreams
                         ? "Livestreams will be included in downloads."
@@ -1417,7 +1429,7 @@ export default function ChannelDetailPage() {
           {/* Subtitles */}
           {showAdvanced && (
             <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Subtitles</p>
+              <h3 className="text-sm font-semibold mb-2">Subtitles</h3>
               <Button
                 size="sm"
                 onClick={() => {
@@ -1572,13 +1584,13 @@ export default function ChannelDetailPage() {
           <div>
             <div className="flex items-end gap-2">
               <Field className="flex-1" label="Folder path (on server)">
-                <input
+                <Input
                   type="text"
                   autoFocus
+                  data-autofocus
                   value={importFolder}
                   onChange={(e) => setImportFolder(e.target.value)}
                   placeholder="/path/to/existing/videos"
-                  className="w-full px-3 py-2 rounded-md border bg-background text-sm"
                 />
               </Field>
               <Button

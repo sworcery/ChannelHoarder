@@ -15,6 +15,7 @@ import { Button, buttonClasses } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { DateTime } from "@/components/ui/DateTime"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { Input, Select } from "@/components/ui/Input"
 import { PageHeader } from "@/components/ui/PageHeader"
 import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
 import {
@@ -397,7 +398,7 @@ export default function DownloadsPage() {
     {
       key: "queue",
       label: "Queue",
-      badge: queueTotal > 0 ? <Badge tone="info" className="ml-1.5 px-1.5">{queueTotal}</Badge> : undefined,
+      badge: queueTotal > 0 ? <Badge tone="info" className="ml-1.5 px-1.5 py-0 align-middle">{queueTotal}</Badge> : undefined,
     },
     { key: "history", label: "History" },
     { key: "failed", label: "Failed" },
@@ -505,19 +506,20 @@ export default function DownloadsPage() {
           {/* Download order */}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
             <label htmlFor="queue-order" className="text-sm text-muted-foreground">Download order</label>
-            <select
-              id="queue-order"
-              value={queueOrderMutation.isPending ? queueOrderMutation.variables : queueOrder}
-              onChange={(e) => queueOrderMutation.mutate(e.target.value)}
-              disabled={queueOrderMutation.isPending}
-              className="px-2 py-1 text-sm rounded-md border bg-background"
-            >
-              <option value="queued">Order added</option>
-              <option value="newest">Newest videos first</option>
-              <option value="oldest">Oldest videos first</option>
-              <option value="shortest">Shortest first</option>
-              <option value="longest">Longest first</option>
-            </select>
+            <div className="w-56">
+              <Select
+                id="queue-order"
+                value={queueOrderMutation.isPending ? queueOrderMutation.variables : queueOrder}
+                onChange={(e) => queueOrderMutation.mutate(e.target.value)}
+                disabled={queueOrderMutation.isPending}
+              >
+                <option value="queued">Order added</option>
+                <option value="newest">Newest videos first</option>
+                <option value="oldest">Oldest videos first</option>
+                <option value="shortest">Shortest first</option>
+                <option value="longest">Longest first</option>
+              </Select>
+            </div>
             <span className="text-xs text-muted-foreground">
               Items you move to the top and channels set to download first always go first.
             </span>
@@ -526,12 +528,13 @@ export default function DownloadsPage() {
           {/* Search */}
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
+              aria-label="Search queue"
               placeholder="Search queue..."
               value={queueSearch}
               onChange={(e) => { setQueueSearch(e.target.value); setQueuePage(0) }}
-              className="w-full pl-9 pr-3 py-2 rounded-md border bg-background"
+              className="pl-9"
             />
           </div>
 
@@ -814,12 +817,13 @@ export default function DownloadsPage() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative flex-1 min-w-[180px] max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
+              <Input
                 type="text"
+                aria-label={tab === "failed" ? "Search failed videos" : "Search history"}
                 placeholder="Search videos..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setPage(0) }}
-                className="w-full pl-9 pr-3 py-2 rounded-md border bg-background"
+                className="pl-9"
               />
             </div>
             {tab === "failed" && (

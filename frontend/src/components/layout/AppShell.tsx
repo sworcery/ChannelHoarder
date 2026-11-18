@@ -85,7 +85,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-background">
       <GlobalNotifications />
       {/* Mobile menu: the sidebar as a left drawer Dialog */}
       <Dialog

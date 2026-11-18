@@ -32,6 +32,15 @@ export interface Channel {
   last_error_code: string | null
   created_at: string
   updated_at: string
+  activity?: {
+    moving: boolean
+    scanning: boolean
+    exclusive: boolean
+    working: boolean
+    draining: boolean
+    downloading: boolean
+    subtitles: boolean
+  }
 }
 
 export interface Video {

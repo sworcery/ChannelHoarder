@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { DateTime } from "@/components/ui/DateTime"
 import { EmptyState } from "@/components/ui/EmptyState"
+import { Input, Select } from "@/components/ui/Input"
 import { Tabs, readSavedTab, panelId, tabId, type TabItem } from "@/components/ui/Tabs"
 import LibraryCheckCard from "./LibraryCheckCard"
 import SharedFoldersCard from "./SharedFoldersCard"
@@ -111,10 +112,10 @@ export default function DiagnosticsTab() {
           storageKey="diagnostics_tab"
           label="Diagnostics sections"
           idPrefix="diag"
-          className="min-w-0 basis-full flex-1 sm:basis-0"
+          className="min-w-0 basis-full sm:basis-0 sm:flex-1"
         />
         {subTab === "overview" && diagnostics && (
-          <Button onClick={copyReport} className="sm:ml-4 whitespace-nowrap">
+          <Button onClick={copyReport} className="w-full sm:w-auto sm:ml-4 whitespace-nowrap">
             <ClipboardCopy className="h-4 w-4" />
             {copied ? "Copied!" : "Copy Diagnostic Report"}
           </Button>
@@ -139,17 +140,17 @@ export default function DiagnosticsTab() {
               />
             </div>
 
-            <Card title="Statistics" className="space-y-3">
-              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
-                <div className="flex justify-between">
+            <Card title="Statistics" as="h2" className="space-y-3">
+              <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-x-8">
+                <div className="flex justify-between sm:justify-start sm:gap-2">
                   <span className="text-muted-foreground">Channels</span>
                   <span>{diagnostics.total_channels}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between sm:justify-start sm:gap-2">
                   <span className="text-muted-foreground">Downloaded</span>
                   <span>{diagnostics.total_downloads}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between sm:justify-start sm:gap-2">
                   <span className="text-muted-foreground">Failed</span>
                   <span className={diagnostics.total_failed > 0 ? "text-danger" : ""}>
                     {diagnostics.total_failed}
@@ -163,7 +164,7 @@ export default function DiagnosticsTab() {
             <SharedFoldersCard />
 
             {diagnostics.recent_errors.length > 0 && (
-              <Card title="Recent Errors" className="space-y-3">
+              <Card title="Recent Errors" as="h2" className="space-y-3">
                 <div className="space-y-2">
                   {diagnostics.recent_errors.map((error: any) => (
                     <div key={error.id} className="flex items-start gap-2 text-sm">
@@ -187,12 +188,13 @@ export default function DiagnosticsTab() {
         <div role="tabpanel" id={panelId("diag", "logs")} aria-labelledby={tabId("diag", "logs")} className="space-y-4">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
+            <Input
               type="text"
+              aria-label="Search logs"
               placeholder="Search logs..."
               value={logSearch}
               onChange={(e) => { setLogSearch(e.target.value); setLogPage(0) }}
-              className="w-full pl-9 pr-3 py-2 rounded-md border bg-background"
+              className="pl-9"
             />
           </div>
 
@@ -277,17 +279,15 @@ export default function DiagnosticsTab() {
         <div role="tabpanel" id={panelId("diag", "system-logs")} aria-labelledby={tabId("diag", "system-logs")} className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <select
-                value={logLevel}
-                onChange={(e) => setLogLevel(e.target.value)}
-                className="px-2 py-1.5 rounded-md border bg-background text-sm"
-              >
-                <option value="">All Levels</option>
-                <option value="DEBUG">DEBUG</option>
-                <option value="INFO">INFO</option>
-                <option value="WARNING">WARNING</option>
-                <option value="ERROR">ERROR</option>
-              </select>
+              <div className="w-36">
+                <Select aria-label="Log level" value={logLevel} onChange={(e) => setLogLevel(e.target.value)}>
+                  <option value="">All Levels</option>
+                  <option value="DEBUG">DEBUG</option>
+                  <option value="INFO">INFO</option>
+                  <option value="WARNING">WARNING</option>
+                  <option value="ERROR">ERROR</option>
+                </Select>
+              </div>
               <span className="text-xs text-muted-foreground">
                 {liveLogs?.total || 0} entries (auto-refreshing)
               </span>

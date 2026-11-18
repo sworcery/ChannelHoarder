@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from "react"
-import { createPortal } from "react-dom"
+import { useRef, useState, type ReactNode } from "react"
+import * as DropdownPrimitive from "@radix-ui/react-dropdown-menu"
+import { cn } from "@/lib/utils"
 
 interface DropdownMenuProps {
   trigger: ReactNode
@@ -15,84 +16,60 @@ interface DropdownItemProps {
   disabled?: boolean
 }
 
+/** Radix menu: portaled, flips/shifts to stay on screen, Esc / outside-click close, arrow-key navigation. */
 export function DropdownMenu({ trigger, label, children }: DropdownMenuProps) {
   const [open, setOpen] = useState(false)
-  const triggerRef = useRef<HTMLButtonElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 })
-
-  // Position the menu just below the trigger, right-aligned to it. Using fixed
-  // positioning in a portal keeps the menu above everything and free of any
-  // overflow-hidden ancestor that would otherwise clip it.
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return
-    const rect = triggerRef.current.getBoundingClientRect()
-    setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right })
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (
-        !triggerRef.current?.contains(target) &&
-        !menuRef.current?.contains(target)
-      ) {
-        setOpen(false)
-      }
-    }
-    const close = () => setOpen(false)
-    document.addEventListener("mousedown", handleClickOutside)
-    window.addEventListener("scroll", close, true)
-    window.addEventListener("resize", close)
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside)
-      window.removeEventListener("scroll", close, true)
-      window.removeEventListener("resize", close)
-    }
-  }, [open])
-
+  const touchRef = useRef(false)
   return (
-    <>
-      <button
-        ref={triggerRef}
-        onClick={() => setOpen(!open)}
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        className="p-1 hover:bg-accent rounded"
-      >
-        {trigger}
-      </button>
-      {open &&
-        createPortal(
-          <div
-            ref={menuRef}
-            style={{ position: "fixed", top: pos.top, right: pos.right }}
-            className="z-[9999] min-w-[160px] rounded-md border bg-popover shadow-md py-1"
-          >
-            <div onClick={() => setOpen(false)}>{children}</div>
-          </div>,
-          document.body
-        )}
-    </>
+    <DropdownPrimitive.Root open={open} onOpenChange={setOpen}>
+      <DropdownPrimitive.Trigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          // Radix opens on pointerdown; for touch, open on click instead so a swipe that starts here still scrolls.
+          onPointerDown={(e) => {
+            touchRef.current = e.pointerType === "touch"
+            if (touchRef.current) e.preventDefault()
+          }}
+          onClick={() => {
+            if (touchRef.current) { touchRef.current = false; setOpen((o) => !o) }
+          }}
+          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded p-1 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:min-w-0"
+        >
+          {trigger}
+        </button>
+      </DropdownPrimitive.Trigger>
+      <DropdownPrimitive.Portal>
+        <DropdownPrimitive.Content
+          align="end"
+          side="bottom"
+          sideOffset={4}
+          collisionPadding={8}
+          className="z-[9999] max-h-[var(--radix-dropdown-menu-content-available-height)] min-w-[160px] overflow-y-auto max-w-[calc(100vw-1rem)] rounded-md border bg-popover py-1 text-popover-foreground shadow-md"
+        >
+          {children}
+        </DropdownPrimitive.Content>
+      </DropdownPrimitive.Portal>
+    </DropdownPrimitive.Root>
   )
 }
 
 export function DropdownItem({ onClick, children, variant = "default", disabled = false }: DropdownItemProps) {
   return (
-    <button
-      onClick={onClick}
+    <DropdownPrimitive.Item
+      onSelect={() => onClick()}
       disabled={disabled}
-      className={`w-full text-left px-3 py-1.5 text-sm hover:bg-accent disabled:opacity-50 flex items-center gap-2 ${
-        variant === "danger" ? "text-danger hover:text-danger/80" : ""
-      }`}
+      className={cn(
+        "flex min-h-10 w-full cursor-pointer select-none items-center gap-2 px-3 py-1.5 text-left text-sm outline-none sm:min-h-0",
+        "hover:bg-accent focus:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        variant === "danger" && "text-danger",
+      )}
     >
       {children}
-    </button>
+    </DropdownPrimitive.Item>
   )
 }
 
 export function DropdownSeparator() {
-  return <div className="h-px bg-border my-1" />
+  return <DropdownPrimitive.Separator className="my-1 h-px bg-border" />
 }

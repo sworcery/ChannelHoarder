@@ -43,9 +43,9 @@ export default function Sidebar({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
-                  ? "bg-primary/10 text-primary"
+                  ? "bg-primary/10 text-red-700 dark:text-red-400"
                   : "text-muted-foreground hover:bg-accent hover:text-foreground"
               )
             }

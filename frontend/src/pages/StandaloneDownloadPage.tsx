@@ -10,6 +10,7 @@ import { Button, buttonClasses } from "@/components/ui/Button"
 import { Card } from "@/components/ui/Card"
 import { EmptyState } from "@/components/ui/EmptyState"
 import { Field } from "@/components/ui/Field"
+import { Input, Select } from "@/components/ui/Input"
 import { PageHeader } from "@/components/ui/PageHeader"
 import {
   Download,
@@ -146,14 +147,14 @@ export default function StandaloneDownloadPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="space-y-6">
       <PageHeader
-        title="Quick Download"
+        title="Download Video"
         subtitle="Download any video by URL. Files are stored temporarily and available for download from your browser for 7 days."
       />
 
       {/* Download Form */}
-      <Card className="p-6">
+      <Card>
         <Field
           label={
             <>
@@ -162,12 +163,11 @@ export default function StandaloneDownloadPage() {
             </>
           }
         >
-          <input
+          <Input
             type="text"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="Paste a video URL from any supported platform"
-            className="w-full px-3 py-2.5 rounded-md border bg-background text-sm"
             onKeyDown={(e) => {
               if (e.key === "Enter" && url.trim() && !downloadMutation.isPending) downloadMutation.mutate()
             }}
@@ -176,17 +176,13 @@ export default function StandaloneDownloadPage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Quality">
-            <select
-              value={quality}
-              onChange={(e) => setQuality(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-md border bg-background text-sm"
-            >
+            <Select value={quality} onChange={(e) => setQuality(e.target.value)}>
               <option value="best">Best Available</option>
               <option value="2160p">4K (2160p)</option>
               <option value="1080p">1080p</option>
               <option value="720p">720p</option>
               <option value="480p">480p</option>
-            </select>
+            </Select>
           </Field>
         </div>
 
@@ -206,12 +202,15 @@ export default function StandaloneDownloadPage() {
             </>
           )}
         </Button>
+        {!url.trim() && (
+          <p className="text-center text-xs text-muted-foreground">Paste a video URL to start</p>
+        )}
       </Card>
 
       {/* Active Downloads */}
       {activeDownloads.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Active Downloads</h2>
+          <h2 className="font-semibold">Active Downloads</h2>
           {activeDownloads.map((dl) => {
             const id = dl.downloadId
             const prog = progress[id]
@@ -298,8 +297,8 @@ export default function StandaloneDownloadPage() {
 
       {/* Downloaded Files */}
       <div className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-          <FileVideo className="h-4 w-4" />
+        <h2 className="font-semibold flex items-center gap-2">
+          <FileVideo className="h-5 w-5 text-primary" />
           Downloaded Files
         </h2>
         <p className="text-xs text-muted-foreground">
