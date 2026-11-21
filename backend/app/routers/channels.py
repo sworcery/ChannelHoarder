@@ -967,6 +967,43 @@ async def _rename_video_file(channel_id: int, video_id: int, db: AsyncSession):
     return {"message": f"Renamed '{video.title}'", "renamed": True, "new_path": new_path}
 
 
+async def _number_unmarked(db: AsyncSession, channel_id: int, video: Video) -> tuple[str, int]:
+    """Give a just-unmarked video the next free episode in its season and rename its file.
+
+    The number is saved first (one atomic statement), so a busy channel or a failed
+    rename never loses it; the scan's rename pass finishes the file later.
+    Returns (message suffix, files renamed).
+    """
+    from app.utils.renumber import assign_next_episode, _regenerate_nfo
+
+    episode = await assign_next_episode(db, video)
+    await db.commit()
+    suffix = f" It is now episode {episode}."
+    if not video.file_path or not await asyncio.to_thread(os.path.exists, video.file_path):
+        return suffix, 0
+
+    later = " The file will be renamed at the next scan."
+    # No drain: nothing retries this, so holding the channel's downloads would only stall them.
+    reason = await try_claim(db, channel_id, "work", video_ids=[video.id])
+    if reason:
+        return suffix + later, 0
+    try:
+        protected, _ = await other_recorded(db, channel_id)
+        if protected and protected & await asyncio.to_thread(file_keys, video.file_path):
+            return suffix, 0  # another channel's video records this file too
+        result = await _rename_video_file(channel_id, video.id, db)
+        if result.get("renamed"):
+            channel = await db.get(Channel, channel_id)
+            await asyncio.to_thread(_regenerate_nfo, video, channel)
+            return suffix, 1
+        return suffix, 0
+    except Exception as e:
+        logger.warning("Could not rename %s after unmark: %s", video.video_id, e)
+        return suffix + later, 0
+    finally:
+        release_claim(channel_id, "work")
+
+
 class ShortRequest(BaseModel):
     is_short: bool
 
@@ -991,7 +1028,10 @@ async def toggle_video_short(
     if body.is_short:
         video.episode = 0  # Shorts are excluded from episode numbering
     await db.commit()
-    return {"message": f"{'Marked' if body.is_short else 'Unmarked'} '{video.title}' as short", "is_short": body.is_short}
+    suffix, renamed = "", 0
+    if not body.is_short and not video.is_livestream and video.episode == 0:
+        suffix, renamed = await _number_unmarked(db, channel_id, video)
+    return {"message": f"{'Marked' if body.is_short else 'Unmarked'} '{video.title}' as short.{suffix}", "is_short": body.is_short, "renamed": renamed}
 
 
 class LivestreamRequest(BaseModel):
@@ -1018,7 +1058,10 @@ async def toggle_video_livestream(
     if body.is_livestream:
         video.episode = 0  # Livestreams are excluded from episode numbering
     await db.commit()
-    return {"message": f"{'Marked' if body.is_livestream else 'Unmarked'} '{video.title}' as livestream", "is_livestream": body.is_livestream}
+    suffix, renamed = "", 0
+    if not body.is_livestream and not video.is_short and video.episode == 0:
+        suffix, renamed = await _number_unmarked(db, channel_id, video)
+    return {"message": f"{'Marked' if body.is_livestream else 'Unmarked'} '{video.title}' as livestream.{suffix}", "is_livestream": body.is_livestream, "renamed": renamed}
 
 
 class MonitorRequest(BaseModel):
@@ -1118,7 +1161,18 @@ async def bulk_reclassify_videos(
         label_parts.append("regular videos")
     label = " & ".join(label_parts) if label_parts else "reclassified"
 
-    return {"message": f"Marked {count} videos as {label}", "count": count}
+    # Videos that became regular get the next free episode, oldest first
+    suffix, renamed, deferred = "", 0, False
+    for video in sorted(videos, key=lambda v: (v.upload_date, v.id)):
+        if not video.is_short and not video.is_livestream and video.episode == 0:
+            note, n = await _number_unmarked(db, channel_id, video)
+            renamed += n
+            deferred = deferred or "next scan" in note
+    if renamed:
+        suffix += f" Renamed {renamed} file{'s' if renamed != 1 else ''}."
+    if deferred:
+        suffix += " Some files will be renamed at the next scan."
+    return {"message": f"Marked {count} videos as {label}.{suffix}", "count": count, "renamed": renamed}
 
 
 class BulkRenameRequest(BaseModel):

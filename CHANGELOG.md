@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Rumble downloads no longer fail with "Unable to download JSON metadata: HTTP Error 403" (#53). When Rumble refuses that request, ChannelHoarder reads the same video details from the video's embed page instead. This works around a yt-dlp bug that is still open upstream.
 - Download Video (quick download) now uses the same browser disguise as normal downloads for Rumble and other non-YouTube sites, so their pages no longer return 403 there.
+- A video you unmark as a Short or livestream gets a real episode number (the next free one in its season) instead of staying at episode 0, and an already downloaded file is renamed to match. Other episodes are not renumbered. Videos left at episode 0 by an earlier unmark get their number, and their files are renamed, at the channel's next scan.
 
 ## [2.0.0] - 2026-11-18
 

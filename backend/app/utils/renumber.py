@@ -10,6 +10,24 @@ from app.utils.file_utils import channel_folder_name, file_keys, move_video_file
 logger = logging.getLogger(__name__)
 
 
+async def assign_next_episode(db, video) -> int:
+    """Give a video the next free episode in its season, in one atomic statement.
+
+    The caller commits. Returns the number assigned.
+    """
+    from sqlalchemy import func, select, update
+    from app.models import Video
+
+    next_ep = (
+        select(func.coalesce(func.max(Video.episode), 0) + 1)
+        .where(Video.channel_id == video.channel_id, Video.season == video.season)
+        .scalar_subquery()
+    )
+    await db.execute(update(Video).where(Video.id == video.id).values(episode=next_ep))
+    await db.refresh(video)
+    return video.episode
+
+
 def renumber_channel_episodes(videos: list, channel, naming_template: str | None = None,
                                force_ids: set[int] | None = None,
                                protected_keys: set[str] | None = None) -> int:

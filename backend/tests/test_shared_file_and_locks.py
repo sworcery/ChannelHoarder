@@ -1,5 +1,6 @@
 """A file another channel's video also records (an old shared folder) survives every
 delete and move path, and a manual short/livestream mark outlasts scans."""
+import os
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -170,7 +171,8 @@ async def test_unmark_short_sticks_across_scan(monkeypatch, tmp_path):
         await ChannelService(db)._reclassify_existing_videos(
             ch, [{"id": "a_own", "_source_tab": "shorts"}])
     v = await _get(maker, "a_own")
-    assert v.short_locked and not v.is_short and v.status == "completed" and own.exists()
+    # The unmark renumbers, so the file may have moved to its new episode name
+    assert v.short_locked and not v.is_short and v.status == "completed" and os.path.exists(v.file_path)
     await eng.dispose()
 
 

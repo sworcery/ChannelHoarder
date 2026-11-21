@@ -1202,6 +1202,25 @@ class ChannelService:
             if renamed > 0:
                 logger.info("Renumbered %d episodes for %s after reclassification", renamed, channel.channel_name)
 
+        # A manual unmark can leave a regular video at episode 0 (e.g. the channel was
+        # busy). Give each the next free number in its season; nobody else is renumbered.
+        # The rename pass below fixes the files.
+        result = await self.db.execute(
+            select(Video)
+            .where(Video.channel_id == channel.id)
+            .where(Video.is_short.is_(False), Video.is_livestream.is_(False))
+            .where(Video.episode == 0)
+            .order_by(Video.upload_date.asc(), Video.id.asc())
+        )
+        leftovers = result.scalars().all()
+        if leftovers:
+            from app.utils.renumber import assign_next_episode
+            for video in leftovers:
+                await assign_next_episode(self.db, video)
+            await self.db.commit()
+            logger.info("Gave %d unnumbered episodes their next number for %s",
+                        len(leftovers), channel.channel_name)
+
         # Auto-scan download directory for existing video files that match pending videos
         imported = await self._auto_import_existing(channel)
         if imported > 0:
