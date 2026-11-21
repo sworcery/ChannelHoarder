@@ -5,6 +5,12 @@ All notable changes to ChannelHoarder will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - unreleased
+
+### Fixed
+- Rumble downloads no longer fail with "Unable to download JSON metadata: HTTP Error 403" (#53). When Rumble refuses that request, ChannelHoarder reads the same video details from the video's embed page instead. This works around a yt-dlp bug that is still open upstream.
+- Download Video (quick download) now uses the same browser disguise as normal downloads for Rumble and other non-YouTube sites, so their pages no longer return 403 there.
+
 ## [2.0.0] - 2026-11-18
 
 Jobs that move, rename or delete files now wait their turn instead of colliding. The download queue can no longer get stuck. Settings follow what you saved. The whole interface was rebuilt, phones included. Your channels, videos and files carry over; read the upgrade notes below before you update.

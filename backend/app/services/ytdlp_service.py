@@ -13,8 +13,12 @@ import httpx
 import yt_dlp
 
 from app.config import settings
+from app.services import rumble_fallback
 
 logger = logging.getLogger(__name__)
+
+# Scans, downloads and quick downloads all go through yt-dlp, so patch once here.
+rumble_fallback.install()
 
 # SponsorBlock segment categories to mark/remove. The default set covers the
 # least-controversial promotional segments; intro/outro/filler are left out so
@@ -673,7 +677,9 @@ class YtdlpService:
 
     def get_video_info_by_url(self, url: str) -> dict | None:
         """Get full metadata for a video by its URL (any platform)."""
-        opts = self._base_opts()
+        from app.utils.platform_utils import detect_platform
+
+        opts = self._base_opts(platform=detect_platform(url))
         opts.update({
             "skip_download": True,
             "ignoreerrors": True,
